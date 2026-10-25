@@ -50,6 +50,7 @@ import { foldTree, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
 import { release, settleGate, SETTLE_MS, TURN_MS, TURN_WAIT } from "./settle";
 import { Toasts } from "./toasts";
+import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
 import { isPhone, useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
 import { focusToWrite, modeOf } from "../vim";
@@ -290,6 +291,7 @@ export function DevTools<C>({
   }, [actor, storageKey]);
   // Undo and redo turn a step's light from the look it had, so the settle runs backwards.
   useEffect(() => {
+    const done = actor.on("done", (e) => finished(e.journey));
     const sub = actor.on("undone", (e) => {
       const turned = e.turned;
       if (turned === undefined) return;
@@ -297,7 +299,10 @@ export function DevTools<C>({
       // A light that never shows, as in the preview, does not wait to turn.
       window.setTimeout(() => settling.turned(turned.step), TURN_WAIT);
     });
-    return () => sub.unsubscribe();
+    return () => {
+      done.unsubscribe();
+      sub.unsubscribe();
+    };
   }, [actor]);
   // The parts on the page show the reviewer's verdicts, as a deleted variant leaves the
   // lift, and which variants have a note.

@@ -9,7 +9,14 @@ import {
   LoaderCircle,
   MapPin,
 } from "lucide-react";
-import { useEffect, useRef, useSyncExternalStore, type PointerEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent,
+} from "react";
 import { isKept, isWithAgent, type Note } from "../notes/note";
 import { PAGE_JOURNEY, placePath } from "../part/page";
 import { parts as partsStore, variantsOn } from "../part/store";
@@ -645,8 +652,8 @@ export function useJourneys() {
 }
 
 /** The journeys: the open ones, with the one the review walks open on its steps, or the
- * done ones, which stand at the tree's foot. Each opens on its steps; its row starts it
- * where its work is left. */
+ * settled ones, which stand folded at the tree's foot under a quiet heading. Each opens on its
+ * steps; its row starts it where its work is left. */
 function Journeys({
   current,
   done,
@@ -658,20 +665,21 @@ function Journeys({
   const selected = useSession((s) => s.context.row);
   const folds = useSession((s) => s.context.folds);
   const active = useSession((s) => s.context.active);
-  // The journey the review walks stays in the open ones when it is done, with its steps.
+  // The journey the review walks stays in the open ones while the walk goes on, also while
+  // the panel asks to finish it; once finished, it goes down to the settled ones.
   const shown = journeys.filter((j) =>
-    j.id === current ? !done : (settledIn(j) === j.steps.length) === done,
+    j.id === current && active ? !done : (settledIn(j) === j.steps.length) === done,
   );
   if (shown.length === 0) return null;
   return (
-    <section aria-label={done ? "Done" : "Journeys"} className="flex flex-col p-1.5 pt-0">
-      <Heading text={done ? "Done" : "Journeys"} />
+    <section aria-label={done ? "Settled" : "Journeys"} className="flex flex-col p-1.5 pt-0">
+      <Heading text={done ? "Settled" : "Journeys"} />
       {shown.map((j) => {
         const id = `journey:${j.id}`;
         const walked = j.id === current;
-        const open = folds[id] ?? walked;
+        const open = folds[id] ?? (walked && !done);
         return (
-          <div key={j.id} className="contents">
+          <Journey key={j.id} id={j.id} settled={done}>
             <TreeRow
               id={id}
               fold={id}
@@ -683,17 +691,53 @@ function Journeys({
             >
               <span className="min-w-0 flex-1 truncate">{j.title}</span>
               {settledIn(j) === j.steps.length && (
-                <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Done" />
+                <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Settled" />
               )}
               <span className="text-[11px] font-normal text-dt-faint tabular-nums">
                 {done ? j.steps.length : `${String(settledIn(j))}/${String(j.steps.length)}`}
               </span>
             </TreeRow>
             {open && <Steps journey={j} walked={walked} />}
-          </div>
+          </Journey>
         );
       })}
     </section>
+  );
+}
+
+/** Where each journey last stood: with the open ones, or the settled ones. */
+const stoodSettled = new Map<string, boolean>();
+
+/** The journey stood with the open ones until now, as the reviewer finished it: the tree,
+ * folded through the walk, shows it move down when it shows next. */
+export const finished = (journey: string) => stoodSettled.set(journey, false);
+
+/** A journey's rows. A journey that has just moved between the open and the settled ones
+ * comes in with a short motion, down and up alike, so the eye sees where it went; one that
+ * shows again where it stood, as the tree unfolds, comes in still. */
+function Journey({
+  id,
+  settled,
+  children,
+}: {
+  readonly id: string;
+  readonly settled: boolean;
+  readonly children: React.ReactNode;
+}) {
+  const [moved] = useState(() => {
+    const was = stoodSettled.get(id);
+    return was !== undefined && was !== settled;
+  });
+  useLayoutEffect(() => {
+    stoodSettled.set(id, settled);
+  }, [id, settled]);
+  return (
+    <div
+      data-dt-journey={id}
+      className={cx("flex flex-col", moved && "animate-dt-arrive motion-reduce:animate-dt-fade")}
+    >
+      {children}
+    </div>
   );
 }
 

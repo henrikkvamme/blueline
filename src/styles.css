@@ -20,6 +20,8 @@
   --radius-dt-control: 8px;
   --radius-dt-mark: 5px;
   --animate-dt-pulse: dt-pulse 520ms ease-out;
+  --animate-dt-arrive: dt-arrive 220ms ease-out;
+  --animate-dt-fade: dt-fade 150ms ease-out;
   --shadow-dt-float: 0 18px 48px -12px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
@@ -52,6 +54,20 @@
   }
   to {
     box-shadow: 0 0 0 10px transparent;
+  }
+}
+
+/* A journey that moved between the open and the settled ones comes in where it went. */
+@keyframes dt-arrive {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+@keyframes dt-fade {
+  from {
+    opacity: 0;
   }
 }
 
