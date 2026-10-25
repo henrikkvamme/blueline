@@ -5,7 +5,7 @@ the agent, and parts with variants. A build holds none of it.
 
 ## Set up in an app
 
-The app needs React 19.3 or later, Tailwind 4.3 or later and effect 4.0.0-rc.115, the
+The app needs React 19.3 or later, Tailwind 4.3 or later and effect 4.0.6, the
 package's peers. Four places use it:
 
 - The styles, after Tailwind: `@import "@henrikkvamme/blueline/styles.css";`. Tailwind finds the

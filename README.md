@@ -5,9 +5,16 @@ the designs of a part, and write notes on the page. Your coding agent gets the n
 answers in the page, and applies the designs you keep.
 
 **Status: design.** No package is published yet. The code came here from the private
-repository where Blueline started, and it does not build here yet: its TypeScript config
-and scripts still point to that repository's workspace. Read
-[docs/design.md](docs/design.md) for the plan.
+repository where Blueline started. It builds, checks and tests here on Effect 4.0.6, XState
+5.33.3 and TypeScript 7. Read [docs/design.md](docs/design.md) for the plan.
+
+With Node 24 and pnpm, from the repository root:
+
+- `pnpm install` installs the locked dependencies.
+- `pnpm run check` formats, lints and type checks.
+- `pnpm test` runs the tests.
+- `pnpm run pack` builds the published files in `dist`.
+- `pnpm run verify` runs all of them.
 
 - [docs/manual.md](docs/manual.md) is the manual for the code as it is now.
 - [GLOSSARY.md](GLOSSARY.md) gives the words that the tool, its docs and its agents use.
