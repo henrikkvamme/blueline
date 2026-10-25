@@ -10,7 +10,8 @@ the reviewer writes the first note.
 
 ## Where Blueline is now
 
-Blueline started as a package in a private monorepo. It has about 8,400 lines: an overlay in
+Blueline started as a package in a private monorepo, and its code is now in this
+repository. It has about 8,400 lines: an overlay in
 React, a session machine in XState, a channel on the Vite dev server, and a command for the
 agent (`listen`, `review`, `reply`, `apply`). Two apps use it:
 
@@ -54,7 +55,7 @@ These parts worked, and they stay:
 | Effect | The latest v4 release, never a release candidate. Internal. | The app's own Effect version must not matter. |
 | XState | The latest release. Internal. | Same reason |
 | Overlay | Today's React UI, bundled in a shadow root ([ADR 0001](adr/0001-bundle-the-overlay-in-a-shadow-root.md)) | The app needs no React, Tailwind or Effect. |
-| Mount | A Vite plugin, and a script tag for other dev servers | Covers Vite apps and Next.js. An extension or a TanStack Devtools plugin can come later. |
+| Mount | `blueline dev -- <cmd>` first, then a Vite plugin and a script tag ([ADR 0004](adr/0004-a-wrapper-command-is-the-first-way-in.md)) | Level 0 needs no code. The plugin and the tag cover the apps that a proxy breaks. |
 | Delivery | One server per machine ([ADR 0003](adr/0003-one-server-owns-delivery.md)) | Notes must arrive with no agent that listens. |
 | No registered agent | The server starts one: the repository's last T3 thread while its cache is warm, else a new thread with a handoff | A note never waits unseen. |
 | A note mid-turn | It joins at the agent's next tool boundary | The agent sees it in seconds and loses no work. |
@@ -72,15 +73,15 @@ These parts worked, and they stay:
 ```
 Browser                         Machine                          Agent
 -------                         -------                          -----
-Overlay (React, shadow root)    blueline serve                   CLI: listen, reply, apply,
+Overlay (React, shadow root)    blueline serve                   CLI: dev, listen, reply, apply,
 Core (plain TS):                  HTTP channel                        guide, doctor
   session machine,                notes and replies per repo      Delivery adapters:
   part store, registry,           registered agents                 T3 (send, steer)
   channel client                  delivery queue, retries           Codex app-server (turn/steer)
-App adapters:                   Vite plugin / script tag            claude -p, codex exec
-  React variants(),               starts the server if needed      Later, if needed:
-  Foldkit subscription,         Files per repo: .blueline/          Claude Code plugin (hooks)
-  data-blueline-part
+App adapters:                   blueline dev (proxy),               claude -p, codex exec
+  React variants(),             Vite plugin or script tag:       Later, if needed:
+  Foldkit subscription,           each starts the server            Claude Code plugin (hooks)
+  data-blueline-part            Files per repo: .blueline/
 ```
 
 The notes file and the replies file stay the record of a review. Everything around them is
@@ -92,7 +93,7 @@ Each level adds to the one before it. An app uses the lowest level that does the
 
 | Level | The app holds | The reviewer gets |
 | --- | --- | --- |
-| 0 | One plugin line or a script tag | Page notes, pins, screenshots, chat |
+| 0 | Nothing with `blueline dev`, else one plugin line or a script tag | Page notes, pins, screenshots, chat |
 | 1 | `blueline.config.ts`: journeys as data | Journeys and steps |
 | 2 | Parts: `variants()` in React, a Foldkit subscription, or `data-blueline-part` | Variants, states, the lift, `blueline apply` |
 | 3 | An adapter in code, whose functions return Promises | Scenarios, acting as a person, setup in code |
@@ -132,6 +133,20 @@ export default defineConfig({
 
 This is a sketch. The names can change while the code is built.
 
+### Entry points
+
+Every entry point loads the same overlay script. The core puts itself on `window`, so an
+app's own code at Levels 2 and 3 finds it there, and the app does not bundle the overlay.
+
+- `blueline dev -- <cmd>` runs the app's dev command behind a proxy. The proxy passes
+  everything through, websockets too, and adds the script tag to each HTML page. It starts
+  the app on a hidden port and takes the port that the app would have used, so the origin
+  does not change. When it cannot move the app, it uses a new port and says what can break:
+  sign-in redirects built from the origin, backend CORS lists and service workers.
+- The Vite plugin adds the script tag and forwards Blueline's routes to the server. It
+  needs no proxy.
+- A script tag by hand works in any server that you control.
+
 ### Keys
 
 Blueline takes a key in the capture phase while its sidebar or one of its fields has the
@@ -139,23 +154,24 @@ focus. Ctrl combinations always belong to Blueline. Other keys go to the app fir
 
 ## Plan
 
-Each step leaves the tool working. Code moves only after the source repository's last
-open change to Blueline has landed (Settle goes to the next step, Ctrl+H/L, a plan that
-updates in place).
+Each step leaves the tool working.
 
-1. **Move.** Copy `packages/blueline` here with its history (`git filter-repo`). Rename it.
-   Move to the latest Effect v4 and XState, both internal. No change in behaviour.
+1. **Move.** The code came here on 2026-10-25 as one import commit, with the last open
+   change from the source repository (Settle goes to the next step, Ctrl+H/L, a plan that
+   updates in place). It has no history, because the source repository's commit messages
+   are internal. Next: make it build and test here, and move to the latest Effect v4 and
+   XState, both internal. No change in behaviour.
 2. **Split.** Take the core out of React. Bundle the overlay in a shadow root, with its CSS.
    Steps and adapters take Promises. React, Tailwind and Effect are no longer peers.
-3. **Server.** Add `blueline serve`, the Vite plugin that starts it, and the script tag.
-   The dev dashboard drops its import aliases. Level 0 works in any app.
+3. **Server.** Add `blueline serve`, `blueline dev`, the Vite plugin and the script tag.
+   The dev dashboard drops its import aliases. Level 0 works in any app with no code.
 4. **Delivery.** Add registered agents and the delivery adapters: T3 with steer, the Codex
    app-server, and starting an agent. Retire the launchd service.
 5. **Journeys as data.** Add `blueline.config.ts`. The dev dashboard moves its steps there.
 6. **Agent guide.** Add `blueline guide` and `blueline doctor`. Notes carry their own
    instructions. The React app at work moves to the npm package, and the old package
    leaves its repository.
-7. **Next.js.** Prove the script tag and the server in a Next.js app.
+7. **Next.js.** Prove `blueline dev` and the server in a Next.js app.
 
 ## To verify while building
 
