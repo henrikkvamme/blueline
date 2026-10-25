@@ -48,6 +48,17 @@ function partsOf(session: Context, step: string) {
   };
 }
 
+/** The step's own variant (DevStep.variants) that the settle kept. It has no `variants()` call
+ * for `blueline apply` to change, so the line tells the agent to make it the app's own. */
+function keptVariantOf(session: Context, step: string) {
+  const variant = session.feedback[step]?.variant;
+  if (variant === undefined) return {};
+  return {
+    variant,
+    keep: `Make the step's variant "${variant}" the app's own design. It has no variants() call, so blueline apply cannot do it.`,
+  };
+}
+
 export function postedLine<C>(journeys: readonly DevJourney<C>[], post: Post, sentAt: string) {
   const { session } = post;
   const journey = journeyOf(journeys, session);
@@ -83,5 +94,6 @@ export function postedLine<C>(journeys: readonly DevJourney<C>[], post: Post, se
     // The steps still open: none means the reviewer is through the journey.
     left: openPlace(journey?.steps.map((s) => s.id) ?? [], session.feedback, index).open,
     ...partsOf(session, id),
+    ...keptVariantOf(session, id),
   };
 }

@@ -417,7 +417,10 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
         const fold = `step:${step.id}`;
         const f = feedback[step.id];
         // The variants the settle kept, as the agent applies them.
-        const kept = Object.values(f?.parts ?? {}).flatMap((v) => v.kept);
+        const kept = [
+          ...Object.values(f?.parts ?? {}).flatMap((v) => v.kept),
+          ...(f?.variant === undefined ? [] : [f.variant]),
+        ];
         const { pins } = notesOf(notes, step.id);
         const open = pins.length === 0 ? undefined : (folds[fold] ?? false);
         const here = walked && active && i === at;

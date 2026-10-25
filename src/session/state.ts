@@ -18,13 +18,15 @@ const FeedbackSchema = Schema.Struct({
   settled: Schema.optional(Schema.Boolean),
   /** The variants kept and deleted in the step's parts, by the part's name. */
   parts: Schema.optional(Schema.Record(Schema.String, VerdictsSchema)),
+  /** The step's own variant (DevStep.variants) that the settle kept, by its label. */
+  variant: Schema.optional(Schema.String),
 });
 export type Feedback = typeof FeedbackSchema.Type;
 
 /** The feedback of a step opened again: not settled, and no variant kept, as the reviewer
  * may settle on another. The deleted variants stay deleted. */
 export function openedAgain(f: Feedback): Feedback {
-  const { parts, ...rest } = f;
+  const { variant: _, parts, ...rest } = f;
   return {
     ...rest,
     settled: false,

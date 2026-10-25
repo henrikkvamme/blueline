@@ -156,7 +156,9 @@ shows, a dot for each; on a step with none, `v` says so.
 A variant is a way the part could look; a state is what it could show. Give a part's
 states as patches in `variants`, so the lift draws them side by side. A step's own
 `variants` set up data on the page through `apply`, one at a time: the bar and `v` call
-them the step's states.
+them the step's states. A settle keeps the one shown too: the settle line names it in
+`variant`, and its `keep` tells the agent to make it the app's own, as it has no
+`variants` call for `blueline apply` to change.
 
 Off the lift, the keys mean the same: `i` writes a note on the step, and `R` opens the
 next reply, or goes through the notes on the page when no reply is new.

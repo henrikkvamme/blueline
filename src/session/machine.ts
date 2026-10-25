@@ -754,7 +754,7 @@ export const sessionMachine = setup({
               ? n
               : noteAfter(n, { type: "settle" }),
           );
-          // The settle keeps the variant the step's part shows.
+          // The settle keeps the variant shown: of the step's part, and of the step's own.
           const parts =
             event.keep !== undefined
               ? {
@@ -765,12 +765,14 @@ export const sessionMachine = setup({
                   ),
                 }
               : was.parts;
+          const own = step.variants.length > 1 ? variantLabel(context, step.id) : undefined;
           const feedback = {
             ...context.feedback,
             [step.id]: {
               ...was,
               settled: true,
               ...(parts === undefined ? {} : { parts }),
+              ...(own === undefined ? {} : { variant: own }),
             },
           };
           enqueue.assign({ notes, feedback });

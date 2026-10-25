@@ -750,6 +750,20 @@ describe("the verdicts on a part's variants", () => {
     });
   });
 
+  it("keeps the step's own variant shown when the step settles, and none when it opens again", () => {
+    const onB = after(start(true), { type: "entered" }, { type: "go", by: 1 }, { type: "entered" });
+    const s = after(onB, { type: "variant", by: 1 }, { type: "switched" }, { type: "settle" });
+    expect(s.context.feedback["b"]).toMatchObject({ settled: true, variant: "Two" });
+    const opened = after(s, { type: "jump", at: 1 }, { type: "entered" }, { type: "settle" });
+    expect(opened.context.feedback["b"]?.settled).toBe(false);
+    expect(opened.context.feedback["b"]?.variant).toBeUndefined();
+  });
+
+  it("keeps no own variant for a step with none", () => {
+    const s = after(start(true), { type: "entered" }, { type: "settle" });
+    expect(s.context.feedback["a"]?.variant).toBeUndefined();
+  });
+
   it("takes a settle's keep back with undo", () => {
     const s = after(start(true), { type: "entered" }, settle("Card"), { type: "undo" });
     expect(on(s)).toBeUndefined();

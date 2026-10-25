@@ -251,6 +251,17 @@ describe("the lines the agent reads", () => {
     ).toMatchObject({ left: 0 });
   });
 
+  it("says on a settle which of the step's own variants the reviewer kept", () => {
+    const kept = { ...session, feedback: { b: { settled: true, variant: "Two" } } };
+    expect(
+      postedLine([steps], { kind: "settle", ids: [], step: "b", session: kept }, "now"),
+    ).toMatchObject({ variant: "Two", keep: expect.stringContaining('"Two"') });
+    const plain = { ...session, feedback: { b: { settled: true } } };
+    expect(
+      postedLine([steps], { kind: "settle", ids: [], step: "b", session: plain }, "now"),
+    ).not.toHaveProperty("variant");
+  });
+
   it("sends the variants kept and deleted in the step's parts with the note", () => {
     const parts = { Suggestion: { kept: ["Tracked change"], dropped: ["Marked field"] } };
     const judged = { ...session, feedback: { b: { parts } } };
