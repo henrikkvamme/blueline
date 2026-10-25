@@ -13,6 +13,7 @@ import { stepNoteId, treeShown } from "../session/machine";
 import { focusToWrite } from "../vim";
 import { Chips, Composer, NoteState, Thread } from "./composer";
 import { cx } from "./cx";
+import { FinishView } from "./finish";
 import { DOCK, FOCUSED, PANEL } from "./geometry";
 import { usePins, useSession, useStep, useStepNote, useTools } from "./session";
 import {
@@ -89,6 +90,7 @@ export function Panel() {
   const shown = useSession((s) => s.context.panel && !s.context.preview);
   const active = useSession((s) => s.context.active);
   const tree = useSession((s) => s.context.tree);
+  const finishing = useSession((s) => s.context.finish !== null);
   const phone = usePhone();
   const present = usePresent(shown);
   useDock(shown && !phone);
@@ -171,7 +173,7 @@ export function Panel() {
               unfolded && "invisible max-sm:hidden",
             )}
           >
-            <StepView />
+            {finishing ? <FinishView /> : <StepView />}
           </div>
         ) : (
           <>

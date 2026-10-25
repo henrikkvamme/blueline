@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { settleGate } from "../src/ui/settle";
+import { release, settleGate } from "../src/ui/settle";
 
 describe("a settle", () => {
   it("does nothing while another settle's motion plays", () => {
@@ -44,5 +44,21 @@ describe("a settle", () => {
     gate.turned("status");
     expect(gate.turning()).toBeUndefined();
     expect(told).toBe(2);
+  });
+
+  it("finishes only with an Enter pressed after the finish shows", () => {
+    const enter = release();
+    // The Enter that settled the last step is still down as the finish shows.
+    enter.down();
+    enter.shows();
+    expect(enter.free()).toBe(false);
+    enter.up();
+    expect(enter.free()).toBe(true);
+    // A quick press is up before the motion ends and the finish shows.
+    const quick = release();
+    quick.down();
+    quick.up();
+    quick.shows();
+    expect(quick.free()).toBe(true);
   });
 });

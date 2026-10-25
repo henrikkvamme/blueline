@@ -402,6 +402,7 @@ export const KEPT: Kept = {
   design: "",
   chat: "step",
   folds: {},
+  finish: null,
 };
 
 /** A note in each state, for the line that says where a note is. */

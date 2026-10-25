@@ -254,6 +254,27 @@ describe("the keys", () => {
     }
   });
 
+  it("finish with Enter, and go back with Escape or u, while the finish asks", () => {
+    const finish = { kind: "event", event: { type: "finish" } };
+    const undo = { kind: "event", event: { type: "back" } };
+    for (const view of VIEWS.filter((v) => v.active && v.layer === "none")) {
+      const asks = { ...view, finishing: true };
+      const keys = (key: string, more: object = {}) =>
+        dispatch(bindings, asks, "page", { key, ...more });
+      expect(keys("Enter")).toEqual(finish);
+      // The Enter that settled the last step, held, does not finish too.
+      expect(keys("Enter", { repeat: true })).toBeUndefined();
+      expect(keys("Escape")).toEqual(view.preview ? expect.anything() : undo);
+      expect(keys("u")).toEqual(undo);
+      // The walk waits: no step, variant or settle.
+      for (const key of ["j", "k", "h", "l", "J", "K", "y", "v", "0"])
+        expect(keys(key), key).toBeUndefined();
+      // The app's own control keeps Enter.
+      expect(dispatch(bindings, asks, "control", { key: "Enter" })).toBeUndefined();
+      expect(dispatch(bindings, view, "page", { key: "Enter" })).not.toEqual(finish);
+    }
+  });
+
   it("settle once for a held key: the key's repeats do nothing", () => {
     for (const view of VIEWS.filter((v) => v.active && v.layer === "none")) {
       for (const zone of ["page", "control", "panel"] as const)

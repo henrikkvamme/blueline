@@ -48,7 +48,7 @@ import {
 import { Panel } from "./panel";
 import { foldTree, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
-import { settleGate, SETTLE_MS, TURN_MS, TURN_WAIT } from "./settle";
+import { release, settleGate, SETTLE_MS, TURN_MS, TURN_WAIT } from "./settle";
 import { Toasts } from "./toasts";
 import { VariantNote } from "./variant-note";
 import { isPhone, useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
@@ -154,6 +154,7 @@ const viewOf = (s: Snapshot, adapter: DevInfo): View => {
     people: adapter.people !== undefined,
     preview: s.context.preview,
     aiming: aim.current(),
+    finishing: s.context.finish !== null,
   };
 };
 
@@ -684,8 +685,24 @@ function Keys() {
       );
       if (action === undefined) return;
       e.preventDefault();
+      // Enter finishes only once it was let go after the finish showed.
+      if (action.kind === "event" && action.event.type === "finish" && !enter.free()) return;
       perform(action);
     };
+    const enter = release();
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.repeat) enter.down();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "Enter") enter.up();
+    };
+    const away = () => enter.up();
+    let finishing = actor.getSnapshot().context.finish !== null;
+    const watch = actor.subscribe((s) => {
+      const now = s.context.finish !== null;
+      if (now && !finishing) enter.shows();
+      finishing = now;
+    });
     // The tools' own keys go first, before the page and a field's handlers see them.
     const onFirstKey = (e: KeyboardEvent) => {
       if (e.isComposing) return;
@@ -707,9 +724,16 @@ function Keys() {
       e.stopImmediatePropagation();
       perform(action);
     };
+    window.addEventListener("keydown", down, true);
+    window.addEventListener("keyup", up, true);
+    window.addEventListener("blur", away);
     window.addEventListener("keydown", onFirstKey, true);
     window.addEventListener("keydown", onKey);
     return () => {
+      watch.unsubscribe();
+      window.removeEventListener("keydown", down, true);
+      window.removeEventListener("keyup", up, true);
+      window.removeEventListener("blur", away);
       window.removeEventListener("keydown", onFirstKey, true);
       window.removeEventListener("keydown", onKey);
     };
@@ -826,11 +850,20 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
     turning !== undefined && turns
       ? turning.settled
       : settledHere || (motion.kind === "playing" && motion.step === stepId);
+  // The step whose light stands on its part now.
+  const standing = useRef("");
   const placed = (on: string) => {
     settling.shown(on);
+    standing.current = on;
     if (on === key && stepId !== undefined && settling.turning()?.step === stepId)
       window.setTimeout(() => settling.turned(stepId), TURN_MS);
   };
+  // Undo on the step that shows, as Back from the finish: the light already stands there.
+  useEffect(() => {
+    if (!turns || stepId === undefined || standing.current !== key) return;
+    const turn = window.setTimeout(() => settling.turned(stepId), TURN_MS);
+    return () => window.clearTimeout(turn);
+  }, [turns, stepId, key]);
   // With the walk ended or the light hidden, nothing waits for the light.
   useEffect(() => {
     if (!active) settling.reset();
@@ -885,7 +918,8 @@ const sameView = (a: View, b: View) =>
   a.variants === b.variants &&
   a.people === b.people &&
   a.preview === b.preview &&
-  a.aiming === b.aiming;
+  a.aiming === b.aiming &&
+  a.finishing === b.finishing;
 
 /** Starts the review from the app's own dev parts, as a link or another tool asks. */
 export function useReviewControl() {

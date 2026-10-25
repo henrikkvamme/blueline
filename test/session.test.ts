@@ -65,6 +65,8 @@ const ALPHABET: readonly Event[] = [
   { type: "send", id: stepNoteId("b"), step: "b", at: 1 },
   { type: "settle" },
   { type: "settle", step: 2 },
+  { type: "finish" },
+  { type: "back" },
   {
     type: "replies",
     replies: {
@@ -521,32 +523,110 @@ describe("the review's end", () => {
       { type: "entered" },
     );
 
-  it("ends the review when the last open step settles: the tools show the page, and the walk stays on the step", () => {
+  it("holds the last settle until the reviewer finishes: the panel shows the finish, and nothing goes yet", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
     expect(s.matches({ review: "on" })).toBe(true);
     expect(s.context.at).toBe(2);
-    const done = after(s, { type: "entered" }, { type: "settle" });
-    expect(done.matches({ review: "off" })).toBe(true);
-    expect(done.context).toMatchObject({ active: false, panel: true, at: 2 });
-    expect(done.context.feedback["c"]?.settled).toBe(true);
+    const posts = s.context.posts;
+    const held = after(s, { type: "entered" }, { type: "panel" }, { type: "settle" });
+    expect(held.context.feedback["c"]?.settled).toBe(true);
+    expect(held.context.finish).toEqual({ step: "c", ids: [] });
+    // The walk stays on the step, and the panel shows to ask.
+    expect(held.matches({ review: "on" })).toBe(true);
+    expect(held.context).toMatchObject({ active: true, panel: true, at: 2 });
+    expect(held.context.posts).toBe(posts);
   });
 
-  it("ends it also when the tree settles the last open step, and leaves the panel shown", () => {
+  it("ends the review on finish: the held settle goes, the tools show the page, and the walk stays on the step", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    const done = after(s, { type: "entered" }, { type: "settle", step: 2 });
-    expect(done.context.feedback["c"]?.settled).toBe(true);
-    expect(done.matches({ review: "off" })).toBe(true);
-    expect(done.context).toMatchObject({ panel: true, at: 2, cursor: 2 });
-  });
-
-  it("shows the page's chat in the panel at the last settle, also when the panel was hidden", () => {
-    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    const done = after(s, { type: "entered" }, { type: "panel" }, { type: "settle" });
+    const held = after(s, { type: "entered" }, { type: "settle" });
+    const done = after(held, { type: "finish" });
     expect(done.matches({ review: "off", panel: "shown" })).toBe(true);
-    expect(done.context).toMatchObject({ active: false, panel: true, tree: false });
+    expect(done.context).toMatchObject({ active: false, panel: true, tree: false, at: 2 });
+    expect(done.context.finish).toBeNull();
+    expect(done.context.posts).toBe(held.context.posts + 1);
+    // Finish does nothing when nothing waits for it.
+    expect(after(s, { type: "finish" }).context).toEqual(s.context);
   });
 
-  it("tells the tools the journey is done", () => {
+  it("holds the last settle also when the tree settles the last open step", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const held = after(s, { type: "entered" }, { type: "settle", step: 2 });
+    expect(held.context.feedback["c"]?.settled).toBe(true);
+    expect(held.context.finish).toEqual({ step: "c", ids: [] });
+    expect(held.context).toMatchObject({ panel: true, at: 2, cursor: 2 });
+  });
+
+  it("holds the notes that go with the last settle, and sends them on finish", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const note = stepNoteId("c");
+    const held = after(
+      s,
+      { type: "entered" },
+      { type: "write", id: note, step: "c", draft: "Make it bold" },
+      { type: "settle", at: 5 },
+    );
+    expect(held.context.finish).toEqual({ step: "c", ids: [note] });
+    expect(after(held, { type: "finish" }).context.posts).toBe(held.context.posts + 1);
+  });
+
+  it("goes back from the finish with undo: the last step opens again, and nothing went", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const held = after(s, { type: "entered" }, { type: "settle" });
+    const back = after(held, { type: "undo" });
+    expect(back.context.feedback["c"]?.settled).toBeUndefined();
+    expect(back.context.finish).toBeNull();
+    expect(back.matches({ review: "on" })).toBe(true);
+    expect(back.context).toMatchObject({ active: true, at: 2, posts: held.context.posts });
+  });
+
+  it("goes back from the finish with Back as with undo", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const held = after(s, { type: "entered" }, { type: "settle" });
+    expect(after(held, { type: "back" }).context).toEqual(after(held, { type: "undo" }).context);
+    // Back does nothing when nothing waits.
+    expect(after(s, { type: "back" }).context).toEqual(s.context);
+  });
+
+  it("goes back from the finish after a reload, with no undo: the step opens, and the notes held go", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const note = stepNoteId("c");
+    const held = after(
+      s,
+      { type: "entered" },
+      { type: "write", id: note, step: "c", draft: "Make it bold" },
+      { type: "settle", at: 5 },
+    );
+    const reloaded = after(
+      initialTransition(sessionMachine, {
+        kept: keptOf(held.context),
+        journeys: JOURNEYS,
+        now: 0,
+      })[0],
+      { type: "entered" },
+    );
+    const back = after(reloaded, { type: "back" });
+    expect(back.context.finish).toBeNull();
+    expect(back.context.feedback["c"]?.settled).toBe(false);
+    expect(back.context).toMatchObject({ active: true, at: 2 });
+    // The agent never heard of the settle; the notes shown as sent go now.
+    expect(back.context.posts).toBe(reloaded.context.posts + 1);
+  });
+
+  it("keeps the finish through a reload", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const held = after(s, { type: "entered" }, { type: "settle" });
+    expect(keptOf(held.context).finish).toEqual({ step: "c", ids: [] });
+    const reloaded = initialTransition(sessionMachine, {
+      kept: keptOf(held.context),
+      journeys: JOURNEYS,
+      now: 0,
+    })[0];
+    expect(reloaded.context.finish).toEqual({ step: "c", ids: [] });
+    expect(reloaded.context.active).toBe(true);
+  });
+
+  it("tells the tools the journey is done, on finish", () => {
     const actor = createActor(sessionMachine, {
       input: {
         kept: {
@@ -564,13 +644,15 @@ describe("the review's end", () => {
     actor.on("done", (e) => done.push(e.journey));
     actor.send({ type: "entered" });
     actor.send({ type: "settle" });
+    expect(done).toEqual([]);
+    actor.send({ type: "finish" });
     expect(done).toEqual(["prep"]);
     actor.stop();
   });
 
   it("goes back to the step from the page when u takes the last settle back", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    const done = after(s, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish" });
     const undone = after(done, { type: "undo" });
     expect(undone.context.feedback["c"]?.settled).toBeUndefined();
     expect(undone.matches({ review: "on" })).toBe(true);
@@ -583,6 +665,7 @@ describe("the review's end", () => {
       s,
       { type: "entered" },
       { type: "settle", keep: { part: "Suggestion", variant: "Card" } },
+      { type: "finish" },
     );
     expect(done.context.feedback["c"]?.parts?.["Suggestion"]?.kept).toEqual(["Card"]);
     // A step opened alone, as a reply on it opens it, keeps the journey settled.

@@ -92,3 +92,34 @@ export function settleGate(): SettleGate {
     },
   };
 }
+
+/**
+ * Whether Enter may finish the review: only a press that comes after the finish shows. The
+ * Enter that settled the last step, still held as the finish comes, does not finish too: a
+ * release comes first.
+ */
+export interface Release {
+  readonly down: () => void;
+  readonly up: () => void;
+  /** The finish shows now. */
+  readonly shows: () => void;
+  readonly free: () => boolean;
+}
+
+export function release(): Release {
+  let held = false;
+  let free = true;
+  return {
+    down: () => {
+      held = true;
+    },
+    up: () => {
+      held = false;
+      free = true;
+    },
+    shows: () => {
+      free = !held;
+    },
+    free: () => free,
+  };
+}

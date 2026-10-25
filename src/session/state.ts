@@ -78,6 +78,10 @@ export const KeptSchema = Schema.Struct({
   /** The tree's rows the reviewer opened or closed, by the row's fold key; a row not here
    * has its own start: open for this page and the journey walked, else closed. */
   folds: Schema.Record(Schema.String, Schema.Boolean),
+  /** The last open step's settle, which waits for the reviewer to finish the review: its
+   * step, and the chats whose notes went with it. Only Finish sends it, so the agent wakes
+   * once. Null while nothing waits. */
+  finish: Schema.NullOr(Schema.Struct({ step: Schema.String, ids: Schema.Array(Schema.String) })),
 });
 export type Kept = typeof KeptSchema.Type;
 
@@ -92,6 +96,7 @@ export const START: Kept = {
   design: "",
   chat: "step",
   folds: {},
+  finish: null,
 };
 
 /** A journey as the machine needs it: its steps' IDs, groups and variant counts. */

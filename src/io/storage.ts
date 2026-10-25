@@ -76,6 +76,7 @@ export function loadKept(key: string): Kept {
       design: field(fields.design, raw["design"], START.design),
       chat: field(fields.chat, raw["chat"], START.chat),
       folds: field(fields.folds, raw["folds"], START.folds),
+      finish: field(fields.finish, raw["finish"], START.finish),
     };
   } catch {
     return START;
@@ -98,4 +99,5 @@ export const keptOf = (context: Kept): Kept => ({
   design: context.design,
   chat: context.chat,
   folds: context.folds,
+  finish: context.finish,
 });

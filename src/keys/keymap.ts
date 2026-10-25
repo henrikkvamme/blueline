@@ -29,6 +29,8 @@ export interface View {
   readonly preview: boolean;
   /** Whether the reviewer points at an element for a note, from the pin button. */
   readonly aiming?: boolean | undefined;
+  /** Whether every step is settled and the panel asks the reviewer to finish the review. */
+  readonly finishing?: boolean | undefined;
 }
 
 /** What a key does: a session event, or something on the page. */
@@ -85,8 +87,10 @@ export interface Binding {
 }
 
 const event = (e: Event): Action => ({ kind: "event", event: e });
-const active = (v: View) => v.active;
-const walking = (v: View) => v.active && !v.preview;
+// While the panel asks to finish the review, the walk waits: Enter finishes, and Escape and
+// u go back.
+const active = (v: View) => v.active && v.finishing !== true;
+const walking = (v: View) => active(v) && !v.preview;
 
 export const BINDINGS: readonly Binding[] = [
   // The review, on the page. One rule holds here, in the lift and in the tree: across is the
@@ -166,6 +170,15 @@ export const BINDINGS: readonly Binding[] = [
     once: true,
     when: (v) => active(v) && v.layer === "none",
     does: event({ type: "settle" }),
+  },
+  {
+    keys: ["Enter"],
+    label: "Finish the review: send it to the agent",
+    group: "Review",
+    zone: "page",
+    once: true,
+    when: (v) => v.active && v.finishing === true && v.layer === "none",
+    does: event({ type: "finish" }),
   },
   {
     keys: ["Escape"],
@@ -318,7 +331,22 @@ export const BINDINGS: readonly Binding[] = [
   },
   // Undo takes back the tools' own actions, as a removed note. In a field, vim's u and
   // Ctrl+R take back the text instead.
-  { keys: ["u"], label: "Undo", group: "Tools", zone: "page", does: event({ type: "undo" }) },
+  {
+    keys: ["u"],
+    label: "Undo",
+    group: "Tools",
+    zone: "page",
+    when: (v) => v.finishing !== true,
+    does: event({ type: "undo" }),
+  },
+  {
+    keys: ["u"],
+    label: "Back: open the last step again",
+    group: "Review",
+    zone: "page",
+    when: (v) => v.finishing === true,
+    does: event({ type: "back" }),
+  },
   {
     keys: ["r"],
     ctrl: true,
@@ -461,6 +489,9 @@ export function dispatch(
   // note card too. In the preview it shows them again, as Ctrl+P does. Leaving moves the
   // reviewer; only Ctrl+B and Ctrl+P hide.
   if (key.key === "Escape" && view.preview && key.ctrl !== true) return event({ type: "preview" });
+  // Escape goes back from the finish, as Back and u do: the last step opens again.
+  if (key.key === "Escape" && key.ctrl !== true && view.finishing === true && view.layer === "none")
+    return event({ type: "back" });
   if (key.key === "Escape" && key.ctrl !== true)
     return view.layer !== "none"
       ? event({ type: "escape" })
