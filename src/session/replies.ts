@@ -2,7 +2,7 @@ import { needsYou, type Note } from "../notes/note";
 
 /*
  * Where the agent's replies are, so the reviewer goes through them in the journey's order:
- * the sidebar marks each step with one, and n goes to the next.
+ * the tree marks each step with one, and n goes to the next.
  */
 
 /** Whether the note has a reply the reviewer has not dealt with. */

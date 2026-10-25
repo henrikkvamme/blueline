@@ -28,7 +28,7 @@ export interface DevStep<C> {
   readonly look: string;
   /** What to try on the page, if anything. */
   readonly try?: string;
-  /** The group the step is in, such as its scenario, for the sidebar. */
+  /** The group the step is in, such as its scenario, for the panel's tree. */
   readonly group: { readonly id: string; readonly title: string };
   readonly person?: DevPerson;
   /** Where the part is: CSS selectors, one for each element. The light covers them all. */

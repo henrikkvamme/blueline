@@ -74,14 +74,21 @@ _Avoid_: Response, comment
 
 ## On the screen
 
+**Panel**:
+The one Blueline column at the right of the page. It holds the tree, the step's header, the
+step's words and the chat. The page narrows by its width, so it covers nothing. On a phone
+it is a sheet at the bottom.
+_Avoid_: Sidebar, step card, page card, drawer
+
+**Tree**:
+The pages, journeys and steps in the panel. On a step it folds to one line.
+
 **Bar**:
-The row of controls at the bottom centre of the page.
+The panel's folded form, at the bottom centre of the page. It shows only while the panel
+is hidden.
 
-**Sidebar**:
-The tree of pages, journeys and steps at the right side of the page.
-
-**Step card**:
-The card beside the lit part, with the step's words and its chat.
+**Note card**:
+The card beside a pin, where the reviewer writes the pin's note.
 
 **Light**:
 The frame around the part that a step is about.

@@ -19,30 +19,29 @@ interface Term {
 
 /** The parts the map shows. */
 const PARTS: readonly Term[] = [
-  { id: "bar", name: "Bar", what: "At the bottom centre: full in a review, small at other times." },
   {
-    id: "sidebar",
-    name: "Sidebar",
-    what: "On the right: this page, the journey's steps, the journeys.",
+    id: "panel",
+    name: "Panel",
+    what: "On the right, and the page makes room: the tree, the step, the chat. Its switch says whose chat.",
   },
   {
-    id: "stepCard",
-    name: "Step card",
-    what: "Beside the lit part: what to look at, what to try, the chat. Its switch says whose chat.",
+    id: "tree",
+    name: "Tree",
+    what: "In the panel: the pages, the journeys and their steps. On a step it folds to one line.",
+  },
+  {
+    id: "bar",
+    name: "Bar",
+    what: "The panel folded, at the bottom centre: the step and Settle; small off a step.",
   },
   { id: "light", name: "Light", what: "The outline around the step's part." },
   {
     id: "messageField",
     name: "Message field",
-    what: "At the bottom of a card. What you write here sends.",
+    what: "At the bottom of the panel. What you write here sends.",
   },
   { id: "pin", name: "Pin", what: "The numbered mark that Alt+click puts on an element." },
   { id: "noteCard", name: "Note card", what: "Opens on a pin. What you write here waits." },
-  {
-    id: "pageCard",
-    name: "Page card",
-    what: "The card for the page's chat, off a step (i).",
-  },
   {
     id: "lift",
     name: "Lift",
@@ -58,13 +57,13 @@ const WORDS: readonly Term[] = [
     name: "Chat",
     what: "The talk with the agent: one for each page and each step. Tab switches on a step.",
   },
-  { id: "review", name: "Review", what: "A walk through a journey's steps, from the sidebar." },
+  { id: "review", name: "Review", what: "A walk through a journey's steps, from the tree." },
   {
     id: "journey",
     name: "Journey",
     what: "A path through the app, in steps, that the agent writes.",
   },
-  { id: "group", name: "Group", what: "Steps that belong together; the headings in the sidebar." },
+  { id: "group", name: "Group", what: "Steps that belong together; the headings in the tree." },
   { id: "step", name: "Step", what: "One thing to look at in a journey." },
   { id: "openStep", name: "Open step", what: "A step not settled yet. H and L go to these." },
   {
@@ -80,7 +79,7 @@ const WORDS: readonly Term[] = [
     name: "Message",
     what: "What you write in a message field. It sends, with the notes.",
   },
-  { id: "reply", name: "Reply", what: "The agent's answer, in the card where you wrote." },
+  { id: "reply", name: "Reply", what: "The agent's answer, in the chat where you wrote." },
   { id: "keys", name: "Keys", what: "?: the list of keys and commands." },
 ];
 
@@ -148,13 +147,6 @@ export function NamesWorkshop() {
                 className="top-[46px] left-[62px] h-[34px] w-[236px] rounded-md border-2 border-dt-accent bg-transparent"
                 tag="above"
               />
-              <Box id="stepCard" map={map} className="top-[88px] left-[62px] h-[118px] w-[176px]">
-                <Box
-                  id="messageField"
-                  map={map}
-                  className="top-[84px] left-[8px] h-[24px] w-[160px] bg-dt-raised"
-                />
-              </Box>
               <Box
                 id="pin"
                 map={map}
@@ -168,34 +160,34 @@ export function NamesWorkshop() {
               <Box
                 id="noteCard"
                 map={map}
-                className="top-[168px] left-[262px] h-[56px] w-[112px]"
+                className="top-[168px] left-[220px] h-[56px] w-[112px]"
               />
-              <Box id="sidebar" map={map} className="top-[8px] right-[8px] bottom-[8px] w-[92px]" />
               <Box
-                id="bar"
+                id="panel"
                 map={map}
-                className="bottom-[10px] left-[130px] h-[22px] w-[200px] rounded-full"
-              />
+                className="top-0 right-0 bottom-0 w-[170px] rounded-none"
+                tag="inside"
+              >
+                <Box
+                  id="tree"
+                  map={map}
+                  className="top-[22px] left-[8px] h-[20px] w-[154px] bg-dt-raised"
+                />
+                <Box
+                  id="messageField"
+                  map={map}
+                  className="bottom-[8px] left-[8px] h-[24px] w-[154px] bg-dt-raised"
+                />
+              </Box>
             </Frame>
             <div className="flex gap-6">
-              <Frame title="On the page" small>
+              <Frame title="Panel hidden" small>
                 <Page />
-                <Box
-                  id="pageCard"
-                  map={map}
-                  className="bottom-[40px] left-[56px] h-[62px] w-[150px]"
-                >
-                  <Box
-                    id="messageField"
-                    map={map}
-                    className="top-[30px] left-[8px] h-[22px] w-[134px] bg-dt-raised"
-                  />
-                </Box>
                 <Box
                   id="bar"
                   map={map}
-                  className="bottom-[10px] left-[106px] h-[22px] w-[50px] rounded-full"
-                  tag="right"
+                  className="bottom-[10px] left-[46px] h-[22px] w-[170px] rounded-full"
+                  tag="above"
                 />
               </Frame>
               <Frame title="Lift" small>

@@ -28,11 +28,11 @@ replaces it: `blueline dev`, a Vite plugin or a script tag, and no peers.
 The tools, their hints and these docs use one name for each thing. The workshop's Names
 tab shows each part on a map of the screen.
 
-- Parts: the **bar** at the bottom centre, full on a step and small at other times; the
-  **sidebar** on the right; the **step card** beside the lit part, and the **light** around
-  that part; the **message field** at the bottom of a card; a **pin**, the numbered mark of
-  Alt+click, and its **note card**; the **page card**, off a step; the **lift** (`v`);
-  the **preview** (Ctrl+P).
+- Parts: the **panel** on the right, with the **tree** of pages and journeys, the step and
+  the chat; the **message field** at the bottom of the panel; the **bar** at the bottom
+  centre, the panel's folded form, full on a step and small at other times; the **light**
+  around the step's part; a **pin**, the numbered mark of Alt+click, and its **note card**;
+  the **lift** (`v`); the **preview** (Ctrl+P).
 - Words: a **review** walks a **journey** of **steps** in **groups**; an **open step** is
   not settled yet, and **settle** (`y`) says a step is right as it shows. A **part** has
   **variants**. Each step and each page has one **chat** with the agent. A **note** is
@@ -42,51 +42,74 @@ tab shows each part on a map of the screen.
 
 ## Where you are
 
-There is no mode to go into or out of. What you open in the sidebar is where you are: a
-step opens it, with its card and the full bar, and a page leaves the step for the page,
-with its card and the small bar. Escape on a step leaves it for the page too. The walk stays
-where it was, so the journey's row opens it again on the same step.
+There is no mode to go into or out of. What you open in the tree is where you are: a step
+opens it, and a page leaves the step for the page. Escape on a step leaves it for the page
+too. The walk stays where it was, so the journey's row opens it again on the same step.
+
+## The panel
+
+The panel stands at the right, and the page narrows by its width, so the panel covers
+nothing. On a step it shows, from the top: the tree folded to one line, with the journey and
+the group; the step's header, with the step before and after, the step's number and title,
+and Settle; the step's words; and the step's chat, with the message field at the bottom.
+Off a step it shows the tree and the page's chat in the same place.
+
+The button at the panel's top right and Ctrl+B hide the panel, and show it again. Hiding
+changes only the view: the walk stays on its step, and the light stays on the part. The
+hidden panel folds to the bar: on a step it shows the step's number and title, the step
+before and after, and Settle; off a step it is small. The bar and the panel never show at
+once, and a reload keeps the panel shown or hidden. An element that the app pins to the
+right edge can still sit under the panel.
+
+| Action                       | The walk                          | Light | Panel                                                   |
+| ---------------------------- | --------------------------------- | ----- | ------------------------------------------------------- |
+| Ctrl+B or the panel's button | stays on the step                 | stays | hides or shows                                          |
+| Ctrl+P                       | stays on the step                 | hides | hides, and only the eye shows                           |
+| Esc, with no field focused   | leaves the step for the page view | off   | shows the page's chat                                   |
+| The last settle              | ends: the journey is done         | off   | shows the page's chat, and the journey's row is checked |
 
 When the last open step settles, the review ends by itself. The tools go back to the page,
-a short message says the journey is done, and the journey's row in the sidebar shows a
+a short message says the journey is done, and the journey's row in the tree shows a
 check. `u` takes the last settle back and opens its step again. A journey with every step
 settled opens all its steps again from its row, or from `g j`, for another pass; a step's
 row opens that one step and keeps the journey settled.
 
-On a step, the card's switch says whose chat you write in: **Step** or **Page**. A click
+On a step, the switch above the chat says whose chat you write in: **Step** or **Page**. A click
 or Tab switches it, also in the message field, so you write on the page and keep your
 place in the journey. Alt+click writes its note in the same chat.
 
 ## The g menu
 
-`g` opens a small menu above the bar, as LazyVim's which-key, from the page and the sidebar.
+`g` opens a small menu at the bottom centre, as LazyVim's which-key, from the page and the
+tree.
 The key after `g` does the thing, and any other key closes the menu: `g j` picks a journey, `g p` picks from this page's chat, notes and parts, and `g a`
 acts as someone. As in vim, `g g` and `G` go to the top and the bottom: on the page, the
-first and the last open step; in the sidebar, the top and the bottom row. `?` lists them
+first and the last open step; in the tree, the top and the bottom row. `?` lists them
 with the other keys.
 
 ## On a phone
 
-Each key has a button, and the bar's `?` lists the keys and does each one with a tap. On a
-screen narrower than 640 px, the bar takes the screen's width and stands above the page's
-own bottom bar. The cards stand above the bar as sheets, and the chevron folds the step
-card. A swipe to the left or the right across the lit part shows the next or the previous
+Each key has a button, and the `?` lists the keys and does each one with a tap. On a
+screen narrower than 640 px, the panel is a sheet at the bottom, above the page's own bottom
+bar, and its tree stays folded until you tap its line. Hidden, it folds to the bar, which
+takes the screen's width in the same place. The note card stands above the bar as a sheet.
+A swipe to the left or the right across the lit part shows the next or the previous
 variant. On the lift, a swipe across goes through the variants, and a swipe up or down goes
 through the states. The pin in the message field points at an element for a note, as
 Alt+click does. A tap in a field starts to write.
 
-## Moving between the page, a field and the sidebar
+## Moving between the page, a field and the tree
 
 Enter in a message field sends, and in a note keeps the note; then the keys are the page's,
 so `y` or `i` comes next. Escape in a field goes to vim's normal mode, and a second Escape
-goes to the sidebar and opens it, so you see where you are; in the lift's note it leaves the
-field. While the sidebar is open, it has the keys when no field has them.
+goes to the tree and unfolds it, so you see where you are; in the lift's note it leaves the
+field. While the tree shows, it has the keys when no field has them. On a step it folds, and
+the page has the keys, so `h` and `l` walk the steps.
 
-Escape backs out one level at a time, from the page and the sidebar: it closes what is open
-over the page, then leaves the step for the page, then closes the page's card, then hides
-the tools.
+Escape backs out one level at a time, from the page and the tree: it closes what is open
+over the page, then leaves the step for the page, then hides the tools.
 
-The sidebar is a tree, as Neovim's: this page and the pages with notes, in the order of
+The tree is as Neovim's: this page and the pages with notes, in the order of
 their paths, and the journeys. A page's row is its chat: it shows the chat's last words, and
 opens the chat. A page opens on its notes not sent, and this page on its parts too; a
 journey opens on its steps, and a step on its notes not sent. This page and the journey
@@ -102,16 +125,20 @@ its message in the chat has it.
   is.
 - `y` settles the selected step and goes on to the next open step, as on the page. The
   page's other keys, as `v`, work as on the page too.
+- On a step, a click on the folded line unfolds the tree, and so does a key of the tree's
+  while the line has the keys. A step opened from it folds it again.
 
-Ctrl+B goes into the sidebar from a field, and from the sidebar hides it; `i` there goes
-back to the field you left, at its place, to write. The panel that has the keys has a thin
-ring.
-Ctrl+P is the **preview**, on a step and off one: it hides the tools, the sidebar too, and leaves
-only an eye that shows them again. Escape in the sidebar off a step does the same, so the
-sidebar and the note card come back together; Ctrl+B closes the sidebar. A second Ctrl+P or `i` shows
-them with the sidebar as it was, and comes back to the field, in its mode and at its place;
-Escape and Ctrl+B show them with the keys in the sidebar, and `i` there goes back to the field.
-In the preview the keys turn as the sidebar has them: `j` and `k` go to the step after and
+`i` in the tree goes back to the field you left, at its place, to write. The panel has a
+thin ring while it has the keys.
+
+Ctrl+B hides the panel and shows it again, from a field too. A field in the panel that had
+the keys gets them back when the panel shows again, in its mode and at its place.
+
+Ctrl+P is the **preview**, on a step and off one: it hides the tools, the panel too, and
+leaves only an eye that shows them again. Escape in the tree off a step does the same, so
+the panel and the note card come back together. A second Ctrl+P, Escape or `i` shows them
+with the panel as it was, and comes back to the field, in its mode and at its place; Ctrl+B
+shows them with the panel shown. In the preview the keys turn as the tree has them: `j` and `k` go to the step after and
 before, and `h` and `l` show the step's variants one by one, to compare them with the page
 alone. Off the preview, `h` and `l` go over the steps, and `j` and `k` over the variants.
 Ctrl+H and Ctrl+L show the previous and the next variant, in the preview and off it. An app
@@ -148,7 +175,7 @@ On the step, `v` lifts the part: variants in a row, states in a column. `Enter` 
 variant shown on the page, `d` deletes one, `u` undoes, `i` writes a note on the variant
 shown, and `R` goes to the next variant with a note. Settling the step with `y` keeps the
 variant the page shows, sends the step's notes not sent yet, and goes on to the next open
-step, also from the sidebar or the card's button; `y` on a settled step opens it again and
+step, also from the tree or the Settle button; `y` on a settled step opens it again and
 keeps none. The last open step settled ends the review, as "Where you are" says. The bar says
 how many variants the step has, and a tab on the light's edge shows which one the page
 shows, a dot for each; on a step with none, `v` says so.
@@ -165,11 +192,11 @@ next reply, or goes through the notes on the page when no reply is new.
 
 ## Notes on a page
 
-Off a step, the tools are a chat with the agent on the page. `i` opens the page's card,
+Off a step, the panel is a chat with the agent on the page. `i` goes to its message field,
 and Alt+click writes a note on an element. A note waits: the bar counts the ones not sent,
 and the next message takes them all, in it. Enter in an empty message field sends the
 notes alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
-answers in the card. `blueline review` listens to it.
+answers in the panel's chat. `blueline review` listens to it.
 
 A note line has the chat's `id`, and `pins`: each note in the message, with what it points
 at and its words. A pointed note has no ID of its own, so the agent answers the message and
@@ -178,14 +205,14 @@ old messages go.
 
 Each page has its own notes, by its path. An app whose router keeps the page out of the
 address's path, as in its hash, gives `DevTools` the page's `path`, and a `navigate` that
-goes to a path, so the sidebar's pages go there.
+goes to a path, so the tree's pages go there.
 
 ## Review a page
 
-A page with `variants` parts needs no journey. The sidebar's "This page" lists a step for
-each part the page shows, and an app with no journeys starts there from the sidebar. A step
+A page with `variants` parts needs no journey. The tree's row for this page lists a step for
+each part the page shows, and an app with no journeys starts there from the tree. A step
 opens nothing: it lights its part, `v` lifts it, and `y` keeps the variant shown and goes on
-to the next open step, from the page or the sidebar. The agent reads the journey `page`; a
+to the next open step, from the page or the tree. The agent reads the journey `page`; a
 step's id is `page:<part>`, and its group is the page's path. Write a journey only for a
 flow across people or pages.
 
