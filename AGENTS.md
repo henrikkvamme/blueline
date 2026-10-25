@@ -8,3 +8,6 @@
   both internal: the public API uses Promises and plain data.
 - Commits: an imperative subject of at most 72 characters, and a body that says why. No
   agent attribution.
+- Effect 4 marks its platform layer as unstable. `tsconfig.base.json` allows exactly those
+  modules in `allowedUnstableApis`. Add a module there only when Effect has no stable way to
+  do the job, and never silence the warning another way.
