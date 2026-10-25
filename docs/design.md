@@ -185,8 +185,24 @@ and Ctrl+B and Ctrl+P only hide.
 
 ### Keys
 
-Blueline takes a key in the capture phase while its sidebar or one of its fields has the
+Blueline takes a key in the capture phase while its panel or one of its fields has the
 focus. Ctrl combinations always belong to Blueline. Other keys go to the app first.
+
+One rule holds everywhere, as in the lift and the tree: across is the variant, down is the
+step.
+
+- `h` and `l` show the previous and the next variant. Ctrl+H and Ctrl+L do the same when
+  the app takes `h` and `l`.
+- `j` and `k` go to the step after and before. Ctrl+J and Ctrl+K do the same.
+- Enter and `y` settle the step and go on to the next open step. Enter settles only when no
+  control of the app has the focus, so Enter on the app's own button still clicks it.
+
+### Settle
+
+A settle shows that it took. The light turns green and a check draws in its corner, for
+about 400 ms. The step's row in the tree gets its check. Then the walk goes on to the next
+open step. Nothing else moves. Undo runs the same motion backwards. With reduced motion,
+the check only fades in. On a phone, the same motion shows above the sheet.
 
 ## Requirements from the dev dashboard review
 
