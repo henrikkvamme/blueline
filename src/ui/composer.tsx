@@ -635,7 +635,13 @@ export function Composer({
         {sends && (
           <button
             type="button"
-            aria-label={draft.trim() === "" ? `Send ${pointed} notes now` : "Send now"}
+            aria-label={
+              draft.trim() !== "" || pointed === 0
+                ? "Send now"
+                : pointed === 1
+                  ? "Send the note now"
+                  : `Send ${String(pointed)} notes now`
+            }
             disabled={!canSend}
             onClick={() => {
               const command = commands[at];

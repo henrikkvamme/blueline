@@ -235,7 +235,8 @@ function PageChat({ drafts, news }: { readonly drafts: number; readonly news: nu
     >
       <MessageSquare className="size-3.5 text-dt-accent" aria-hidden />
       This page
-      {drafts > 0 && <span className="text-dt-warn tabular-nums">{drafts}</span>}
+      {/* A fixed place for the count, so the bar keeps its width as notes come and go. */}
+      <span className="min-w-[1ch] text-dt-warn tabular-nums">{drafts > 0 ? drafts : ""}</span>
       {news > 0 && <News count={news} />}
     </button>
   );

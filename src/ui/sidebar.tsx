@@ -179,7 +179,8 @@ function TreeRow({
       aria-expanded={open}
       aria-current={current === true ? "page" : undefined}
       className={cx(
-        "flex w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted hover:bg-dt-raised max-sm:min-h-11 max-sm:text-[15px]",
+        // The selection shows where the keys are, so a row the pointer clicked shows no ring.
+        "flex w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted outline-none hover:bg-dt-raised max-sm:min-h-11 max-sm:text-[15px]",
         tall ? "items-start" : "items-center",
         DEPTH[depth],
         selected && "bg-dt-raised",
