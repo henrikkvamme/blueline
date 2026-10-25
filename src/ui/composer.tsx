@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { PAGE_JOURNEY, placePath } from "../part/page";
-import { ArrowUp, Check, ImageIcon, LoaderCircle, MapPin, Plus, X } from "lucide-react";
+import { ArrowUp, Check, Clock, ImageIcon, LoaderCircle, MapPin, Plus, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { postImage } from "../io/channel";
 import { isListened } from "../io/listening";
@@ -152,14 +152,16 @@ export function NoteState({ note }: { readonly note: Note | undefined }) {
     return null;
   const line = (
     <span className="flex h-4 items-center gap-1.5 text-[11px] text-dt-muted">
-      {(state === "waiting" || state === "working") && (
+      {state === "waiting" && (
+        <>
+          <Clock className="size-3" aria-hidden />
+          {unheard ? "Sent, but no agent listens" : "Sent"}
+        </>
+      )}
+      {state === "working" && (
         <>
           <LoaderCircle className="size-3 animate-spin" aria-hidden />
-          {state === "waiting"
-            ? unheard
-              ? "Sent, but no agent listens"
-              : "Sent"
-            : "The agent is on it"}
+          The agent is on it
         </>
       )}
       {state === "settled" && (

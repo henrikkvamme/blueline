@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Circle,
   CircleCheck,
+  Clock,
   Layers,
   LoaderCircle,
   MapPin,
@@ -82,7 +83,7 @@ export function Sidebar() {
       </div>
       {done ? (
         <Done
-          waiting={notes.filter(isWithAgent).length}
+          waiting={notes.filter(isWithAgent)}
           news={notes.filter(hasNews).length}
           onReply={() => {
             const next = notes.find(hasNews);
@@ -425,7 +426,6 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
         const open = pins.length === 0 ? undefined : (folds[fold] ?? false);
         const here = walked && active && i === at;
         const news = newsOn(notes, step.id);
-        const working = notes.some((n) => n.step === step.id && isWithAgent(n));
         return (
           <li key={step.id} className="contents">
             {step.group.id !== journey.steps[i - 1]?.group.id && (
@@ -463,12 +463,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
               >
                 {step.title}
               </span>
-              {working && (
-                <LoaderCircle
-                  className="size-3 shrink-0 animate-spin text-dt-faint"
-                  aria-label="The agent is on it"
-                />
-              )}
+              <AgentMark notes={notes.filter((n) => n.step === step.id)} />
               {news.length > 0 ? (
                 <span
                   aria-label={`${news.length} new replies`}
@@ -537,13 +532,21 @@ function VariantCount({ count }: { readonly count: number }) {
 function NoteMark({ notes }: { readonly notes: readonly Note[] }) {
   if (notes.some(hasNews))
     return <span className="size-2 shrink-0 rounded-full bg-dt-accent" aria-label="New reply" />;
-  if (notes.some(isWithAgent))
+  return <AgentMark notes={notes} />;
+}
+
+/** Whether the agent works on one of the notes, which turns, or has one sent that waits for
+ * it, which stands still: a note no agent takes must not look busy. */
+function AgentMark({ notes }: { readonly notes: readonly Note[] }) {
+  if (notes.some((n) => n.state === "working"))
     return (
       <LoaderCircle
         className="size-3 shrink-0 animate-spin text-dt-faint"
         aria-label="The agent is on it"
       />
     );
+  if (notes.some((n) => n.state === "waiting"))
+    return <Clock className="size-3 shrink-0 text-dt-faint" aria-label="Sent, not yet taken" />;
   return null;
 }
 
@@ -689,7 +692,7 @@ function Done({
   onReply,
 }: {
   /** The notes the agent has not answered yet. */
-  readonly waiting: number;
+  readonly waiting: readonly Note[];
   readonly news: number;
   readonly onReply: () => void;
 }) {
@@ -701,13 +704,13 @@ function Done({
       <span className="flex items-center gap-1.5 text-[13px] font-medium text-dt-good">
         <CircleCheck className="size-4" aria-hidden />
         <span className="flex-1">Review done</span>
-        {waiting > 0 && (
+        {waiting.length > 0 && (
           <span
             className="flex items-center gap-1 text-[11px] font-normal text-dt-faint tabular-nums"
-            title={`The agent works on ${waiting === 1 ? "1 note" : `${String(waiting)} notes`}`}
+            title={`The agent has not answered ${waiting.length === 1 ? "1 note" : `${String(waiting.length)} notes`}`}
           >
-            <LoaderCircle className="size-3 animate-spin" aria-hidden />
-            {waiting}
+            <AgentMark notes={waiting} />
+            {waiting.length}
           </span>
         )}
       </span>
