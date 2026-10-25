@@ -1,3 +1,7 @@
+---
+status: proposed
+---
+
 # A wrapper command is the first way in
 
 An app must be able to use Blueline with no change to its code. `blueline dev -- <cmd>`
@@ -8,6 +12,9 @@ on a hidden port and takes the port that the app would have used. A browser exte
 also need no code, but it adds a store review and a second way to deliver the overlay. A
 Vite plugin is simpler, but it needs a change in each app. We keep the plugin and a script
 tag for the apps where the proxy cannot take the port.
+
+Henrik's try-out on several repos settles whether the wrapper is the best way in. Until
+then, this decision is proposed.
 
 ## Consequences
 
