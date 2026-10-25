@@ -9,7 +9,7 @@ export const UI = { "data-dt-ui": "" };
 /** Marks the tools' bar and the sheets above it on a phone, which the page makes room for. */
 export const DOCK = { ...UI, "data-dt-dock": "" };
 
-/** A faint ring on the tools' panel that has the keys, so the reviewer sees where they go. */
+/** A faint ring on the tools' part that has the keys, so the reviewer sees where they go. */
 export const FOCUSED = "ring-1 ring-transparent focus-within:ring-dt-accent/80";
 
 export interface Box {
@@ -25,6 +25,9 @@ const GAP = 10;
 
 /** The bottom of the screen the bar takes, which cards keep clear of. */
 export const BAR = 60;
+
+/** The panel's width, docked at the right: the page narrows by as much. */
+export const PANEL = 360;
 
 /** The box around the first element of each selector, or nothing when none shows. */
 /** An element's rect; one that shows its children only, as a part's, takes theirs. */
@@ -83,8 +86,6 @@ const overlap = (a: Box, b: Box) =>
  * the side it prefers, then above, below, left or right; else in a free corner of the screen;
  * else where it covers the least of the part.
  */
-/** The room the open sidebar takes on the right: its width (w-72) and its gap to the edge. */
-export const SIDEBAR = 288 + 12;
 
 export function placeCard(
   box: Box,

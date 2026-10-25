@@ -7,7 +7,13 @@ import {
   type SnapshotFrom,
 } from "xstate";
 import { isWithAgent } from "../src/notes/note";
-import { sessionMachine, stepNoteId, type Event, type Post } from "../src/session/machine";
+import {
+  sessionMachine,
+  stepNoteId,
+  treeShown,
+  type Event,
+  type Post,
+} from "../src/session/machine";
 import { keptOf } from "../src/io/storage";
 import { START, type Shape } from "../src/session/state";
 
@@ -45,7 +51,8 @@ const ALPHABET: readonly Event[] = [
   { type: "variant", by: 1 },
   { type: "entered" },
   { type: "switched" },
-  { type: "sidebar" },
+  { type: "panel" },
+  { type: "tree" },
   { type: "cursor", by: 1 },
   { type: "cursorOpen", by: 1 },
   { type: "choose" },
@@ -96,7 +103,22 @@ describe("the review session, over every path of up to five events", () => {
     expect([...states].some((s) => s.includes("polling"))).toBe(true);
   });
 
-  it("keeps the step and the sidebar's selection on the journey", () => {
+  it("keeps the panel's region and its flag as one, and no tree unfolded in a hidden panel", () => {
+    for (const { snapshot, path } of all) {
+      const { panel, tree } = snapshot.context;
+      expect(snapshot.matches({ panel: panel ? "shown" : "hidden" }), why(path)).toBe(true);
+      expect(!panel && tree, why(path)).toBe(false);
+    }
+  });
+
+  it("shows the panel each time the reviewer leaves a step", () => {
+    for (const { snapshot, path } of all) {
+      if (!snapshot.context.active) continue;
+      expect(after(snapshot, { type: "leave" }).context.panel, why(path)).toBe(true);
+    }
+  });
+
+  it("keeps the step and the tree's selection on the journey", () => {
     for (const { snapshot, path } of all) {
       const { at, cursor } = snapshot.context;
       expect(at >= 0 && at <= 2 && cursor >= 0 && cursor <= 2, why(path)).toBe(true);
@@ -198,10 +220,9 @@ describe("the review session", () => {
     expect(after(page, { type: "choose" }).context.preview).toBe(false);
   });
 
-  it("opens the step selected in the sidebar, also when no review runs", () => {
+  it("opens the step selected in the tree, also when no review runs", () => {
     const s = after(
       start(),
-      { type: "sidebar" },
       { type: "cursor", by: 1 },
       { type: "cursor", by: 1 },
       { type: "choose" },
@@ -218,22 +239,21 @@ describe("the review session", () => {
     expect(reset.matches({ review: { on: "entering" } })).toBe(true);
   });
 
-  it("selects the open steps in the sidebar with Ctrl+J and Ctrl+K", () => {
+  it("selects the open steps in the tree with Ctrl+J and Ctrl+K", () => {
     const settled = initialTransition(sessionMachine, {
       kept: { ...START, journey: "prep", feedback: { b: { settled: true } } },
       journeys: JOURNEYS,
       now: 0,
     })[0];
-    const down = after(settled, { type: "sidebar" }, { type: "cursorOpen", by: 1 });
+    const down = after(settled, { type: "cursorOpen", by: 1 });
     expect(down.context.cursor).toBe(2);
     expect(after(down, { type: "cursorOpen", by: 1 }).context.cursor).toBe(2);
     expect(after(down, { type: "cursorOpen", by: -1 }).context.cursor).toBe(0);
   });
 
-  it("keeps the sidebar's open and closed rows, which a reload keeps", () => {
+  it("keeps the tree's open and closed rows, which a reload keeps", () => {
     const open = after(
       start(),
-      { type: "sidebar" },
       { type: "fold", id: "journey:prep", open: true },
       { type: "fold", id: "page:place:/", open: false },
     );
@@ -442,9 +462,9 @@ describe("the review session", () => {
   });
 });
 
-describe("a settle from the sidebar", () => {
+describe("a settle from the tree", () => {
   it("settles the selected step, and moves the walk and the selection on", () => {
-    let s = after(start(), { type: "choose" }, { type: "entered" }, { type: "sidebar" });
+    let s = after(start(), { type: "choose" }, { type: "entered" });
     s = after(s, { type: "settle", step: 1 });
     expect(s.context.feedback["b"]?.settled).toBe(true);
     expect(s.context.feedback["a"]?.settled).toBeUndefined();
@@ -459,7 +479,7 @@ describe("a settle from the sidebar", () => {
   });
 
   it("goes on from the step the page shows, as y on the page does", () => {
-    const open = after(start(), { type: "choose" }, { type: "entered" }, { type: "sidebar" });
+    const open = after(start(), { type: "choose" }, { type: "entered" });
     expect(open.context.cursor).toBe(open.context.at);
     const s = after(open, { type: "settle", step: open.context.at });
     expect(s.context.feedback["a"]?.settled).toBe(true);
@@ -469,7 +489,7 @@ describe("a settle from the sidebar", () => {
   });
 
   it("goes back to an open step before when none is after", () => {
-    let s = after(start(), { type: "choose" }, { type: "entered" }, { type: "sidebar" });
+    let s = after(start(), { type: "choose" }, { type: "entered" });
     s = after(s, { type: "settle", step: 2 });
     expect(s.context.feedback["c"]?.settled).toBe(true);
     expect(s.context.at).toBe(1);
@@ -477,7 +497,7 @@ describe("a settle from the sidebar", () => {
   });
 
   it("undoes the settle back to the step the page showed", () => {
-    let s = after(start(), { type: "choose" }, { type: "entered" }, { type: "sidebar" });
+    let s = after(start(), { type: "choose" }, { type: "entered" });
     s = after(s, { type: "settle", step: 1 }, { type: "entered" }, { type: "undo" });
     expect(s.context.feedback["b"]?.settled).toBeUndefined();
     expect(s.context.at).toBe(0);
@@ -507,16 +527,23 @@ describe("the review's end", () => {
     expect(s.context.at).toBe(2);
     const done = after(s, { type: "entered" }, { type: "settle" });
     expect(done.matches({ review: "off" })).toBe(true);
-    expect(done.context).toMatchObject({ active: false, page: true, sidebar: false, at: 2 });
+    expect(done.context).toMatchObject({ active: false, panel: true, at: 2 });
     expect(done.context.feedback["c"]?.settled).toBe(true);
   });
 
-  it("ends it also when the sidebar settles the last open step, and leaves the sidebar open", () => {
+  it("ends it also when the tree settles the last open step, and leaves the panel shown", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    const done = after(s, { type: "entered" }, { type: "sidebar" }, { type: "settle", step: 2 });
+    const done = after(s, { type: "entered" }, { type: "settle", step: 2 });
     expect(done.context.feedback["c"]?.settled).toBe(true);
     expect(done.matches({ review: "off" })).toBe(true);
-    expect(done.context).toMatchObject({ sidebar: true, at: 2, cursor: 2 });
+    expect(done.context).toMatchObject({ panel: true, at: 2, cursor: 2 });
+  });
+
+  it("shows the page's chat in the panel at the last settle, also when the panel was hidden", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "panel" }, { type: "settle" });
+    expect(done.matches({ review: "off", panel: "shown" })).toBe(true);
+    expect(done.context).toMatchObject({ active: false, panel: true, tree: false });
   });
 
   it("tells the tools the journey is done", () => {
@@ -822,11 +849,89 @@ describe("notes on a page, off a step", () => {
       false,
     );
   });
+});
 
-  it("opens and closes the page's card", () => {
-    const open = after(page(), { type: "page", open: true });
-    expect(open.context.page).toBe(true);
-    expect(after(open, { type: "page" }).context.page).toBe(false);
+describe("the panel", () => {
+  const ready = (kept = {}) =>
+    after(
+      initialTransition(sessionMachine, {
+        kept: { ...START, journey: "prep", ...kept },
+        journeys: JOURNEYS,
+        now: 0,
+      })[0],
+      { type: "choose" },
+      { type: "entered" },
+    );
+
+  it("shows by default, and a reload keeps whether it shows", () => {
+    expect(start().matches({ panel: "shown" })).toBe(true);
+    const hidden = after(start(), { type: "panel" });
+    expect(hidden.matches({ panel: "hidden" })).toBe(true);
+    expect(keptOf(hidden.context).panel).toBe(false);
+    const reloaded = initialTransition(sessionMachine, {
+      kept: keptOf(hidden.context),
+      journeys: JOURNEYS,
+      now: 0,
+    })[0];
+    expect(reloaded.matches({ panel: "hidden" })).toBe(true);
+  });
+
+  it("hides and shows again with the walk on its step, ready, so the light stays", () => {
+    const on = after(ready(), { type: "go", by: 1 }, { type: "entered" });
+    const hidden = after(on, { type: "panel" });
+    expect(hidden.matches({ review: { on: "ready" }, panel: "hidden" })).toBe(true);
+    expect(hidden.context).toMatchObject({ active: true, at: 1, panel: false, preview: false });
+    const shown = after(hidden, { type: "panel" });
+    expect(shown.matches({ review: { on: "ready" }, panel: "shown" })).toBe(true);
+    expect(shown.context).toMatchObject({ active: true, at: 1, cursor: 1, panel: true });
+    // A panel already shown stays shown when asked to show, and so does a hidden one.
+    expect(after(shown, { type: "panel", shown: true }).context.panel).toBe(true);
+    expect(after(hidden, { type: "panel", shown: false }).context.panel).toBe(false);
+  });
+
+  it("is left alone by the preview, which hides it only from view", () => {
+    const hidden = after(ready(), { type: "panel" });
+    expect(after(hidden, { type: "preview" }, { type: "preview" }).context.panel).toBe(false);
+    expect(after(ready(), { type: "preview" }, { type: "preview" }).context.panel).toBe(true);
+  });
+
+  it("shows the page's chat when the reviewer leaves a step, and the walk stays where it was", () => {
+    const left = after(
+      ready(),
+      { type: "go", by: 1 },
+      { type: "entered" },
+      { type: "panel" },
+      {
+        type: "leave",
+      },
+    );
+    expect(left.matches({ review: "off", panel: "shown" })).toBe(true);
+    expect(left.context).toMatchObject({ active: false, at: 1, panel: true });
+    // The journey opened again goes on there.
+    const back = after(left, { type: "start", journey: "prep", at: 1, fresh: false });
+    expect(back.context).toMatchObject({ active: true, at: 1 });
+  });
+
+  it("folds the tree on each step opened, and when the panel hides", () => {
+    const open = after(ready(), { type: "tree" });
+    expect(open.context.tree).toBe(true);
+    expect(after(open, { type: "tree" }).context.tree).toBe(false);
+    expect(after(open, { type: "tree", open: true }).context.tree).toBe(true);
+    expect(after(open, { type: "go", by: 1 }).context.tree).toBe(false);
+    expect(after(open, { type: "jump", at: 2 }).context.tree).toBe(false);
+    expect(after(open, { type: "panel" }).context.tree).toBe(false);
+    expect(after(open, { type: "leave" }).context.tree).toBe(false);
+    // A hidden panel has no tree to unfold.
+    expect(after(ready(), { type: "panel" }, { type: "tree" }).context.tree).toBe(false);
+  });
+
+  it("shows the tree off a step on a wide screen, and on a step only unfolded", () => {
+    expect(treeShown({ active: false, tree: false }, false)).toBe(true);
+    expect(treeShown({ active: true, tree: false }, false)).toBe(false);
+    expect(treeShown({ active: true, tree: true }, false)).toBe(true);
+    // A phone's sheet keeps it folded off a step too, so the page stays in view.
+    expect(treeShown({ active: false, tree: false }, true)).toBe(false);
+    expect(treeShown({ active: false, tree: true }, true)).toBe(true);
   });
 });
 

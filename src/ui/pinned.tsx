@@ -2,7 +2,7 @@ import { Trash2 } from "lucide-react";
 import { zoneOf } from "../keys/keymap";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Note } from "../notes/note";
-import { SHEET } from "./card";
+import { SHEET } from "./panel";
 import { Composer } from "./composer";
 import { cx } from "./cx";
 import { DOCK, FOCUSED, UI } from "./geometry";
@@ -32,10 +32,10 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
   const shown = box !== undefined;
   useEffect(() => {
     // A new note opens to write in; one with words opens in normal mode, as nvim does. One
-    // opened from the sidebar leaves the keys there, as its other rows do; i goes in.
+    // opened from the tree leaves the keys there, as its other rows do; i goes in.
     if (!shown) return;
     const fresh = note.draft === "";
-    if (!fresh && zoneOf(document.activeElement) === "sidebar") return;
+    if (!fresh && zoneOf(document.activeElement) === "panel") return;
     if (note.draft === "") focusToWrite(field.current);
     else field.current?.focus();
   }, [note.id, shown]);

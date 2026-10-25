@@ -16,8 +16,8 @@ import {
   boxOf,
   inside,
   placeCard,
+  PANEL,
   sameBox,
-  SIDEBAR,
   under,
   UI,
   type Box,
@@ -127,10 +127,10 @@ export function useCard(
   const kept = useRef<{ readonly key: string; readonly side: Side } | undefined>(undefined);
   const [moved, setMoved] = useState<{ readonly key: string; readonly place: Place }>();
   const [dragging, setDragging] = useState(false);
-  // The open sidebar is on the right; a card stays off it.
-  const sidebar = useSession((s) => s.context.sidebar);
+  // The docked panel is on the right; a card stays off it.
+  const docked = useSession((s) => s.context.panel && !s.context.preview) && !isPhone();
   const screen = {
-    width: window.innerWidth - (sidebar ? SIDEBAR : 0),
+    width: window.innerWidth - (docked ? PANEL : 0),
     height: window.innerHeight,
   };
   const stays = kept.current?.key === key ? kept.current.side : undefined;
@@ -225,10 +225,11 @@ export function Flash({
   );
 }
 
-/** The light on the part to look at: the page dims a little around it. */
 /**
- * The light around the step's part. With more than one variant, a tab on its edge shows
- * which one the page shows, of how many, so the reviewer sees there are more to look at.
+ * The light around the step's part: the page dims a little around it. With more than one
+ * variant, a tab on its edge shows which one the page shows, of how many, so the reviewer sees
+ * there are more to look at. It follows the part at once, as the page scrolls or narrows for
+ * the panel: an eased follow would trail behind the part.
  */
 export function Light({
   box,
@@ -237,7 +238,6 @@ export function Light({
   readonly box: Box;
   readonly place?: VariantPlace | undefined;
 }) {
-  const move = "transition-all duration-500 ease-[cubic-bezier(.2,.8,.2,1)]";
   return (
     <div {...UI} aria-hidden className="pointer-events-none fixed inset-0 z-[2147483000]">
       <svg className="absolute inset-0 size-full">
@@ -245,7 +245,6 @@ export function Light({
           <mask id="blueline-light">
             <rect width="100%" height="100%" fill="white" />
             <rect
-              className={move}
               style={{ x: box.x, y: box.y, width: box.width, height: box.height }}
               rx="12"
               fill="black"
@@ -255,7 +254,7 @@ export function Light({
         <rect width="100%" height="100%" fill="rgb(0 0 0 / 0.18)" mask="url(#blueline-light)" />
       </svg>
       <div
-        className={cx("absolute rounded-[12px] ring-2 ring-dt-accent", move)}
+        className="absolute rounded-[12px] ring-2 ring-dt-accent"
         style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
       >
         {place !== undefined && <VariantTab place={place} />}

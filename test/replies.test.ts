@@ -35,25 +35,26 @@ describe("the next reply", () => {
 
 describe("a reply on a page with no review", () => {
   const place = "place:/pursuits";
+  // The panel is hidden, so the reply has to show it.
   const actor = () => {
     const a = createActor(sessionMachine, {
-      input: { kept: { ...START, journey: "prep" }, journeys: [], now: 0 },
+      input: { kept: { ...START, journey: "prep", panel: false }, journeys: [], now: 0 },
     }).start();
     a.send({ type: "place", place });
     return a;
   };
 
-  it("opens the page's card", () => {
+  it("shows the panel, with the page's chat", () => {
     const a = actor();
     openPlaceReply(a, replied("1", place));
-    expect(a.getSnapshot().context.page).toBe(true);
+    expect(a.getSnapshot().context.panel).toBe(true);
     a.stop();
   });
 
-  it("opens the page's card for a pinned note's reply, as the card's chat shows it", () => {
+  it("shows the panel for a pinned note's reply, as the page's chat shows it", () => {
     const a = actor();
     openPlaceReply(a, replied("p1", place, true));
-    expect(a.getSnapshot().context.page).toBe(true);
+    expect(a.getSnapshot().context.panel).toBe(true);
     expect(a.getSnapshot().matches({ layer: "pinned" })).toBe(false);
     a.stop();
   });
@@ -61,7 +62,7 @@ describe("a reply on a page with no review", () => {
   it("does not open on another page", () => {
     const a = actor();
     openPlaceReply(a, replied("1", "place:/projects"));
-    expect(a.getSnapshot().context.page).toBe(false);
+    expect(a.getSnapshot().context.panel).toBe(false);
     a.stop();
   });
 });

@@ -4,7 +4,7 @@ import { fromCallback } from "xstate";
 import { sessionMachine, type EnterInput, type Event, type SwitchInput } from "../session/machine";
 import type { Shape } from "../session/state";
 import type { DevInfo } from "../types";
-import { StepChat } from "../ui/card";
+import { StepChat } from "../ui/panel";
 import { NoteState } from "../ui/composer";
 import { ToolsContext, now, type Tools } from "../ui/session";
 import { KEPT, STATES, WORKSHOP } from "./chats";

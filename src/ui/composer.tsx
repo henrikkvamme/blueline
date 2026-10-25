@@ -24,7 +24,14 @@ import { now, useSession, useTools } from "./session";
  * right, each with the pointed notes sent in it, and the agent's answers as plain text, as a
  * chat shows them.
  */
-export function Thread({ note }: { readonly note: Note | undefined }) {
+export function Thread({
+  note,
+  className = "max-h-[min(60vh,30rem)]",
+}: {
+  readonly note: Note | undefined;
+  /** Its height: at most a part of the screen, or as the panel's chat gives it. */
+  readonly className?: string;
+}) {
   const { actor } = useTools();
   const unread = note?.unread === true ? note.id : undefined;
   useEffect(() => {
@@ -39,7 +46,7 @@ export function Thread({ note }: { readonly note: Note | undefined }) {
   }, [count]);
   if (note === undefined || count === 0) return null;
   return (
-    <ol ref={list} className="flex max-h-[min(60vh,30rem)] flex-col gap-2 overflow-y-auto">
+    <ol ref={list} className={cx("flex flex-col gap-2 overflow-y-auto", className)}>
       {note.thread.map((m, i) =>
         m.by === "you" ? (
           <li key={String(i)} className="flex max-w-[85%] flex-col items-end gap-1 self-end">
@@ -335,7 +342,7 @@ export function Composer({
   fieldRef,
   onDone,
   onTab,
-  escapeTo = "sidebar",
+  escapeTo = "panel",
 }: {
   readonly id: string;
   readonly step: string;
@@ -349,12 +356,11 @@ export function Composer({
   readonly fieldRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Enter or Escape: the reviewer is done writing here. */
   readonly onDone: (how: "enter" | "escape") => void;
-  /** Tab, with no command to complete: the step's card writes to the other chat, in the same
-   * mode. */
+  /** Tab, with no command to complete: the panel writes to the other chat, in the same mode. */
   readonly onTab?: ((insert: boolean) => void) | undefined;
-  /** Where Escape in normal mode puts the keys: the sidebar, which it opens, so the reviewer
-   * sees where they are; or the page, as in the lift, whose keys go on. */
-  readonly escapeTo?: "sidebar" | "page";
+  /** Where Escape in normal mode puts the keys: the panel's tree, which unfolds, so the
+   * reviewer sees where they are; or the page, as in the lift, whose keys go on. */
+  readonly escapeTo?: "panel" | "page";
 }) {
   const { actor, adapter, perform } = useTools();
   const own = useRef<HTMLTextAreaElement>(null);
@@ -362,8 +368,8 @@ export function Composer({
   const field = fieldRef ?? own;
   const [uploading, setUploading] = useState(0);
   const leave = (how: "enter" | "escape") => {
-    // The sidebar keeps the field, so i comes back to it.
-    if (how === "escape" && escapeTo === "sidebar") perform({ kind: "sidebar" });
+    // The tree keeps the field, so i comes back to it.
+    if (how === "escape" && escapeTo === "panel") perform({ kind: "focus", to: "panel" });
     else field.current?.blur();
     onDone(how);
   };

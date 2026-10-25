@@ -6,26 +6,25 @@ import type { Event, Layer } from "../session/machine";
  * nothing or hides one that does something.
  *
  * What a key does depends on where the focus is, its zone, read from the page when the key
- * comes: h, j, k and l walk the review on the page, and move the selection in the sidebar.
+ * comes: h, j, k and l walk the review on the page, and move the selection in the panel's tree.
  * g opens the g menu, as LazyVim's which-key: the key after it, as m in g m, does the thing.
  */
 
 /** Where the focus is. A field and an open list (a picker, the menu) keep their keys. */
-export type Zone = "page" | "sidebar" | "field" | "list";
+export type Zone = "page" | "panel" | "field" | "list";
 
 /** What the keys need to know of the session. */
 export interface View {
   readonly active: boolean;
   readonly layer: Layer;
-  readonly sidebar: boolean;
+  /** Whether the panel shows. */
+  readonly panel: boolean;
   /** How many variants the step has. */
   readonly variants: number;
   /** Whether the app can act as someone else. */
   readonly people: boolean;
   /** Whether the tools hide, so the reviewer sees the page as a user does. */
   readonly preview: boolean;
-  /** Whether the page's card is open, for the page's chat off a step. */
-  readonly page?: boolean | undefined;
   /** Whether the reviewer points at an element for a note, from the pin button. */
   readonly aiming?: boolean | undefined;
 }
@@ -33,10 +32,11 @@ export interface View {
 /** What a key does: a session event, or something on the page. */
 export type Action =
   | { readonly kind: "event"; readonly event: Event }
-  | { readonly kind: "focus"; readonly to: "note" | "sidebar" | "page" }
+  /** Puts the keys in a message field, in the panel's tree, which unfolds, or on the page. */
+  | { readonly kind: "focus"; readonly to: "note" | "panel" | "page" }
   | { readonly kind: "blur" }
-  /** Opens the sidebar and puts the keys in it; from the sidebar, hides it. */
-  | { readonly kind: "sidebar" }
+  /** Hides the panel, or shows it again; the walk and the light stay. */
+  | { readonly kind: "panel" }
   | { readonly kind: "command"; readonly id: string }
   /** Goes to the next reply from the agent; with none, through the notes on the page. */
   | { readonly kind: "reply" }
@@ -48,18 +48,18 @@ export type Action =
   | { readonly kind: "aim"; readonly on: boolean }
   /** Goes to the journey's first or last step not settled. */
   | { readonly kind: "end"; readonly which: "first" | "last" }
-  /** Selects the sidebar's row `by` rows on, over its notes, steps and journeys. */
+  /** Selects the tree's row `by` rows on, over its notes, steps and journeys. */
   | { readonly kind: "row"; readonly by: number }
-  /** Does what a click on the sidebar's selected row does. */
+  /** Does what a click on the tree's selected row does. */
   | { readonly kind: "pick" }
-  /** Settles the step selected in the sidebar, or opens it again. */
+  /** Settles the step selected in the tree, or opens it again. */
   | { readonly kind: "settleSelected" }
-  /** In the sidebar's tree, as in Neovim's: `open` opens the row's children, goes down into
+  /** In the panel's tree, as in Neovim's: `open` opens the row's children, goes down into
    * them once open, or with none, opens what the row names; else it closes them, or goes up
    * to the row it is under, or with none, to the row above. */
   | { readonly kind: "tree"; readonly open: boolean };
 
-export type Group = "Review" | "Notes" | "Sidebar" | "Tools";
+export type Group = "Review" | "Notes" | "Panel" | "Tools";
 
 export interface Binding {
   /** The keys, each one key. */
@@ -71,17 +71,17 @@ export interface Binding {
    * for each way, and a tap does either. */
   readonly each?: readonly [string, string];
   readonly group: Group;
-  /** Where the key works; "go" is the key after g, on the page and in the sidebar. */
-  readonly zone: "page" | "sidebar" | "go";
+  /** Where the key works; "go" is the key after g, on the page and in the panel's tree. */
+  readonly zone: "page" | "panel" | "go";
   /** For a key after g: works only when g came from there. */
-  readonly from?: "page" | "sidebar";
+  readonly from?: "page" | "panel";
   readonly when?: (view: View) => boolean;
   readonly does: Action | ((key: string) => Action);
 }
 
 const event = (e: Event): Action => ({ kind: "event", event: e });
 const active = (v: View) => v.active;
-// The preview turns the keys as the sidebar has them: j and k go down and up the steps, and
+// The preview turns the keys as the tree has them: j and k go down and up the steps, and
 // h and l go across the step's variants, to compare them quickly with the page alone.
 const walking = (v: View) => v.active && !v.preview;
 const looking = (v: View) => v.active && v.preview;
@@ -188,7 +188,7 @@ export const BINDINGS: readonly Binding[] = [
   // Notes.
   {
     keys: ["i"],
-    label: "Write a message in the card's chat: the step's or the page's",
+    label: "Write a message in the panel's chat: the step's or the page's",
     group: "Notes",
     zone: "page",
     does: { kind: "focus", to: "note" },
@@ -208,68 +208,59 @@ export const BINDINGS: readonly Binding[] = [
     zone: "page",
     does: { kind: "reply" },
   },
-  // The sidebar.
+  // The panel's tree.
   {
     keys: ["j", "k"],
     label: "Select the row below, above: a note, a step or a journey",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     does: (k) => ({ kind: "row", by: k === "j" ? 1 : -1 }),
   },
   {
     keys: ["h", "l"],
     label: "Close the row or go up; open it or go down into it",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     does: (k) => ({ kind: "tree", open: k === "l" }),
   },
   {
     keys: ["j", "k"],
     ctrl: true,
     label: "Select the next step below, above that is not settled",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     does: (k) => event({ type: "cursorOpen", by: k === "j" ? 1 : -1 }),
   },
   {
     keys: ["y"],
     label: "Settle the selected step, or open it again; then go on to the next open one",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     when: active,
     does: { kind: "settleSelected" },
   },
   {
     keys: ["G"],
     label: "Select the bottom row",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     does: { kind: "row", by: Infinity },
   },
   {
     keys: ["Enter"],
     label: "Open the selected row",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     does: { kind: "pick" },
   },
   {
     keys: ["i"],
     label: "Write again in the field you left, or a message on the step",
-    group: "Sidebar",
-    zone: "sidebar",
+    group: "Panel",
+    zone: "panel",
     does: { kind: "focus", to: "note" },
   },
-
-  {
-    keys: ["b"],
-    ctrl: true,
-    label: "Close the sidebar",
-    group: "Sidebar",
-    zone: "sidebar",
-    does: { kind: "sidebar" },
-  },
-  // The tools, on the page and in the sidebar.
+  // The tools, on the page and in the panel.
   {
     keys: ["p"],
     ctrl: true,
@@ -281,10 +272,10 @@ export const BINDINGS: readonly Binding[] = [
   {
     keys: ["b"],
     ctrl: true,
-    label: "Go to the sidebar, and from there hide it",
+    label: "Hide the panel, or show it again",
     group: "Tools",
     zone: "page",
-    does: { kind: "sidebar" },
+    does: { kind: "panel" },
   },
   // g opens the g menu; the key after g does the thing.
   {
@@ -294,7 +285,7 @@ export const BINDINGS: readonly Binding[] = [
     zone: "page",
     does: event({ type: "open", layer: "go" }),
   },
-  // As in vim: g g and G go to the top and the bottom, of the steps or the sidebar's rows.
+  // As in vim: g g and G go to the top and the bottom, of the steps or the tree's rows.
   {
     keys: ["g"],
     label: "Go to the first open step",
@@ -307,9 +298,9 @@ export const BINDINGS: readonly Binding[] = [
   {
     keys: ["g"],
     label: "Select the top row",
-    group: "Sidebar",
+    group: "Panel",
     zone: "go",
-    from: "sidebar",
+    from: "panel",
     does: { kind: "row", by: -Infinity },
   },
   {
@@ -375,20 +366,20 @@ export const commandBindings = (
 const keyOf = (b: Binding, key: string) => (b.ctrl === true ? `Ctrl+${key}` : key);
 
 /**
- * The bindings that work in this zone now; "go" gives the g menu's. The sidebar has the focus
- * while it is open, so it has the page's keys too, but the ones it uses itself, as j and k.
+ * The bindings that work in this zone now; "go" gives the g menu's. The tree has the focus
+ * while it shows, so it has the page's keys too, but the ones it uses itself, as j and k.
  */
 export const bindingsFor = (bindings: readonly Binding[], view: View, zone: Zone | "go") => {
   const usable = (b: Binding) => b.when === undefined || b.when(view);
   const own = bindings.filter((b) => b.zone === zone && usable(b));
-  if (zone !== "sidebar") return own;
+  if (zone !== "panel") return own;
   const taken = new Set(own.flatMap((b) => b.keys.map((k) => keyOf(b, k))));
   const page = bindings.filter(
     (b) =>
       b.zone === "page" &&
       usable(b) &&
-      // b goes to the sidebar, where the keys already are.
-      !(typeof b.does !== "function" && b.does.kind === "focus" && b.does.to === "sidebar") &&
+      // A key that puts the keys in the tree, where they already are.
+      !(typeof b.does !== "function" && b.does.kind === "focus" && b.does.to === "panel") &&
       !b.keys.some((k) => taken.has(keyOf(b, k))),
   );
   return [...own, ...page];
@@ -397,7 +388,7 @@ export const bindingsFor = (bindings: readonly Binding[], view: View, zone: Zone
 /** The g menu's keys, after g in this zone. */
 export const goBindings = (bindings: readonly Binding[], view: View, zone: Zone) =>
   bindingsFor(bindings, view, "go").filter(
-    (b) => b.from === undefined || b.from === (zone === "sidebar" ? "sidebar" : "page"),
+    (b) => b.from === undefined || b.from === (zone === "panel" ? "panel" : "page"),
   );
 
 /** A key as the keymap reads it. */
@@ -408,15 +399,15 @@ export interface Key {
   readonly alt?: boolean;
 }
 
-/** Whose element has the focus: the tools', as their fields and the sidebar, or a field of
+/** Whose element has the focus: the tools', as their fields and the panel's tree, or a field of
  * the page's; a picker of the tools' keeps every key, as Ctrl+P to move up. */
 export type Owner = "tools" | "page" | "picker";
 
 /**
  * What a key does before anything else on the page sees it: Ctrl+P hides the tools and shows
- * them again, and Ctrl+B goes to the sidebar, from a field too, and from there hides it. While
- * a step is open they are the tools' alone, so the page's own Ctrl+B waits until the step
- * closes; the tools' own fields and the sidebar have them always. With no step open, the page
+ * them again, and Ctrl+B hides the panel and shows it again, from a field too. While a step is
+ * open they are the tools' alone, so the page's own Ctrl+B waits until the step closes; the
+ * tools' own fields and the panel's tree have them always. With no step open, the page
  * has them first, and the page's bindings take them after. On a Mac, a field loses Ctrl+P and Ctrl+B for up a line
  * and back a letter.
  */
@@ -428,7 +419,7 @@ export function firstAction(view: View, key: Key, owner?: Owner): Action | undef
   if (owner === "picker") return undefined;
   if (!view.active && owner !== "tools") return undefined;
   if (key.key === "p") return event({ type: "preview" });
-  return key.key === "b" ? { kind: "sidebar" } : undefined;
+  return key.key === "b" ? { kind: "panel" } : undefined;
 }
 
 /**
@@ -441,7 +432,7 @@ export function dispatch(
   zone: Zone,
   key: Key,
 ): Action | undefined {
-  const first = firstAction(view, key, zone === "sidebar" ? "tools" : undefined);
+  const first = firstAction(view, key, zone === "panel" ? "tools" : undefined);
   if (first !== undefined) return first;
   if (key.meta === true || key.alt === true) return undefined;
   if (zone === "list") return undefined;
@@ -455,34 +446,25 @@ export function dispatch(
     return typeof next.does === "function" ? next.does(key.key) : next.does;
   }
   // Escape backs out one level: it closes what is open over the page, then leaves the step
-  // for the page, then closes the page's card alone, then hides the tools, so they come back
-  // as they were, the sidebar and the card too. In the preview it shows them again, with
-  // the keys in the sidebar, as Escape went from there.
-  if (key.key === "Escape" && view.preview && key.ctrl !== true)
-    return { kind: "focus", to: "sidebar" };
-  if (key.key === "Escape" && zone === "sidebar" && key.ctrl !== true)
+  // for the page, then hides the tools, so they come back as they were, the panel and the
+  // note card too. In the preview it shows them again, as Ctrl+P does. Leaving moves the
+  // reviewer; only Ctrl+B and Ctrl+P hide.
+  if (key.key === "Escape" && view.preview && key.ctrl !== true) return event({ type: "preview" });
+  if (key.key === "Escape" && key.ctrl !== true)
     return view.layer !== "none"
       ? event({ type: "escape" })
       : view.active
         ? event({ type: "leave" })
-        : event({ type: "preview" });
-  if (key.key === "Escape" && zone === "page" && key.ctrl !== true)
-    return view.layer !== "none"
-      ? event({ type: "escape" })
-      : view.active
-        ? event({ type: "leave" })
-        : view.page === true && !view.sidebar
-          ? event({ type: "page", open: false })
-          : view.sidebar
-            ? event({ type: "preview" })
-            : undefined;
+        : zone === "panel" || view.panel
+          ? event({ type: "preview" })
+          : undefined;
   const usable = bindingsFor(bindings, view, zone).filter((b) => (b.ctrl === true) === ctrl);
   const binding = usable.find((b) => b.keys.includes(key.key));
   if (binding === undefined) return undefined;
   return typeof binding.does === "function" ? binding.does(key.key) : binding.does;
 }
 
-/** The zone of the focused element: a field, a list, the sidebar, or the page. */
+/** The zone of the focused element: a field, a list, the panel's tree, or the page. */
 export function zoneOf(element: Element | null): Zone {
   if (element === null) return "page";
   if (
@@ -493,18 +475,18 @@ export function zoneOf(element: Element | null): Zone {
   )
     return "field";
   const zone = element.closest("[data-dt-zone]")?.getAttribute("data-dt-zone");
-  if (zone === "sidebar" || zone === "list") return zone;
+  if (zone === "panel" || zone === "list") return zone;
   if (element.closest("[role=dialog],[role=listbox],[role=menu]") !== null) return "list";
   return "page";
 }
 
-/** Whose element has the focus: the tools', for a field in their root and the sidebar, or the
+/** Whose element has the focus: the tools', for a field in their root and the tree, or the
  * page's, for its own field; on the page itself, nobody's. */
 export function ownerOf(element: Element | null): Owner | undefined {
   if (element === null) return undefined;
   if (element.closest("[data-dt-picker]") !== null) return "picker";
   const zone = zoneOf(element);
-  if (zone === "sidebar") return "tools";
+  if (zone === "panel") return "tools";
   if (zone !== "field") return undefined;
   return element.closest(".blueline, .blueline-portal") === null ? "page" : "tools";
 }

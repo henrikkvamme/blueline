@@ -398,9 +398,8 @@ export const KEPT: Kept = {
   variants: {},
   feedback: { settled: { settled: true } },
   notes: NOTES,
-  sidebar: false,
+  panel: true,
   design: "",
-  page: false,
   chat: "step",
   folds: {},
 };

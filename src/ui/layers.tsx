@@ -14,7 +14,7 @@ import { isKept } from "../notes/note";
 import { UI } from "./geometry";
 import type { DevInfo } from "../types";
 import { Palette, type Item } from "./palette";
-import { useJourneys, useThisPage } from "./sidebar";
+import { useJourneys, useThisPage } from "./tree";
 import { usePins, useSession, useStep, useTools } from "./session";
 
 /*
@@ -162,7 +162,7 @@ function Help({ view }: { readonly view: View }) {
   );
 }
 
-const GROUPS: readonly string[] = ["Review", "Notes", "Sidebar", "Tools"];
+const GROUPS: readonly string[] = ["Review", "Notes", "Panel", "Tools"];
 /** The tools' own groups first, then the app's. */
 const rank = (group: string | undefined) => {
   const i = GROUPS.indexOf(group ?? "");
@@ -198,7 +198,7 @@ function Journeys({ view }: { readonly view: View }) {
   );
 }
 
-/** This page's chat, notes and parts, as the sidebar shows them; a choice does what a click
+/** This page's chat, notes and parts, as the tree shows them; a choice does what a click
  * there does. */
 function Here() {
   const { actor } = useTools();
@@ -241,7 +241,7 @@ function Here() {
  * next key reaches the keys; a click does the same as the key. */
 function Go({ view }: { readonly view: View }) {
   const { actor, perform } = useTools();
-  // The keys after g from where the keys are, as g g, the top row in the sidebar.
+  // The keys after g from where the keys are, as g g, the top row in the tree.
   const items = goBindings(BINDINGS, view, zoneOf(document.activeElement));
   const menu = useRef<HTMLDivElement>(null);
   // A press outside closes it, as any other key does.

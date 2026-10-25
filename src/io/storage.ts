@@ -71,10 +71,9 @@ export function loadKept(key: string): Kept {
       variants: field(fields.variants, raw["variants"], START.variants),
       feedback: field(fields.feedback, raw["feedback"], START.feedback),
       notes: inChats(field(fields.notes, raw["notes"], START.notes)),
-      // The review before the package called the sidebar its overview.
-      sidebar: field(fields.sidebar, raw["sidebar"] ?? raw["overview"], START.sidebar),
+      // The sidebar before the panel was closed by default, so its state is not the panel's.
+      panel: field(fields.panel, raw["panel"], START.panel),
       design: field(fields.design, raw["design"], START.design),
-      page: field(fields.page, raw["page"], START.page),
       chat: field(fields.chat, raw["chat"], START.chat),
       folds: field(fields.folds, raw["folds"], START.folds),
     };
@@ -95,9 +94,8 @@ export const keptOf = (context: Kept): Kept => ({
   variants: context.variants,
   feedback: context.feedback,
   notes: context.notes,
-  sidebar: context.sidebar,
+  panel: context.panel,
   design: context.design,
-  page: context.page,
   chat: context.chat,
   folds: context.folds,
 });

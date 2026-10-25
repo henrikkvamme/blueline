@@ -1,12 +1,12 @@
 import type { Note } from "../notes/note";
 import type { SessionActor } from "../session/machine";
 import { nextNews } from "../session/replies";
-import { isPhone } from "./touch";
 
-/** Opens a reply where it is: its step, whose chat has it. */
+/** Opens a reply where it is: its step, whose chat the panel shows. */
 export function openReply(actor: SessionActor, at: number) {
   const { context } = actor.getSnapshot();
   if (context.preview) actor.send({ type: "preview" });
+  actor.send({ type: "panel", shown: true });
   actor.send(
     context.active
       ? { type: "jump", at }
@@ -14,14 +14,15 @@ export function openReply(actor: SessionActor, at: number) {
   );
 }
 
-/** Opens a reply on a page's chat: the page's card, or on a step, its card with the page's
- * chat, so the walk stays where it is. Only a reply on this page opens; another page's is
- * not here. */
+/** Opens a reply on a page's chat: the panel off a step, or on a step, the panel with the
+ * page's chat, so the walk stays where it is. Only a reply on this page opens; another page's
+ * is not here. */
 export function openPlaceReply(actor: SessionActor, note: Note) {
   const { context } = actor.getSnapshot();
   if (note.step !== context.place) return;
   if (context.preview) actor.send({ type: "preview" });
-  actor.send(context.active ? { type: "chat", to: "page" } : { type: "page", open: true });
+  actor.send({ type: "panel", shown: true });
+  if (context.active) actor.send({ type: "chat", to: "page" });
 }
 
 /** Opens the next reply in the journey, if there is one. */
@@ -34,8 +35,8 @@ export function openNextReply(actor: SessionActor) {
   return next !== undefined;
 }
 
-/** On a phone the open sidebar covers the cards, so a reply or a chat opened from it or from
- * the bar closes it. The desktop keeps it. */
-export function leaveSidebar(actor: SessionActor) {
-  if (isPhone() && actor.getSnapshot().context.sidebar) actor.send({ type: "sidebar" });
+/** Folds the tree, so the panel shows what a row or a reply opened: the step, or the page's
+ * chat on a phone, whose sheet the tree would fill. */
+export function foldTree(actor: SessionActor) {
+  if (actor.getSnapshot().context.tree) actor.send({ type: "tree", open: false });
 }

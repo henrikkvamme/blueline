@@ -16,7 +16,7 @@ import {
 } from "../keys/keymap";
 import { isKept } from "../notes/note";
 import { liveMachine, shapesOf } from "../session/actors";
-import { LAYERS, type Layer as LayerName, type SessionActor } from "../session/machine";
+import { LAYERS, treeShown, type Layer as LayerName, type SessionActor } from "../session/machine";
 import { pageJourney, pageParts, placeId } from "../part/page";
 import {
   partOn,
@@ -28,8 +28,7 @@ import {
   type Verdicts,
 } from "../part/store";
 import type { DevAdapter, DevInfo, DevShift, JourneyInfo, StepInfo } from "../types";
-import { Bar, useVariantPlace } from "./bar";
-import { PageCard, StepCard } from "./card";
+import { Bar } from "./bar";
 import { firstOpen, lastOpen } from "../session/state";
 import { describe, pathTo } from "./geometry";
 import { Layer } from "./layers";
@@ -46,11 +45,12 @@ import {
   type Snapshot,
   type Tools,
 } from "./session";
-import { Sidebar } from "./sidebar";
-import { leaveSidebar, openNextReply } from "./replies";
+import { Panel } from "./panel";
+import { foldTree, openNextReply } from "./replies";
+import { useVariantPlace } from "./step-controls";
 import { Toasts } from "./toasts";
 import { VariantNote } from "./variant-note";
-import { useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
+import { isPhone, useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
 import { focusToWrite, modeOf } from "../vim";
 
 /*
@@ -68,7 +68,7 @@ export interface DevToolsProps<C> {
   /** The page's path, for a router that keeps it out of the address's path, as in its hash;
    * each path has its own notes. The address's path when none. */
   readonly path?: string | undefined;
-  /** Goes to a page by its path, as `path` names it, for the sidebar's other pages. A new
+  /** Goes to a page by its path, as `path` names it, for the tree's other pages. A new
    * address when none. */
   readonly navigate?: ((path: string) => void) | undefined;
   /** The app's own dev parts, which can start the review (useReviewControl). */
@@ -129,35 +129,43 @@ const viewOf = (s: Snapshot, adapter: DevInfo): View => {
   return {
     active: s.context.active,
     layer: layerOf(s),
-    // The preview hides the sidebar and the page's card, and they come back with the tools.
-    sidebar: s.context.sidebar && !s.context.preview,
+    // The preview hides the panel, and it comes back with the tools.
+    panel: s.context.panel && !s.context.preview,
     // The step's part's variants, else the step's own.
     variants: step === undefined ? 0 : variantsOn(step, journeyIn(s, adapter)),
     people: adapter.people !== undefined,
     preview: s.context.preview,
-    page: s.context.page && !s.context.preview,
     aiming: aim.current(),
   };
 };
 
-/** To write: in the open note's card, else in the step's or the page's. */
-const focusComposer = () =>
-  requestAnimationFrame(() =>
-    focusToWrite(
-      document.querySelector<HTMLElement>("[data-dt-composer=pinned]") ??
-        document.querySelector<HTMLElement>("[data-dt-composer=step]"),
-    ),
-  );
+/** The frames to wait for a field to draw: a note's card has none until its target is
+ * measured, and the panel's chat none until the panel shows. */
+const CARD_FRAMES = 30;
 
-/** The note field the preview hid, or Ctrl+B left for the sidebar, to come back to. */
+/** To write: in the open note's card, else in the panel's chat, once it draws. */
+const focusComposer = (frames = CARD_FRAMES): void => {
+  requestAnimationFrame(() => {
+    const field =
+      document.querySelector<HTMLElement>("[data-dt-composer=pinned]") ??
+      document.querySelector<HTMLElement>("[data-dt-composer=step]");
+    if (field === null && frames > 0) return focusComposer(frames - 1);
+    focusToWrite(field);
+  });
+};
+
+/** Whether the focus is in the panel: in its tree, on one of its buttons or in its chat. */
+const inPanel = () => document.activeElement?.closest("[data-dt-panel]") != null;
+
+/** The note field the preview hid, or Ctrl+B or Escape left for the tree, to come back to. */
 let away: { readonly el: HTMLElement; readonly kind: string; readonly insert: boolean } | undefined;
 
-/** Lets the note field that has the focus go, as the preview hides it or Ctrl+B goes to the
- * sidebar, and keeps it with its mode; the field keeps its cursor. */
+/** Lets the note field that has the focus go, as the preview or Ctrl+B hides it or Escape
+ * goes to the tree, and keeps it with its mode; the field keeps its cursor. */
 function keepFocus() {
   const active = document.activeElement;
-  // From the sidebar, the field it was left for is still the one to come back to.
-  if (zoneOf(active) === "sidebar") return;
+  // From the tree, the field it was left for is still the one to come back to.
+  if (zoneOf(active) === "panel") return;
   const kind = active instanceof HTMLElement ? active.getAttribute("data-dt-composer") : null;
   away =
     active instanceof HTMLElement && kind !== null
@@ -165,10 +173,6 @@ function keepFocus() {
       : undefined;
   away?.el.blur();
 }
-
-/** The frames to wait for a note's card to draw its field again: it has none until its
- * target is measured. */
-const CARD_FRAMES = 30;
 
 /** Back to the note field kept, at its place: in its mode, or to write with `insert`. Says
  * whether a field was kept; with none, the keys stay the page's. `noteOpen` says whether a
@@ -184,7 +188,8 @@ function comeBack(noteOpen: () => boolean, insert?: boolean): boolean {
       const el = was.el.isConnected
         ? was.el
         : document.querySelector<HTMLElement>(`[data-dt-composer=${was.kind}]`);
-      if (el === null && was.kind === "pinned" && noteOpen() && frames > 0) {
+      // The panel draws its chat again a frame after it shows.
+      if (el === null && (was.kind !== "pinned" || noteOpen()) && frames > 0) {
         restore(frames - 1);
         return;
       }
@@ -315,7 +320,7 @@ export function DevTools<C>({
     };
     /** Settles the step at `at`, or opens it again. A settle keeps the variant the step's part
      * shows on the page, and sends the step's notes not sent yet at this time. A step the
-     * sidebar selected is named when the page shows another. */
+     * tree selected is named when the page shows another. */
     const settle = (at: number) => {
       const s = actor.getSnapshot();
       const journey = journeyIn(s, info);
@@ -356,8 +361,14 @@ export function DevTools<C>({
       // As Neovim's tree: l opens the selected row's children, goes down into them once
       // open, and on a row with none opens what it names. h closes them, or goes up to the
       // row it is under and closes that, and on a row under nothing goes up one row.
+      // A key of the tree's that comes while it is folded unfolds it first.
+      if (
+        (action.kind === "tree" || action.kind === "row" || action.kind === "pick") &&
+        !treeShown(actor.getSnapshot().context, isPhone())
+      )
+        return actor.send({ type: "tree", open: true });
       if (action.kind === "tree") {
-        const rows = sidebarRows();
+        const rows = treeRows();
         const at = selectedRow(actor, rows);
         const row = rows[at];
         if (row === undefined) return;
@@ -376,7 +387,7 @@ export function DevTools<C>({
         selectRow(actor, parent);
         return fold(parent, false);
       }
-      // y in the sidebar settles the step selected there; on any other row it does nothing.
+      // y in the tree settles the step selected there; on any other row it does nothing.
       if (action.kind === "settleSelected") {
         const { active, row, cursor } = actor.getSnapshot().context;
         if (active && row === undefined) settle(cursor);
@@ -414,17 +425,17 @@ export function DevTools<C>({
         return;
       }
       // R goes to what needs the reviewer: the next reply, else the notes on the page. With
-      // no review on, the page's card has its replies.
+      // no review on, the panel has the page's replies.
       if (action.kind === "reply") {
-        if (!actor.getSnapshot().context.active) return actor.send({ type: "page", open: true });
+        if (!actor.getSnapshot().context.active) return actor.send({ type: "panel", shown: true });
         if (!openNextReply(actor)) actor.send({ type: "open", layer: "notes" });
-        leaveSidebar(actor);
+        foldTree(actor);
         return;
       }
-      // The sidebar's rows, as they show: this page's, the steps, then the journeys. A step
-      // row is the step cursor; any other row is selected by its id.
+      // The tree's rows, as they show: this page's, the steps, then the journeys. A step row
+      // is the step cursor; any other row is selected by its id.
       if (action.kind === "row" || action.kind === "pick") {
-        const rows = sidebarRows();
+        const rows = treeRows();
         const now = selectedRow(actor, rows);
         if (action.kind === "pick") return rows[now]?.click();
         const from = now === -1 ? (action.by > 0 ? -1 : rows.length) : now;
@@ -442,14 +453,18 @@ export function DevTools<C>({
         return commands()
           .find((c) => c.id === action.id)
           ?.run();
-      if (action.kind === "sidebar") {
-        // Ctrl+B goes to the sidebar first, from a field too, and from there hides it. The
-        // field is kept, so i comes back to it.
-        if (zoneOf(document.activeElement) !== "sidebar") {
-          keepFocus();
-          return act({ kind: "focus", to: "sidebar" });
+      // Ctrl+B and the panel's button hide the panel, or show it again; the walk and the
+      // light stay. A field in it is kept, and comes back with it, in its mode and place.
+      if (action.kind === "panel") {
+        const { panel, preview } = actor.getSnapshot().context;
+        if (preview || !panel) {
+          if (preview) actor.send({ type: "preview" });
+          actor.send({ type: "panel", shown: true });
+          comeBack(noteOpen);
+          return;
         }
-        actor.send({ type: "sidebar" });
+        if (inPanel()) keepFocus();
+        actor.send({ type: "panel", shown: false });
         return act({ kind: "blur" });
       }
       if (action.kind === "blur" || (action.kind === "focus" && action.to === "page")) {
@@ -460,24 +475,28 @@ export function DevTools<C>({
       if (action.to === "note") {
         const { context } = actor.getSnapshot();
         if (context.preview) actor.send({ type: "preview" });
-        // With no review on, the note is on the page, in its card.
-        if (!context.active) actor.send({ type: "page", open: true });
-        leaveSidebar(actor);
-        // To the note opened from the sidebar, else back to the field the preview or the
-        // sidebar took the keys from, to write.
+        // The message field is in the panel, under the tree.
+        actor.send({ type: "panel", shown: true });
+        foldTree(actor);
+        // To the note opened from the tree, else back to the field the preview or the tree
+        // took the keys from, to write.
         if (actor.getSnapshot().context.opened !== undefined) {
           away = undefined;
           focusComposer();
         } else if (!comeBack(noteOpen, true)) focusComposer();
         return;
       }
-      // From the preview, the tools come back with the sidebar open.
+      // To the tree: it unfolds, so the reviewer sees where they are. The field left is kept,
+      // so i comes back to it.
+      keepFocus();
       if (actor.getSnapshot().context.preview) actor.send({ type: "preview" });
-      if (!actor.getSnapshot().context.sidebar) actor.send({ type: "sidebar" });
-      requestAnimationFrame(() => focusSidebar(actor));
+      actor.send({ type: "panel", shown: true });
+      if (!treeShown(actor.getSnapshot().context, isPhone()))
+        actor.send({ type: "tree", open: true });
+      requestAnimationFrame(() => focusTree(actor));
     };
     // A key of the g menu closes it once it is done, also one that sends the session nothing,
-    // as g g in the sidebar.
+    // as g g in the tree.
     const perform = (action: Action) => {
       const fromGo = layerOf(actor.getSnapshot()) === "go";
       act(action);
@@ -505,7 +524,7 @@ export function DevTools<C>({
     <ToolsContext.Provider value={tools}>
       <div ref={root} className="blueline">
         <Keys />
-        <SidebarFocus />
+        <TreeFocus />
         <Review shift={shift} />
         <Toasts />
       </div>
@@ -515,9 +534,9 @@ export function DevTools<C>({
   );
 }
 
-/** The sidebar's rows as they show: this page's, the steps, then the journeys. */
-const sidebarRows = () =>
-  [...document.querySelectorAll<HTMLElement>("[data-dt-zone=sidebar] [data-dt-row]")].filter((r) =>
+/** The tree's rows as they show: this page's, the steps, then the journeys. */
+const treeRows = () =>
+  [...document.querySelectorAll<HTMLElement>("[data-dt-zone=panel] [data-dt-row]")].filter((r) =>
     r.checkVisibility(),
   );
 
@@ -540,11 +559,11 @@ function selectRow(actor: SessionActor, row: HTMLElement) {
   row.scrollIntoView({ block: "nearest" });
 }
 
-/** Puts the keys in the sidebar, on a row that shows: the selected one, else the step the
- * review is on, else the first. */
-function focusSidebar(actor: SessionActor) {
-  document.querySelector<HTMLElement>("[data-dt-zone=sidebar]")?.focus({ preventScroll: true });
-  const rows = sidebarRows();
+/** Puts the keys in the tree, on a row that shows: the selected one, else the step the review
+ * is on, else the first. */
+function focusTree(actor: SessionActor) {
+  document.querySelector<HTMLElement>("nav[data-dt-zone=panel]")?.focus({ preventScroll: true });
+  const rows = treeRows();
   if (selectedRow(actor, rows) !== -1) return;
   const { active, at } = actor.getSnapshot().context;
   const row = (active ? rows.find((r) => r.dataset.step === String(at)) : undefined) ?? rows[0];
@@ -552,7 +571,7 @@ function focusSidebar(actor: SessionActor) {
 }
 
 /** Whether the focus is on nothing, or on the page's own element a click left it on, as a
- * button: the sidebar may take it. A field, a dialog or a list keeps it, and so does an
+ * button: the tree may take it. A field, a dialog or a list keeps it, and so does an
  * element the keyboard went to, as Tab does. */
 function isLoose(at: Element | null): boolean {
   return (
@@ -560,18 +579,24 @@ function isLoose(at: Element | null): boolean {
   );
 }
 
-/** While the sidebar is open, it has the focus when no field has it, so j and k work at once.
- * The preview and the lift take the keys from it. */
-function SidebarFocus() {
+/** While the tree shows, it has the focus when no field has it, so j and k work at once. The
+ * preview and the lift take the keys from it. Folded, as on a step, it gives them back to the
+ * page, so h and l walk the steps. */
+function TreeFocus() {
   const { actor } = useTools();
   useEffect(() => {
     let frame = 0;
     const check = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const { sidebar, preview } = actor.getSnapshot().context;
-        if (!sidebar || preview || parts.current().lifting !== undefined) return;
-        if (isLoose(document.activeElement)) focusSidebar(actor);
+        const { context } = actor.getSnapshot();
+        if (!context.panel || context.preview || parts.current().lifting !== undefined) return;
+        const at = document.activeElement;
+        if (!treeShown(context, isPhone())) {
+          if (zoneOf(at) === "panel" && at instanceof HTMLElement) at.blur();
+          return;
+        }
+        if (isLoose(at)) focusTree(actor);
       });
     };
     check();
@@ -588,8 +613,8 @@ function SidebarFocus() {
   return null;
 }
 
-/** The keys, read on the window after the page's own handlers, but in the sidebar before
- * them, and Alt to point. */
+/** The keys, read on the window after the page's own handlers, but in the tree before them,
+ * and Alt to point. */
 function Keys() {
   const { actor, adapter, perform } = useTools();
   useEffect(() => {
@@ -605,13 +630,6 @@ function Keys() {
       if (action === undefined) return;
       e.preventDefault();
       perform(action);
-      // Leaving the sidebar gives the keys back to the page.
-      if (
-        action.kind === "event" &&
-        action.event.type === "sidebar" &&
-        zoneOf(document.activeElement) === "sidebar"
-      )
-        perform({ kind: "blur" });
     };
     // The tools' own keys go first, before the page and a field's handlers see them.
     const onFirstKey = (e: KeyboardEvent) => {
@@ -622,9 +640,9 @@ function Keys() {
         ownerOf(document.activeElement),
       );
       if (action === undefined) {
-        // The sidebar is the tools' own, so its keys, as Ctrl+K, do not reach the page.
+        // The tree is the tools' own, so its keys, as Ctrl+K, do not reach the page.
         // The lift takes every key while it is up.
-        if (zoneOf(document.activeElement) !== "sidebar" || parts.current().lifting !== undefined)
+        if (zoneOf(document.activeElement) !== "panel" || parts.current().lifting !== undefined)
           return;
         onKey(e);
         if (e.defaultPrevented) e.stopImmediatePropagation();
@@ -687,15 +705,11 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
   const { actor, adapter, anchors, perform } = useTools();
   const active = useSession((s) => s.context.active);
   const ready = useSession((s) => s.matches({ review: { on: "ready" } }));
-  const sidebar = useSession((s) => s.context.sidebar);
-  // On a phone the open sidebar takes the whole screen above the bar, the cards' place too.
-  const cards = !(usePhone() && sidebar);
   const run = useSession((s) => s.context.run);
   const view = useSession((s) => viewOf(s, adapter), sameView);
   const opened = useSession((s) => s.context.opened);
   const preview = useSession((s) => s.context.preview);
-  const { journey, step, at } = useStep();
-  const page = useSession((s) => s.context.page);
+  const { step, at } = useStep();
   // The notes are the step's, or the page's off a step or with its chat.
   const noteStep = useNoteStep();
   const pins = usePins(noteStep);
@@ -744,24 +758,20 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
   };
   return (
     <>
-      {sidebar && !preview && <Sidebar />}
+      <Panel />
       {active && ready && !preview && step !== undefined && (
         <>
           {box !== undefined && <Light box={box} place={place} />}
           <Pins pins={pins} open={opened} onOpen={(id) => actor.send({ type: "pin", id })} />
-          {cards && <StepCard step={step} at={at} count={journey?.steps.length ?? 0} box={box} />}
-          {cards &&
-            openedNote !== undefined &&
-            (openedNote.pin?.variant === undefined || !lifted) && (
-              <NoteCard note={openedNote} number={pins.indexOf(openedNote) + 1} />
-            )}
+          {openedNote !== undefined && (openedNote.pin?.variant === undefined || !lifted) && (
+            <NoteCard note={openedNote} number={pins.indexOf(openedNote) + 1} />
+          )}
         </>
       )}
       {!active && !preview && (
         <>
           <Pins pins={pins} open={opened} onOpen={(id) => actor.send({ type: "pin", id })} />
-          {cards && page && noteStep !== undefined && <PageCard place={noteStep} />}
-          {cards && openedNote !== undefined && (
+          {openedNote !== undefined && (
             <NoteCard note={openedNote} number={pins.indexOf(openedNote) + 1} />
           )}
         </>
@@ -781,11 +791,10 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
 const sameView = (a: View, b: View) =>
   a.active === b.active &&
   a.layer === b.layer &&
-  a.sidebar === b.sidebar &&
+  a.panel === b.panel &&
   a.variants === b.variants &&
   a.people === b.people &&
   a.preview === b.preview &&
-  a.page === b.page &&
   a.aiming === b.aiming;
 
 /** Starts the review from the app's own dev parts, as a link or another tool asks. */

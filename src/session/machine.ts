@@ -3,6 +3,7 @@ import {
   emit,
   enqueueActions,
   fromCallback,
+  raise,
   setup,
   stopChild,
   type ActorRefFrom,
@@ -35,9 +36,9 @@ import {
 /*
  * The review session as a state machine. Four regions run side by side:
  * - review: off, on the page, or on a step of a journey: entering it, switching its
- *   variant, or ready. The sidebar's selection says which: a step opens it, a page leaves it;
- *   on a step, the card's chat is the step's or the page's;
- * - sidebar: the journey at the side, closed or open;
+ *   variant, or ready. The tree's selection says which: a step opens it, a page leaves it;
+ *   on a step, the panel's chat is the step's or the page's;
+ * - panel: the panel at the side, shown or hidden; hidden, the bar is its folded form;
  * - layer: what is open over the page, at most one: a picker, as the journeys or this page's
  *   notes, the key menu, the g menu, a pointed note or the send sheet;
  * - agent: whether it reads the agent's replies: while a step is open, or a note waits.
@@ -72,10 +73,13 @@ export interface Context extends Kept {
   /** What the walk leaves: the step it last started, which a key press may have stopped
    * halfway, so its variant's state can be on the page. */
   readonly leaving: Entered | undefined;
-  /** The sidebar's selected step. */
+  /** The tree's selected step. */
   readonly cursor: number;
-  /** The sidebar's selected row when it is not a step, as a note or a journey: its id. */
+  /** The tree's selected row when it is not a step, as a note or a journey: its id. */
   readonly row: string | undefined;
+  /** Whether the tree of pages and journeys unfolds over the step in the panel. A step folds
+   * it to one line at the panel's top; off a step, a wide screen always shows it. */
+  readonly tree: boolean;
   /** The open pointed note. */
   readonly opened: string | undefined;
   /** Whether the tools hide, so the reviewer sees the page as a user does. The walk goes
@@ -125,15 +129,17 @@ export type Event =
   | { readonly type: "reset" }
   | { readonly type: "variant"; readonly by: number }
   | { readonly type: "showVariant"; readonly step: string; readonly label: string }
-  | { readonly type: "sidebar" }
-  /** Opens or closes the page's card, for notes on the page; with no `open`, toggles it. */
-  | { readonly type: "page"; readonly open?: boolean | undefined }
+  /** Shows or hides the panel; with no `shown`, the other way. Hiding changes only the view:
+   * the walk stays on its step, and the light stays. */
+  | { readonly type: "panel"; readonly shown?: boolean | undefined }
+  /** Unfolds or folds the tree over the step; with no `open`, the other way. */
+  | { readonly type: "tree"; readonly open?: boolean | undefined }
   /** The page changed: its notes have their own place. */
   | { readonly type: "place"; readonly place: string }
   | { readonly type: "cursor"; readonly by: number }
-  /** Selects a sidebar row that is not a step, by its id. */
+  /** Selects a tree row that is not a step, by its id. */
   | { readonly type: "row"; readonly id: string }
-  /** Opens or closes a sidebar row's children, by the row's fold key. */
+  /** Opens or closes a tree row's children, by the row's fold key. */
   | { readonly type: "fold"; readonly id: string; readonly open: boolean }
   | { readonly type: "cursorOpen"; readonly by: number }
   | { readonly type: "choose" }
@@ -171,7 +177,7 @@ export type Event =
    * settle keeps the variant the step's part shows, as the one the agent keeps in the code. */
   | {
       readonly type: "settle";
-      /** The step to settle, as one selected in the sidebar; the review's step when none. */
+      /** The step to settle, as one selected in the tree; the review's step when none. */
       readonly step?: number | undefined;
       readonly keep?: { readonly part: string; readonly variant: string } | undefined;
       /** When, in ms: the step's notes not sent yet go with the settle, as a message. */
@@ -290,6 +296,13 @@ const dropEmpty = (c: Context) =>
 
 /** The chat's ID: one for each step and each page. */
 export const stepNoteId = (step: string) => `note-${step}`;
+
+/** Whether the panel shows the tree of pages and journeys: unfolded over the step, or off a
+ * step on a wide screen. A phone's sheet folds it off a step too, so the page stays in view. */
+export const treeShown = (
+  c: { readonly active: boolean; readonly tree: boolean },
+  phone: boolean,
+): boolean => c.tree || (!phone && !c.active);
 
 /** Whether the page reads the agent's replies: while a note waits, and all through a walk,
  * as an agent may answer again a note it answered, or settle it. */
@@ -484,7 +497,7 @@ export const sessionMachine = setup({
         ? {}
         : { past: [...context.past, change].slice(-HISTORY), future: [] };
     }),
-    // A step opens with its own chat, and the sidebar on it.
+    // A step opens with its own chat, and the tree's selection on it.
     activate: assign({
       active: true,
       chat: "step" as const,
@@ -492,11 +505,11 @@ export const sessionMachine = setup({
       cursor: ({ context }) => context.at,
       row: undefined,
     }),
-    // The page view: the page's card and the small bar.
+    // The page view: the panel shows the page's chat.
     deactivate: assign({
       active: false,
-      page: true,
       row: undefined,
+      tree: false,
       entered: undefined,
       opening: undefined,
       preview: false,
@@ -526,6 +539,7 @@ export const sessionMachine = setup({
     leaving: undefined,
     cursor: input.kept.at,
     row: undefined,
+    tree: false,
     opened: undefined,
     preview: false,
     listened: undefined,
@@ -537,7 +551,6 @@ export const sessionMachine = setup({
     listening: { actions: assign({ listened: ({ event }) => event.listened }) },
     journeys: { actions: assign({ journeys: ({ event }) => event.journeys }) },
     place: { actions: assign({ place: ({ event }) => event.place }) },
-    page: { actions: assign({ page: ({ context, event }) => event.open ?? !context.page }) },
     chat: {
       actions: assign({
         chat: ({ context, event }) => event.to ?? (context.chat === "step" ? "page" : "step"),
@@ -800,7 +813,7 @@ export const sessionMachine = setup({
             return;
           }
           // A settle goes on to the next open step, or back to one before when none is after,
-          // from the page and from the sidebar alike: the walk and the selection go there.
+          // from the page and from the tree alike: the walk and the selection go there.
           const after = stepBy(ids, feedback, at, 1);
           const next = after !== at ? after : stepBy(ids, feedback, at, -1);
           enqueue.assign({ cursor: next, row: undefined });
@@ -867,7 +880,10 @@ export const sessionMachine = setup({
         on: {
           initial: "entering",
           on: {
-            leave: { target: "off", actions: "deactivate" },
+            leave: {
+              target: "off",
+              actions: ["deactivate", raise({ type: "panel", shown: true })],
+            },
             start: {
               target: ".entering",
               reenter: true,
@@ -935,8 +951,10 @@ export const sessionMachine = setup({
             },
           },
           states: {
+            // A step opens with the tree folded, so the panel shows the step.
             entering: {
               entry: assign(({ context }) => ({
+                tree: false,
                 leaving: context.opening,
                 opening: {
                   journey: context.journey,
@@ -998,30 +1016,39 @@ export const sessionMachine = setup({
         },
       },
     },
-    sidebar: {
+    panel: {
       initial: "starting",
       states: {
         starting: {
           always: [
-            { guard: ({ context }) => context.sidebar, target: "open" },
-            { target: "closed" },
+            { guard: ({ context }) => context.panel, target: "shown" },
+            { target: "hidden" },
           ],
         },
-        closed: {
+        hidden: {
           on: {
-            sidebar: {
-              target: "open",
+            panel: {
+              guard: ({ event }) => event.shown !== false,
+              target: "shown",
               actions: assign({
-                sidebar: true,
+                panel: true,
                 cursor: ({ context }) => context.at,
                 row: undefined,
               }),
             },
           },
         },
-        open: {
+        shown: {
           on: {
-            sidebar: { target: "closed", actions: assign({ sidebar: false }) },
+            // The panel comes back with the tree folded, so it shows the step as it was.
+            panel: {
+              guard: ({ event }) => event.shown !== true,
+              target: "hidden",
+              actions: assign({ panel: false, tree: false }),
+            },
+            tree: {
+              actions: assign({ tree: ({ context, event }) => event.open ?? !context.tree }),
+            },
             row: { actions: assign({ row: ({ event }) => event.id }) },
             fold: {
               actions: assign({

@@ -17,30 +17,32 @@ import { stepNoteId } from "../session/machine";
 import { hasNews, newsOn } from "../session/replies";
 import { firstOpen, openPlace } from "../session/state";
 import { cx } from "./cx";
-import { FOCUSED, UI } from "./geometry";
-import { leaveSidebar, openReply } from "./replies";
-import { usePhone } from "./touch";
+import { foldTree, openReply } from "./replies";
 import { journeyOf, useNotes, useSession, useTools } from "./session";
 import type { JourneyInfo } from "../types";
 
 /*
- * Where the reviewer is, at the side, as a tree: the pages, each with its chat, and this one
+ * Where the reviewer is, in the panel, as a tree: the pages, each with its chat, and this one
  * with its parts, then the journeys, with the one walked open on its steps, and at the foot
  * the done ones and the review's end. What the reviewer opens is where they are: a step
- * opens it, and a page leaves the step for the page. A step with a new reply has a blue count. While the
- * sidebar is open it has the keys when no field has them: j and k select a row, l and h open
- * and close it, Enter opens what it names, Escape leaves a step for the page and off one hides
- * the tools, and the page's other keys work.
+ * opens it, and a page leaves the step for the page. A step with a new reply has a blue
+ * count. While the tree shows it has the keys when no field has them: j and k select a row,
+ * l and h open and close it, Enter opens what it names, Escape leaves a step for the page and
+ * off one hides the tools, and the page's other keys work.
  */
 
-export function Sidebar() {
-  const { actor, perform } = useTools();
-  const journey = useJourney();
-  const at = useSession((s) => s.context.at);
-  const feedback = useSession((s) => s.context.feedback);
-  const notes = useNotes();
-  const steps = journey?.steps ?? [];
-  const anyNews = notes.some(hasNews);
+/** The tree, where the keys go in the panel: it takes them when it shows and no field has
+ * them, and a key that comes while it is folded unfolds it. */
+export function TreeZone({
+  heading,
+  className,
+}: {
+  /** Whether the tree names its pages: the panel's top line does, off a step on a wide
+   * screen. */
+  readonly heading: boolean;
+  readonly className?: string;
+}) {
+  const { actor } = useTools();
   // The pointer selects the row it is on, so the keys, as y and Enter, act on that row.
   const hover = (e: PointerEvent) => {
     const el = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-dt-row]") : null;
@@ -52,6 +54,27 @@ export function Sidebar() {
         actor.send({ type: "cursor", by: Number(step) - now });
     } else if (el.dataset.dtRow !== was) actor.send({ type: "row", id: el.dataset.dtRow ?? "" });
   };
+  return (
+    <nav
+      aria-label="Pages and journeys"
+      data-dt-zone="panel"
+      tabIndex={-1}
+      onPointerMove={hover}
+      className={cx("flex flex-col outline-none", className)}
+    >
+      <Tree heading={heading} />
+    </nav>
+  );
+}
+
+function Tree({ heading }: { readonly heading: boolean }) {
+  const { actor, perform } = useTools();
+  const journey = useJourney();
+  const at = useSession((s) => s.context.at);
+  const feedback = useSession((s) => s.context.feedback);
+  const notes = useNotes();
+  const steps = journey?.steps ?? [];
+  const anyNews = notes.some(hasNews);
   // The journey walked is done once every step is settled, also after the review ended.
   const done =
     steps.length > 0 &&
@@ -64,19 +87,9 @@ export function Sidebar() {
   // Off a step too, so the reviewer comes back to where the walk stopped.
   const current = journey?.id !== PAGE_JOURNEY ? journey?.id : undefined;
   return (
-    <nav
-      {...UI}
-      aria-label="Sidebar"
-      data-dt-zone="sidebar"
-      tabIndex={-1}
-      onPointerMove={hover}
-      className={cx(
-        "fixed top-3 right-3 bottom-3 z-[2147483002] flex w-72 animate-in flex-col overflow-hidden rounded-dt-panel bg-dt-panel text-dt-text shadow-dt-float outline-none duration-200 slide-in-from-right-2 fade-in max-sm:top-[calc(env(safe-area-inset-top)+8px)] max-sm:right-2 max-sm:bottom-(--dt-above-bar) max-sm:left-2 max-sm:w-auto",
-        FOCUSED,
-      )}
-    >
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <Pages />
+    <>
+      <div className="flex flex-1 flex-col">
+        <Pages heading={heading} />
         <Journeys current={current} done={false} />
         <span className="flex-1" />
         <Journeys current={current} done />
@@ -90,7 +103,7 @@ export function Sidebar() {
             const i = steps.findIndex((s) => s.id === next?.step);
             if (next === undefined || i < 0) return;
             openReply(actor, i);
-            leaveSidebar(actor);
+            foldTree(actor);
           }}
         />
       ) : (
@@ -104,7 +117,7 @@ export function Sidebar() {
           </button>
         )
       )}
-    </nav>
+    </>
   );
 }
 
@@ -114,7 +127,7 @@ function useJourney() {
   return journeyOf(adapter, journeyId);
 }
 
-/** A page's or a step's notes as the sidebar lists them: its chat once it has a message, in
+/** A page's or a step's notes as the tree lists them: its chat once it has a message, in
  * its row, and the pointed notes not sent yet, under it. */
 export function notesOf(notes: readonly Note[], step: string) {
   const own = notes.filter((n) => n.step === step);
@@ -128,7 +141,7 @@ export function notesOf(notes: readonly Note[], step: string) {
 const DEPTH = ["pl-2.5", "pl-[26px]", "pl-[42px]"] as const;
 
 /**
- * A row of the sidebar's tree. A row with children (`open` set) shows them or not as its
+ * A row of the panel's tree. A row with children (`open` set) shows them or not as its
  * chevron says; l and h open and close them, as in Neovim's tree, and a click on the chevron
  * does too. A click on the row, or Enter, opens what it names, and its children with it.
  */
@@ -166,7 +179,6 @@ function TreeRow({
   readonly children: React.ReactNode;
 }) {
   const { actor } = useTools();
-  const phone = usePhone();
   const Icon = open === true ? ChevronDown : ChevronRight;
   return (
     <button
@@ -190,8 +202,8 @@ function TreeRow({
         if (open === false && fold !== undefined)
           actor.send({ type: "fold", id: fold, open: true });
         onOpen();
-        // On a phone the sidebar covers the page, so it goes once a row opens what it names.
-        if (phone) actor.send({ type: "sidebar" });
+        // The tree folds once a row opens what it names, so the panel shows it.
+        foldTree(actor);
       }}
     >
       {open === undefined || fold === undefined ? (
@@ -266,7 +278,7 @@ function NoteCount({ notes }: { readonly notes: readonly Note[] }) {
  * words, and opens it. Under it are its pointed notes not sent, and this page's parts with
  * variants. A row on another page goes there.
  */
-function Pages() {
+function Pages({ heading }: { readonly heading: boolean }) {
   const { actor, navigate } = useTools();
   const { place, at, feedback, chat, pins, parts, here, drafts, openChat, openPin, openPart } =
     useThisPage();
@@ -274,7 +286,7 @@ function Pages() {
   const folds = useSession((s) => s.context.folds);
   const selected = useSession((s) => s.context.row);
   const cursor = useSession((s) => s.context.cursor);
-  // The page is where the reviewer writes: off a step, or with the step's card on its chat.
+  // The page is where the reviewer writes: off a step, or with the panel on its chat.
   const writing = useSession((s) => !s.context.active || s.context.chat === "page");
   const pages = [
     { place, chat, pins },
@@ -290,7 +302,7 @@ function Pages() {
   };
   return (
     <section aria-label="Pages" className="flex flex-col p-1.5 pt-0">
-      <Heading text="Pages" />
+      {heading && <Heading text="Pages" />}
       {pages.map((p) => {
         const id = `page:${p.place}`;
         const isHere = p.place === place;
@@ -308,7 +320,9 @@ function Pages() {
               current={isHere}
               tall={last !== undefined}
               onOpen={() =>
-                isHere ? openChat() : visit(p.place, () => actor.send({ type: "page", open: true }))
+                isHere
+                  ? openChat()
+                  : visit(p.place, () => actor.send({ type: "panel", shown: true }))
               }
             >
               <span className="flex min-w-0 flex-1 flex-col">
@@ -553,8 +567,8 @@ function AgentMark({ notes }: { readonly notes: readonly Note[] }) {
 
 /**
  * This page's chat, its notes and its parts with variants, and what a choice of one does: it
- * leaves the step and opens the chat or the note, or starts the page's review on the part. The sidebar
- * and the g p picker show them.
+ * leaves the step and opens the chat or the note, or starts the page's review on the part. The
+ * tree and the g p picker show them.
  */
 export function useThisPage() {
   const { actor, adapter } = useTools();
@@ -583,7 +597,7 @@ export function useThisPage() {
     drafts: notes.filter(isKept).length,
     openChat: () => {
       leave();
-      actor.send({ type: "page", open: true });
+      actor.send({ type: "panel", shown: true });
     },
     openPin: (id: string) => {
       leave();
@@ -631,7 +645,7 @@ export function useJourneys() {
 }
 
 /** The journeys: the open ones, with the one the review walks open on its steps, or the
- * done ones, which stand at the sidebar's foot. Each opens on its steps; its row starts it
+ * done ones, which stand at the tree's foot. Each opens on its steps; its row starts it
  * where its work is left. */
 function Journeys({
   current,
@@ -684,7 +698,7 @@ function Journeys({
 }
 
 /**
- * The review's end, at the sidebar's foot: every step is settled. The agent's notes still
+ * The review's end, at the tree's foot: every step is settled. The agent's notes still
  * open, and the new replies to read.
  */
 function Done({

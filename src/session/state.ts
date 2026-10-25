@@ -42,7 +42,7 @@ export function openedAgain(f: Feedback): Feedback {
 
 /**
  * The step h and l go to: `by` steps on, passing over the settled ones, as the review is
- * done with them; the sidebar still opens them. With no open step that way, it stays.
+ * done with them; the panel's tree still opens them. With no open step that way, it stays.
  */
 export function stepBy(
   steps: readonly string[],
@@ -69,14 +69,13 @@ export const KeptSchema = Schema.Struct({
   variants: Schema.Record(Schema.String, Schema.Finite),
   feedback: Schema.Record(Schema.String, FeedbackSchema),
   notes: Schema.Array(NoteSchema),
-  sidebar: Schema.Boolean,
+  /** Whether the panel shows: hidden, the bar is its folded form. */
+  panel: Schema.Boolean,
   /** The dev tools' own design, while the reviewer picks one. */
   design: Schema.String,
-  /** Whether the page's card is open, for the page's chat off a step. */
-  page: Schema.Boolean,
-  /** On a step, whose chat the card shows and Alt+click writes to: the step's or the page's. */
+  /** On a step, whose chat the panel shows and Alt+click writes to: the step's or the page's. */
   chat: Schema.Literals(["step", "page"]),
-  /** The sidebar's rows the reviewer opened or closed, by the row's fold key; a row not here
+  /** The tree's rows the reviewer opened or closed, by the row's fold key; a row not here
    * has its own start: open for this page and the journey walked, else closed. */
   folds: Schema.Record(Schema.String, Schema.Boolean),
 });
@@ -89,9 +88,8 @@ export const START: Kept = {
   variants: {},
   feedback: {},
   notes: [],
-  sidebar: false,
+  panel: true,
   design: "",
-  page: false,
   chat: "step",
   folds: {},
 };

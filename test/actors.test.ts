@@ -170,6 +170,7 @@ describe("the lines the agent reads", () => {
     leaving: undefined,
     cursor: 0,
     row: undefined,
+    tree: false,
     opened: undefined,
     preview: false,
     listened: undefined,
