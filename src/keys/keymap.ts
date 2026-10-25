@@ -522,10 +522,11 @@ export function zoneOf(element: Element | null): Zone {
   return isControl(element) ? "control" : "page";
 }
 
-/** What takes Enter itself: a button, a link, a field, or an element with a tabindex of its
- * own. */
+/** What takes Enter itself: a button, a link, a field, or an element that Tab goes to by its
+ * own tabindex. A negative tabindex is not one: a router puts it on `main` to move the focus
+ * there, and Enter on `main` presses nothing. */
 const CONTROL =
-  "button, a[href], area[href], input, select, textarea, summary, [contenteditable], [tabindex]";
+  'button, a[href], area[href], input, select, textarea, summary, [contenteditable], [tabindex]:not([tabindex^="-"])';
 
 /** Whether the focused element is a control that Enter presses: any of the app's; of the
  * tools', one the keyboard went to, as Tab does, and not one a click left the focus on. */
