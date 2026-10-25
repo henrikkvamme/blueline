@@ -501,28 +501,84 @@ describe("the review's end", () => {
       { type: "entered" },
     );
 
-  it("opens the sidebar when the last open step settles, and stays on the step", () => {
+  it("ends the review when the last open step settles: the tools show the page, and the walk stays on the step", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    expect(s.context.sidebar).toBe(false);
+    expect(s.matches({ review: "on" })).toBe(true);
     expect(s.context.at).toBe(2);
     const done = after(s, { type: "entered" }, { type: "settle" });
-    expect(done.context.sidebar).toBe(true);
-    expect(done.context.at).toBe(2);
+    expect(done.matches({ review: "off" })).toBe(true);
+    expect(done.context).toMatchObject({ active: false, page: true, sidebar: false, at: 2 });
+    expect(done.context.feedback["c"]?.settled).toBe(true);
   });
 
-  it("opens the end when the sidebar settles the last open step, and stays on the step", () => {
+  it("ends it also when the sidebar settles the last open step, and leaves the sidebar open", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    expect(s.context.at).toBe(2);
     const done = after(s, { type: "entered" }, { type: "sidebar" }, { type: "settle", step: 2 });
     expect(done.context.feedback["c"]?.settled).toBe(true);
-    expect(done.context.sidebar).toBe(true);
-    expect(done.context.at).toBe(2);
-    expect(done.context.cursor).toBe(2);
+    expect(done.matches({ review: "off" })).toBe(true);
+    expect(done.context).toMatchObject({ sidebar: true, at: 2, cursor: 2 });
   });
 
-  it("leaves the sidebar alone once the review is done", () => {
-    const open = after(lastOpen(), { type: "sidebar" }, { type: "settle" });
-    expect(open.context.sidebar).toBe(true);
+  it("tells the tools the journey is done", () => {
+    const actor = createActor(sessionMachine, {
+      input: {
+        kept: {
+          ...START,
+          journey: "prep",
+          active: true,
+          at: 2,
+          feedback: { a: { settled: true }, b: { settled: true } },
+        },
+        journeys: JOURNEYS,
+        now: 0,
+      },
+    }).start();
+    const done: string[] = [];
+    actor.on("done", (e) => done.push(e.journey));
+    actor.send({ type: "entered" });
+    actor.send({ type: "settle" });
+    expect(done).toEqual(["prep"]);
+    actor.stop();
+  });
+
+  it("goes back to the step from the page when u takes the last settle back", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "settle" });
+    const undone = after(done, { type: "undo" });
+    expect(undone.context.feedback["c"]?.settled).toBeUndefined();
+    expect(undone.matches({ review: "on" })).toBe(true);
+    expect(undone.context).toMatchObject({ active: true, at: 2 });
+  });
+
+  it("opens every step again for another pass when the settled journey starts again", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(
+      s,
+      { type: "entered" },
+      { type: "settle", keep: { part: "Suggestion", variant: "Card" } },
+    );
+    expect(done.context.feedback["c"]?.parts?.["Suggestion"]?.kept).toEqual(["Card"]);
+    // A step opened alone, as a reply on it opens it, keeps the journey settled.
+    const looked = after(done, { type: "start", journey: "prep", at: 1, fresh: false });
+    expect(looked.context.feedback["b"]?.settled).toBe(true);
+    const again = after(done, { type: "start", journey: "prep", at: 0, fresh: false, again: true });
+    expect(again.matches({ review: "on" })).toBe(true);
+    expect(again.context.at).toBe(0);
+    for (const id of ["a", "b", "c"]) expect(again.context.feedback[id]?.settled).toBe(false);
+    expect(again.context.feedback["c"]?.parts?.["Suggestion"]?.kept).toEqual([]);
+    // u takes the new pass back: every step is settled again.
+    const undone = after(again, { type: "undo" });
+    for (const id of ["a", "b", "c"]) expect(undone.context.feedback[id]?.settled).toBe(true);
+  });
+
+  it("keeps a journey's settled steps when it starts with a step still open", () => {
+    const s = after(
+      lastOpen(),
+      { type: "leave" },
+      { type: "start", journey: "prep", at: 2, fresh: false },
+    );
+    expect(s.context.feedback["a"]?.settled).toBe(true);
+    expect(s.context.at).toBe(2);
   });
 });
 

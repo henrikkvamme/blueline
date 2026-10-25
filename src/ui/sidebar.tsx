@@ -28,15 +28,14 @@ import type { JourneyInfo } from "../types";
  * the done ones and the review's end. What the reviewer opens is where they are: a step
  * opens it, and a page leaves the step for the page. A step with a new reply has a blue count. While the
  * sidebar is open it has the keys when no field has them: j and k select a row, l and h open
- * and close it, Enter opens what it names, Escape hides the tools, and the page's other keys
- * work.
+ * and close it, Enter opens what it names, Escape leaves a step for the page and off one hides
+ * the tools, and the page's other keys work.
  */
 
 export function Sidebar() {
   const { actor, perform } = useTools();
   const journey = useJourney();
   const at = useSession((s) => s.context.at);
-  const active = useSession((s) => s.context.active);
   const feedback = useSession((s) => s.context.feedback);
   const notes = useNotes();
   const steps = journey?.steps ?? [];
@@ -52,8 +51,8 @@ export function Sidebar() {
         actor.send({ type: "cursor", by: Number(step) - now });
     } else if (el.dataset.dtRow !== was) actor.send({ type: "row", id: el.dataset.dtRow ?? "" });
   };
+  // The journey walked is done once every step is settled, also after the review ended.
   const done =
-    active &&
     steps.length > 0 &&
     openPlace(
       steps.map((s) => s.id),
@@ -593,23 +592,34 @@ export function useThisPage() {
 }
 
 /** The journeys but this page's, with how many steps each has settled, and what starts one:
- * it opens where its work is left, its first step not settled. */
+ * the journey walked goes on where the walk stopped, another opens where its work is left, its
+ * first step not settled, and a journey with every step settled opens them all again, for
+ * another pass. */
 export function useJourneys() {
   const { actor, adapter } = useTools();
   const feedback = useSession((s) => s.context.feedback);
   const journeys = adapter.journeys.filter((j) => j.id !== PAGE_JOURNEY && j.steps.length > 0);
   const settledIn = (j: JourneyInfo) =>
     j.steps.filter((st) => feedback[st.id]?.settled === true).length;
-  const start = (j: JourneyInfo) =>
+  const start = (j: JourneyInfo) => {
+    const { context } = actor.getSnapshot();
+    const again = settledIn(j) === j.steps.length;
+    const walked = j.id === context.journey && context.at < j.steps.length;
     actor.send({
       type: "start",
       journey: j.id,
-      at: firstOpen(
-        j.steps.map((st) => st.id),
-        feedback,
-      ),
+      at: again
+        ? 0
+        : walked
+          ? context.at
+          : firstOpen(
+              j.steps.map((st) => st.id),
+              feedback,
+            ),
       fresh: false,
+      again,
     });
+  };
   return { journeys, settledIn, start };
 }
 
@@ -651,7 +661,9 @@ function Journeys({
               className={walked && active && "font-medium text-dt-text"}
             >
               <span className="min-w-0 flex-1 truncate">{j.title}</span>
-              {done && <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Done" />}
+              {settledIn(j) === j.steps.length && (
+                <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Done" />
+              )}
               <span className="text-[11px] font-normal text-dt-faint tabular-nums">
                 {done ? j.steps.length : `${String(settledIn(j))}/${String(j.steps.length)}`}
               </span>

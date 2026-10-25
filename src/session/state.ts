@@ -21,6 +21,23 @@ const FeedbackSchema = Schema.Struct({
 });
 export type Feedback = typeof FeedbackSchema.Type;
 
+/** The feedback of a step opened again: not settled, and no variant kept, as the reviewer
+ * may settle on another. The deleted variants stay deleted. */
+export function openedAgain(f: Feedback): Feedback {
+  const { parts, ...rest } = f;
+  return {
+    ...rest,
+    settled: false,
+    ...(parts === undefined
+      ? {}
+      : {
+          parts: Object.fromEntries(
+            Object.entries(parts).map(([part, v]) => [part, { ...v, kept: [] }]),
+          ),
+        }),
+  };
+}
+
 /**
  * The step h and l go to: `by` steps on, passing over the settled ones, as the review is
  * done with them; the sidebar still opens them. With no open step that way, it stays.

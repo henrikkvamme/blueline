@@ -7,8 +7,8 @@ import { openPlaceReply, openReply } from "./replies";
 import { useTools } from "./session";
 
 /*
- * Short messages at the top of the screen: the agent answered, an undo, the preview, or
- * a send that failed. Sonner stacks them and lets each go. The dev tools have their own
+ * Short messages at the top of the screen: the agent answered, an undo, the preview, a
+ * journey done, or a send that failed. Sonner stacks them and lets each go. The dev tools have their own
  * toaster, by its ID, so the app's toasts and theirs stay apart.
  */
 
@@ -17,7 +17,7 @@ const ID = "blueline";
 const PREVIEW_TOLD = `${STORED}:preview-told`;
 
 export function Toasts() {
-  const { actor } = useTools();
+  const { actor, adapter } = useTools();
   useEffect(() => {
     const show = (text: string, open?: () => void) =>
       toast(text, {
@@ -51,6 +51,10 @@ export function Toasts() {
       }),
       actor.on("nothing", (e) => show(e.redo ? "Nothing to redo" : "Nothing to undo")),
       actor.on("unvaried", () => show("This step has no variants or states")),
+      actor.on("done", (e) => {
+        const title = adapter.journeys.find((j) => j.id === e.journey)?.title ?? "The journey";
+        show(`${title} is done: every step is settled`);
+      }),
       actor.on("failed", () =>
         show("The dev server did not take it. Your words are back in their field."),
       ),
@@ -58,7 +62,7 @@ export function Toasts() {
     return () => {
       for (const s of subs) s.unsubscribe();
     };
-  }, [actor]);
+  }, [actor, adapter]);
   return (
     <div {...UI}>
       <Toaster

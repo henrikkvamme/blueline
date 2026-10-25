@@ -44,8 +44,14 @@ tab shows each part on a map of the screen.
 
 There is no mode to go into or out of. What you open in the sidebar is where you are: a
 step opens it, with its card and the full bar, and a page leaves the step for the page,
-with its card and the small bar. The walk stays where it was, so a step opened again goes
-on from there.
+with its card and the small bar. Escape on a step leaves it for the page too. The walk stays
+where it was, so the journey's row opens it again on the same step.
+
+When the last open step settles, the review ends by itself. The tools go back to the page,
+a short message says the journey is done, and the journey's row in the sidebar shows a
+check. `u` takes the last settle back and opens its step again. A journey with every step
+settled opens all its steps again from its row, or from `g j`, for another pass; a step's
+row opens that one step and keeps the journey settled.
 
 On a step, the card's switch says whose chat you write in: **Step** or **Page**. A click
 or Tab switches it, also in the message field, so you write on the page and keep your
@@ -76,6 +82,10 @@ so `y` or `i` comes next. Escape in a field goes to vim's normal mode, and a sec
 goes to the sidebar and opens it, so you see where you are; in the lift's note it leaves the
 field. While the sidebar is open, it has the keys when no field has them.
 
+Escape backs out one level at a time, from the page and the sidebar: it closes what is open
+over the page, then leaves the step for the page, then closes the page's card, then hides
+the tools.
+
 The sidebar is a tree, as Neovim's: this page and the pages with notes, in the order of
 their paths, and the journeys. A page's row is its chat: it shows the chat's last words, and
 opens the chat. A page opens on its notes not sent, and this page on its parts too; a
@@ -97,8 +107,8 @@ Ctrl+B goes into the sidebar from a field, and from the sidebar hides it; `i` th
 back to the field you left, at its place, to write. The panel that has the keys has a thin
 ring.
 Ctrl+P is the **preview**, on a step and off one: it hides the tools, the sidebar too, and leaves
-only an eye that shows them again. Escape in the sidebar does the same, so the sidebar and
-the note card come back together; Ctrl+B closes the sidebar. A second Ctrl+P or `i` shows
+only an eye that shows them again. Escape in the sidebar off a step does the same, so the
+sidebar and the note card come back together; Ctrl+B closes the sidebar. A second Ctrl+P or `i` shows
 them with the sidebar as it was, and comes back to the field, in its mode and at its place;
 Escape and Ctrl+B show them with the keys in the sidebar, and `i` there goes back to the field.
 In the preview the keys turn as the sidebar has them: `j` and `k` go to the step after and
@@ -139,7 +149,7 @@ variant shown on the page, `d` deletes one, `u` undoes, `i` writes a note on the
 shown, and `R` goes to the next variant with a note. Settling the step with `y` keeps the
 variant the page shows, sends the step's notes not sent yet, and goes on to the next open
 step, also from the sidebar or the card's button; `y` on a settled step opens it again and
-keeps none. When every step is settled, the sidebar opens on the journey's end. The bar says
+keeps none. The last open step settled ends the review, as "Where you are" says. The bar says
 how many variants the step has, and a tab on the light's edge shows which one the page
 shows, a dot for each; on a step with none, `v` says so.
 

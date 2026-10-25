@@ -49,9 +49,8 @@ describe("the keys", () => {
       ];
       const rows = helpRows(listed);
       for (const b of listed) {
-        const keys = b.keys.filter((k) => k !== "Escape");
         const ways = new Set(
-          keys.map((k) => JSON.stringify(typeof b.does === "function" ? b.does(k) : b.does)),
+          b.keys.map((k) => JSON.stringify(typeof b.does === "function" ? b.does(k) : b.does)),
         );
         const tapped = new Set(
           rows.filter((r) => r.binding === b).map((r) => JSON.stringify(rowAction(r))),
@@ -270,8 +269,9 @@ describe("the keys", () => {
         expect(firstAction(view, { key, ctrl: true }, "picker")).toBeUndefined();
   });
 
-  it("close what is open with Escape, then hide the tools with the sidebar in them, and show them in the sidebar", () => {
+  it("back out one level with Escape: what is open, the step, then the tools, and show them in the sidebar", () => {
     const preview = { kind: "event", event: { type: "preview" } };
+    const leave = { kind: "event", event: { type: "leave" } };
     const sidebar = { kind: "focus", to: "sidebar" };
     for (const view of VIEWS) {
       expect(dispatch(bindings, view, "page", { key: "Escape" })).toEqual(
@@ -279,20 +279,40 @@ describe("the keys", () => {
           ? sidebar
           : view.layer !== "none"
             ? { kind: "event", event: { type: "escape" } }
-            : view.active || view.sidebar
-              ? preview
-              : undefined,
+            : view.active
+              ? leave
+              : view.sidebar
+                ? preview
+                : undefined,
       );
-      // In the sidebar, Escape hides the tools rather than the sidebar, so they come back
-      // as they were.
+      // In the sidebar, Escape off a step hides the tools rather than the sidebar, so they
+      // come back as they were.
       expect(dispatch(bindings, view, "sidebar", { key: "Escape" })).toEqual(
         view.preview
           ? sidebar
           : view.layer !== "none"
             ? { kind: "event", event: { type: "escape" } }
-            : preview,
+            : view.active
+              ? leave
+              : preview,
       );
     }
+  });
+
+  it("close the page's card with Escape off a step, when the sidebar is closed", () => {
+    const view: View = {
+      layer: "none",
+      active: false,
+      sidebar: false,
+      variants: 1,
+      people: false,
+      preview: false,
+      page: true,
+    };
+    expect(dispatch(bindings, view, "page", { key: "Escape" })).toEqual({
+      kind: "event",
+      event: { type: "page", open: false },
+    });
   });
 
   it("open the g menu with g, on the page and in the sidebar", () => {

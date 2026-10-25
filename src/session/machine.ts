@@ -22,6 +22,7 @@ import {
 } from "../notes/note";
 import { dropped, keptOn } from "../part/store";
 import {
+  openedAgain,
   openPlace,
   stepBy,
   type Entered,
@@ -113,6 +114,9 @@ export type Event =
       readonly journey: string;
       readonly at: number;
       readonly fresh: boolean;
+      /** From the journey's own row: a journey with every step settled opens them all
+       * again, for another pass. */
+      readonly again?: boolean | undefined;
     }
   /** `by` steps on; with `open`, only the steps not settled count, as H and L go. */
   | { readonly type: "go"; readonly by: number; readonly open?: boolean | undefined }
@@ -206,7 +210,10 @@ export type Emitted =
   /** Nothing to undo or redo. */
   | { readonly type: "nothing"; readonly redo: boolean }
   /** The step has no variants to lift. */
-  | { readonly type: "unvaried" };
+  | { readonly type: "unvaried" }
+  /** The last open step of the journey settled: the review ended, and the tools show the
+   * page. */
+  | { readonly type: "done"; readonly journey: string };
 
 /**
  * What the post actor sends the agent, at once: a chat's message with the pointed notes in
@@ -299,6 +306,29 @@ const NO_VERDICTS: PartVerdicts = { kept: [], dropped: [] };
 const verdictsOf = (c: Context, part: string, step = stepOf(c)?.id): PartVerdicts =>
   (step === undefined ? undefined : c.feedback[step]?.parts?.[part]) ?? NO_VERDICTS;
 
+/** The steps a start opens again for another pass, by their IDs: every step of the journey,
+ * when the start comes from the journey's row and every one is settled. None otherwise. */
+const passOf = (
+  c: Context,
+  e: { readonly journey: string; readonly again?: boolean | undefined },
+) => {
+  const ids = c.journeys.find((j) => j.id === e.journey)?.steps.map((s) => s.id) ?? [];
+  const settled = ids.length > 0 && ids.every((id) => c.feedback[id]?.settled === true);
+  return e.again === true && settled ? ids : [];
+};
+
+/** The notes and feedback with the steps opened again: each step as `openedAgain` has it,
+ * and the notes the reviewer settled on them open. */
+const reopened = (c: Context, steps: readonly string[]) => ({
+  notes: c.notes.map((n) =>
+    steps.includes(n.step) && n.settledBy === "you" ? noteAfter(n, { type: "reopen" }) : n,
+  ),
+  feedback: {
+    ...c.feedback,
+    ...Object.fromEntries(steps.map((id) => [id, openedAgain(c.feedback[id] ?? {})])),
+  },
+});
+
 /**
  * The notes after a message: the chat, with the place's pointed notes in its message, and
  * without them as notes, as they wait no more. With pointed notes, a send with no words is
@@ -370,6 +400,15 @@ function changeOf(c: Context, event: Event): Change | undefined {
         notes: c.notes.filter((n) => n.step === step.id).map((n) => [n.id, n] as const),
         feedback: [[step.id, c.feedback[step.id]]],
         at: c.at,
+      };
+    }
+    case "start": {
+      const steps = passOf(c, event);
+      if (steps.length === 0) return undefined;
+      return {
+        label: "Opened the journey again",
+        notes: c.notes.filter((n) => steps.includes(n.step)).map((n) => [n.id, n] as const),
+        feedback: steps.map((id) => [id, c.feedback[id]] as const),
       };
     }
     case "drop":
@@ -453,12 +492,20 @@ export const sessionMachine = setup({
       cursor: ({ context }) => context.at,
       row: undefined,
     }),
+    // The page view: the page's card and the small bar.
     deactivate: assign({
       active: false,
+      page: true,
       row: undefined,
       entered: undefined,
       opening: undefined,
       preview: false,
+    }),
+    // A journey started again once every step is settled opens its steps for another pass.
+    anotherPass: enqueueActions(({ context, event, enqueue }) => {
+      if (event.type !== "start") return;
+      const steps = passOf(context, event);
+      if (steps.length > 0) enqueue.assign(reopened(context, steps));
     }),
     nextRun: assign({ run: ({ context }) => context.run + 1 }),
   },
@@ -547,7 +594,11 @@ export const sessionMachine = setup({
           past: context.past.slice(0, -1),
           future: [...context.future, inverseOf(context, change)],
         });
-        if (change.at !== undefined && change.at !== context.at)
+        // A settle taken back goes back to its step: also from the page, where the review's
+        // last settle ended the walk.
+        if (change.at !== undefined && !context.active)
+          enqueue.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
+        else if (change.at !== undefined && change.at !== context.at)
           enqueue.raise({ type: "jump", at: change.at });
         enqueue.emit({ type: "undone", label: change.label, redo: false });
       }),
@@ -674,27 +725,38 @@ export const sessionMachine = setup({
           const step = stepOf(context, at);
           if (step === undefined) return;
           const was: Feedback = context.feedback[step.id] ?? {};
-          const settled = was.settled !== true;
+          // Opening the step again keeps no variant and opens the notes the reviewer
+          // settled, as the reviewer may settle on another.
+          if (was.settled === true) {
+            const { notes, feedback } = reopened(context, [step.id]);
+            enqueue.assign({ notes, feedback, posts: context.posts + 1 });
+            enqueue.spawnChild("post", {
+              id: `post-${context.posts}`,
+              input: {
+                kind: "settle",
+                ids: [],
+                step: step.id,
+                session: { ...context, notes, feedback },
+              },
+            });
+            return;
+          }
           // The notes not sent yet go with the settle, so none is lost: the agent works on
           // them while the step stays settled.
-          const message = settled
-            ? sentOf(context, { id: stepNoteId(step.id), step: step.id, at: event.at ?? 0 })
-            : undefined;
-          // Settling settles the step's other notes, also one the agent works on. Opening the
-          // step again opens the notes the reviewer settled.
+          const message = sentOf(context, {
+            id: stepNoteId(step.id),
+            step: step.id,
+            at: event.at ?? 0,
+          });
+          // Settling settles the step's other notes, also one the agent works on.
           const notes = (message?.notes ?? context.notes).map((n) =>
             n.step !== step.id || message?.ids.includes(n.id) === true
               ? n
-              : settled
-                ? noteAfter(n, { type: "settle" })
-                : n.settledBy === "you"
-                  ? noteAfter(n, { type: "reopen" })
-                  : n,
+              : noteAfter(n, { type: "settle" }),
           );
-          // The settle keeps the variant shown; opening the step again keeps none, as the
-          // reviewer may settle on another.
+          // The settle keeps the variant the step's part shows.
           const parts =
-            settled && event.keep !== undefined
+            event.keep !== undefined
               ? {
                   ...was.parts,
                   [event.keep.part]: keptOn(
@@ -702,14 +764,14 @@ export const sessionMachine = setup({
                     event.keep.variant,
                   ),
                 }
-              : !settled && was.parts !== undefined
-                ? Object.fromEntries(
-                    Object.entries(was.parts).map(([part, v]) => [part, { ...v, kept: [] }]),
-                  )
-                : was.parts;
+              : was.parts;
           const feedback = {
             ...context.feedback,
-            [step.id]: { ...was, settled, ...(parts === undefined ? {} : { parts }) },
+            [step.id]: {
+              ...was,
+              settled: true,
+              ...(parts === undefined ? {} : { parts }),
+            },
           };
           enqueue.assign({ notes, feedback });
           if (context.opened !== undefined && !notes.some((n) => n.id === context.opened))
@@ -727,18 +789,16 @@ export const sessionMachine = setup({
               next: message === undefined ? undefined : { kind: "note", ids: message.ids, session },
             },
           });
-          // The last open step settled: the sidebar opens on the review's end.
+          // The last open step settled: the review ends by itself, and the tools go back to
+          // the page. The walk stays on its step, so the journey opened again goes on there.
           const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
-          const done =
-            openPlace(ids, context.feedback, context.at).open > 0 &&
-            openPlace(ids, feedback, context.at).open === 0;
-          if (done) {
-            if (!context.sidebar) enqueue.raise({ type: "sidebar" });
+          if (openPlace(ids, feedback, context.at).open === 0) {
+            enqueue.raise({ type: "leave" });
+            enqueue.emit({ type: "done", journey: context.journey });
             return;
           }
           // A settle goes on to the next open step, or back to one before when none is after,
           // from the page and from the sidebar alike: the walk and the selection go there.
-          if (!settled) return;
           const after = stepBy(ids, feedback, at, 1);
           const next = after !== at ? after : stepBy(ids, feedback, at, -1);
           enqueue.assign({ cursor: next, row: undefined });
@@ -783,6 +843,8 @@ export const sessionMachine = setup({
             start: {
               target: "on",
               actions: [
+                "remember",
+                "anotherPass",
                 assign({
                   journey: ({ event }) => event.journey,
                   at: ({ event }) => event.at,
@@ -808,6 +870,8 @@ export const sessionMachine = setup({
               target: ".entering",
               reenter: true,
               actions: [
+                "remember",
+                "anotherPass",
                 assign({
                   journey: ({ event }) => event.journey,
                   at: ({ event }) => event.at,

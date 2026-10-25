@@ -170,6 +170,14 @@ export const BINDINGS: readonly Binding[] = [
     does: event({ type: "settle" }),
   },
   {
+    keys: ["Escape"],
+    label: "Leave the step for the page; the walk stays where it is",
+    group: "Review",
+    zone: "page",
+    when: walking,
+    does: event({ type: "leave" }),
+  },
+  {
     keys: ["G"],
     label: "Go to the last open step",
     group: "Review",
@@ -252,14 +260,7 @@ export const BINDINGS: readonly Binding[] = [
     zone: "sidebar",
     does: { kind: "focus", to: "note" },
   },
-  {
-    keys: ["Escape"],
-    label: "Hide the tools, the sidebar too, to see the page",
-    group: "Sidebar",
-    zone: "sidebar",
-    when: (v) => !v.preview,
-    does: event({ type: "preview" }),
-  },
+
   {
     keys: ["b"],
     ctrl: true,
@@ -453,21 +454,28 @@ export function dispatch(
     if (next === undefined) return event({ type: "escape" });
     return typeof next.does === "function" ? next.does(key.key) : next.does;
   }
-  // Escape closes what is open over the page, then the page's card alone, then hides the
-  // tools, so they come back as they were, the sidebar and the card too. In the preview it
-  // shows them again, with the keys in the sidebar, as Escape went from there.
+  // Escape backs out one level: it closes what is open over the page, then leaves the step
+  // for the page, then closes the page's card alone, then hides the tools, so they come back
+  // as they were, the sidebar and the card too. In the preview it shows them again, with
+  // the keys in the sidebar, as Escape went from there.
   if (key.key === "Escape" && view.preview && key.ctrl !== true)
     return { kind: "focus", to: "sidebar" };
-  if (key.key === "Escape" && zone === "sidebar" && view.layer !== "none" && key.ctrl !== true)
-    return event({ type: "escape" });
+  if (key.key === "Escape" && zone === "sidebar" && key.ctrl !== true)
+    return view.layer !== "none"
+      ? event({ type: "escape" })
+      : view.active
+        ? event({ type: "leave" })
+        : event({ type: "preview" });
   if (key.key === "Escape" && zone === "page" && key.ctrl !== true)
     return view.layer !== "none"
       ? event({ type: "escape" })
-      : !view.active && view.page === true && !view.sidebar
-        ? event({ type: "page", open: false })
-        : view.active || view.sidebar
-          ? event({ type: "preview" })
-          : undefined;
+      : view.active
+        ? event({ type: "leave" })
+        : view.page === true && !view.sidebar
+          ? event({ type: "page", open: false })
+          : view.sidebar
+            ? event({ type: "preview" })
+            : undefined;
   const usable = bindingsFor(bindings, view, zone).filter((b) => (b.ctrl === true) === ctrl);
   const binding = usable.find((b) => b.keys.includes(key.key));
   if (binding === undefined) return undefined;
@@ -504,8 +512,15 @@ export function ownerOf(element: Element | null): Owner | undefined {
 /** How the `?` menu names a binding's keys, as `Ctrl+R` or `g g`. */
 export const keyName = (b: Binding, keys: readonly string[] = b.keys) =>
   keys
-    .filter((k) => k !== "Escape")
-    .map((k) => (b.ctrl === true ? `Ctrl+${k.toUpperCase()}` : k === "Enter" ? "↵" : k))
+    .map((k) =>
+      b.ctrl === true
+        ? `Ctrl+${k.toUpperCase()}`
+        : k === "Enter"
+          ? "↵"
+          : k === "Escape"
+            ? "Esc"
+            : k,
+    )
     .map((k) => (b.zone === "go" ? `g ${k}` : k))
     .join(" ");
 
