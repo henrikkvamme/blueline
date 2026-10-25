@@ -166,8 +166,10 @@ must fix each one or design it out. The plan step that does it is in brackets.
    own. [2]
 2. **`v` lifts the design on a step with its own variants.** On such a step, `v` opened a
    list in a modal card. The lift draws a part's component once for each variant, and a step
-   variant changes the whole page, so there was nothing to draw. The approach is open: see
-   "To verify while building". [2]
+   variant changes the whole page, so there was nothing to draw. Now `v` always shows the
+   lift and never a modal. When the app marks the part (Level 2), the lift is live. When a
+   step's variants only change the page, Blueline applies each variant in turn and shows a
+   still copy of the step's target for it, in the same lift. [2]
 3. **Delivery steers, and sends each line once.** The launchd service sent notes with
    `t3 thread send`, which queues behind a busy turn. It also sent the last settle to a
    thread whose agent had already read it: it waited for a live listener's agent to reply
@@ -228,9 +230,8 @@ Evals come after the build, once the design and the behaviour are agreed in real
 
 ## To verify while building
 
-- How `v` lifts a step's own variants (requirement 2). One way: apply each variant in turn,
-  copy the step's target, and show the copies side by side, still and at true size. The
-  other way: make such variants parts, through a part adapter for the app's framework.
+- Whether still copies of a step's target (requirement 2) look right on the dev dashboard,
+  whose styles come from the page and not from the part.
 
 - T3's MCP steer for an outside process: the public docs do not show it yet.
 - Whether an outside process can reach a running Codex TUI through the app-server.
