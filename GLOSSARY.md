@@ -32,6 +32,11 @@ A step that the reviewer has not settled.
 The reviewer's statement that a step is right as it shows now.
 _Avoid_: Approve, accept, done
 
+**Finish**:
+The reviewer's statement that a journey's review is over, once every step is settled. It
+sends the last settle to the agent.
+_Avoid_: Submit, complete, done
+
 ## Parts
 
 **Part**:
@@ -81,7 +86,8 @@ it is a sheet at the bottom.
 _Avoid_: Sidebar, step card, page card, drawer
 
 **Tree**:
-The pages, journeys and steps in the panel. On a step it folds to one line.
+The pages, journeys and steps in the panel. On a step it folds to one line. The settled
+journeys stand at its foot, under **Settled**.
 
 **Bar**:
 The panel's folded form, at the bottom centre of the page. It shows only while the panel

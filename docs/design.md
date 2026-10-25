@@ -44,7 +44,8 @@ These parts worked, and they stay:
   their age.
 - A pin carries a selector, the element's text and screenshots.
 - Replies have states (`working`, `replied`, `settled`) and blocks (plan, variants).
-- The settles wait and go to the agent with the next note. The last settle ends the review.
+- The settles wait and go to the agent with the next note. The last settle asks the
+  reviewer to finish the review, and Finish ends it.
 
 ## Decisions
 
@@ -173,12 +174,14 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 - **Three layers, each hidden on its own.** The page is at the bottom, the light is over
   it, and the panel is over the light.
 
-| Action                       | The walk                          | Light | Panel                                                   |
-| ---------------------------- | --------------------------------- | ----- | ------------------------------------------------------- |
-| Ctrl+B or the panel's button | stays on the step                 | stays | hides or shows                                          |
-| Ctrl+P                       | stays on the step                 | hides | hides, and only the eye shows                           |
-| Esc, with no field focused   | leaves the step for the page view | off   | shows the page's chat                                   |
-| The last settle              | ends: the journey is done         | off   | shows the page's chat, and the journey's row is checked |
+| Action                       | The walk                          | Light                       | Panel                                                  |
+| ---------------------------- | --------------------------------- | --------------------------- | ------------------------------------------------------ |
+| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                         |
+| Ctrl+P                       | stays on the step                 | hides                       | hides, and only the eye shows                          |
+| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                                  |
+| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step                                    |
+| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                       |
+| Finish review                | ends: the journey is done         | off                         | shows the page's chat, and the journey goes to Settled |
 
 Leaving a step changes the place. Hiding changes only the view. So Esc moves the reviewer,
 and Ctrl+B and Ctrl+P only hide.
@@ -199,10 +202,32 @@ step.
 
 ### Settle
 
-A settle shows that it took. The light turns green and a check draws in its corner, for
-about 400 ms. The step's row in the tree gets its check. Then the walk goes on to the next
-open step. Nothing else moves. Undo runs the same motion backwards. With reduced motion,
-the check only fades in. On a phone, the same motion shows above the sheet.
+A settle shows that it took. The light's outline turns green, a clear green and not the blue
+accent, and a check draws in its corner, for about 400 ms. The step's row in the tree gets
+its check. Then the walk goes on to the next open step. Undo runs the same motion
+backwards. With reduced motion, the colour changes with no movement, and the check only
+fades in. On a phone, the same motion shows above the sheet. A settled step keeps its green
+light.
+
+A settle never lands on a step the reviewer has not seen: a key's auto-repeat does nothing,
+and while the motion plays, and until the next step's light is in place, another settle does
+nothing.
+
+After a settle, and on `j` and `k`, the light moves to the next part: it waits while the
+page scrolls there, glides from the old part's box to the new one in about 300 ms, eased
+out, and gives one soft pulse. On another page it fades in instead. With reduced motion it
+fades, with no glide or pulse.
+
+The last settle does not end the walk. The panel shows the finish in place of the step:
+"All 5 steps settled", the kept variant of each part, the number of notes sent, a primary
+**Finish review** and a quiet **Back**. Enter presses Finish, but only an Enter pressed
+after the finish shows. Back, Escape and undo open the last step again. The last step's
+settle line, the one with `left: 0`, waits until Finish, so the agent wakes once. A reload
+keeps the finish.
+
+The tree keeps the open journeys on top. The settled ones stand folded at its foot, under a
+quiet **Settled** heading; a finished journey moves there with a short motion, and back up
+the same way for another pass.
 
 ## Requirements from the dev dashboard review
 
