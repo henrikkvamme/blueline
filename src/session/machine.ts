@@ -210,7 +210,14 @@ export interface Reply {
 export type Emitted =
   | { readonly type: "replied"; readonly note: Note; readonly settled: boolean }
   | { readonly type: "failed" }
-  | { readonly type: "undone"; readonly label: string; readonly redo: boolean }
+  | {
+      readonly type: "undone";
+      readonly label: string;
+      readonly redo: boolean;
+      /** The step whose settle it took back or did again, and whether it was settled before,
+       * so its light turns from that look. */
+      readonly turned?: { readonly step: string; readonly settled: boolean } | undefined;
+    }
   /** The tools hide, until the reviewer asks for them again. */
   | { readonly type: "previewing" }
   /** Nothing to undo or redo. */
@@ -379,6 +386,13 @@ function sentOf(
   ];
   return { notes, ids: [sent.id] };
 }
+
+/** The step whose settle a change takes back or does again, and whether it is settled now,
+ * before the change. */
+const turnedBy = (c: Context, change: Change) => {
+  const step = change.at === undefined ? undefined : change.feedback[0]?.[0];
+  return step === undefined ? undefined : { step, settled: c.feedback[step]?.settled === true };
+};
 
 /** How many actions `u` can take back. */
 const HISTORY = 50;
@@ -613,7 +627,12 @@ export const sessionMachine = setup({
           enqueue.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
         else if (change.at !== undefined && change.at !== context.at)
           enqueue.raise({ type: "jump", at: change.at });
-        enqueue.emit({ type: "undone", label: change.label, redo: false });
+        enqueue.emit({
+          type: "undone",
+          label: change.label,
+          redo: false,
+          turned: turnedBy(context, change),
+        });
       }),
     },
     redo: {
@@ -630,7 +649,12 @@ export const sessionMachine = setup({
         });
         if (change.at !== undefined && change.at !== context.at)
           enqueue.raise({ type: "jump", at: change.at });
-        enqueue.emit({ type: "undone", label: change.label, redo: true });
+        enqueue.emit({
+          type: "undone",
+          label: change.label,
+          redo: true,
+          turned: turnedBy(context, change),
+        });
       }),
     },
     posted: { actions: stopChild(({ event }) => event.child) },

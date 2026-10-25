@@ -59,7 +59,7 @@ if (typeof window !== "undefined")
   });
 
 /** Scrolls the part to the top of a phone's screen, above the tools at the bottom. */
-function toTop(element: HTMLElement) {
+export function toTop(element: HTMLElement) {
   // Clear of the screen's top edge; the margin counts only for this scroll.
   const was = element.style.scrollMarginTop;
   element.style.scrollMarginTop = `${String(TOP)}px`;
@@ -225,27 +225,188 @@ export function Flash({
   );
 }
 
+/** How long the light glides from one part to the next, in ms. */
+export const GLIDE_MS = 300;
+
+/** How long the light waits for the page to stop scrolling to its next part, in ms, before it
+ * glides there all the same. */
+const SCROLL_WAIT = 900;
+
+/** How long the light fades out or in, in ms. */
+const FADE_MS = 150;
+
+/** For how many frames the next part stands still before the scroll counts as done. */
+const STILL_FRAMES = 4;
+
+/** How long a step's part may take to show, in ms, before the light leaves. */
+const PART_WAIT = 600;
+
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Where the page is, as a router has it, so the light knows the next part is on another page. */
+const pageNow = () => `${location.pathname}${location.hash}`;
+
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
+
+const between = (from: Box, to: Box, t: number): Box => ({
+  x: from.x + (to.x - from.x) * t,
+  y: from.y + (to.y - from.y) * t,
+  width: from.width + (to.width - from.width) * t,
+  height: from.height + (to.height - from.height) * t,
+});
+
+/** How the light shows the part of the step `at` names, as it goes from one step to the
+ * next. */
+type Motion =
+  /** It stands on the part, as the part moves. */
+  | { readonly kind: "on"; readonly at: string }
+  /** The page scrolls to the next part: the light waits where it was. */
+  | {
+      readonly kind: "waiting";
+      readonly at: string;
+      readonly from: Box;
+      readonly since: number;
+      readonly last: Box;
+      /** For how many frames the part has stood still. */
+      readonly still: number;
+    }
+  /** It glides from where it was to the part. */
+  | { readonly kind: "gliding"; readonly at: string; readonly from: Box; readonly start: number }
+  /** It fades in on the part: the first light, one on another page, or reduced motion. */
+  | { readonly kind: "fading"; readonly at: string }
+  /** The step shows no part, or the walk left the page: the light fades out. */
+  | { readonly kind: "gone"; readonly at: string; readonly since: number };
+
 /**
  * The light around the step's part: the page dims a little around it. With more than one
  * variant, a tab on its edge shows which one the page shows, of how many, so the reviewer sees
  * there are more to look at. It follows the part at once, as the page scrolls or narrows for
  * the panel: an eased follow would trail behind the part.
+ *
+ * It stays while the walk goes on to the next step, and once the next part shows, it glides
+ * there and gives one soft pulse, so the eye follows where to look next. The page scrolls to
+ * the part first. On another page, and with reduced motion, it fades in instead. A settled
+ * step's light is green, with a check in its corner: the settle turns it, and undo turns it
+ * back. `onPlaced` says when the light stands on the step `at` names.
  */
 export function Light({
   box,
+  at,
+  ready,
+  settled,
   place,
+  turning = false,
+  onPlaced,
 }: {
-  readonly box: Box;
+  readonly box: Box | undefined;
+  /** The step shown, as the run and its index name it. */
+  readonly at: string;
+  /** Whether the step's world is open, so its part shows if it has one. */
+  readonly ready: boolean;
+  readonly settled: boolean;
   readonly place?: VariantPlace | undefined;
+  /** Whether undo or redo took the walk to the step: its light arrives in its old look, with
+   * no motion, and turns once it stands on the part. */
+  readonly turning?: boolean;
+  readonly onPlaced: (at: string) => void;
 }) {
+  const [motion, setMotion] = useState<Motion>({ kind: "fading", at: "" });
+  const [pulse, setPulse] = useState(0);
+  // Each fade in draws a new light, so it does not turn from the last step's look.
+  const [fades, setFades] = useState(0);
+  const [, redraw] = useState(0);
+  const latest = useRef({ box, at, ready, motion, onPlaced });
+  latest.current = { box, at, ready, motion, onPlaced };
+  // The box the light last drew round a part that showed, and on which page.
+  const drawn = useRef<{ readonly box: Box; readonly page: string } | undefined>(undefined);
+  const missing = useRef<number | undefined>(undefined);
+  useFrames(true, () => {
+    const { box, at, ready, motion: m, onPlaced } = latest.current;
+    const now = performance.now();
+    const go = (next: Motion) => {
+      latest.current = { ...latest.current, motion: next };
+      setMotion(next);
+    };
+    missing.current = ready && box === undefined ? (missing.current ?? now) : undefined;
+    if (box !== undefined && (m.at !== at || m.kind === "gone")) {
+      const from = drawn.current;
+      // A light that fades out ends its fade first, so it fades in as a new one.
+      if (m.kind === "gone" && now - m.since < FADE_MS) return;
+      if (from === undefined || m.kind === "gone" || from.page !== pageNow() || reducedMotion()) {
+        setFades((n) => n + 1);
+        go({ kind: "fading", at });
+        onPlaced(at);
+      } else go({ kind: "waiting", at, from: from.box, since: now, last: box, still: 0 });
+      return;
+    }
+    if (m.kind === "waiting" && box !== undefined) {
+      // The page has stopped scrolling once the part stands still for a few frames.
+      const still = sameBox(m.last, box) ? m.still + 1 : 0;
+      if (still < STILL_FRAMES && now - m.since < SCROLL_WAIT) go({ ...m, last: box, still });
+      else go({ kind: "gliding", at: m.at, from: m.from, start: now });
+      return;
+    }
+    if (m.kind === "gliding") {
+      if (now - m.start < GLIDE_MS) return redraw((n) => (n + 1) % 1024);
+      go({ kind: "on", at: m.at });
+      setPulse((n) => n + 1);
+      onPlaced(m.at);
+      return;
+    }
+    if (m.kind === "gone" || box !== undefined) return;
+    // The walk went to another page, or reduced motion is on: the light fades out, and in on
+    // the next part.
+    const from = drawn.current;
+    if (from !== undefined && (from.page !== pageNow() || reducedMotion()))
+      return go({ kind: "gone", at: m.at, since: now });
+    // The step's world is open, and its part does not show.
+    if (missing.current !== undefined && now - missing.current > PART_WAIT) {
+      go({ kind: "gone", at, since: now });
+      onPlaced(at);
+    }
+  });
+  const rect =
+    motion.kind === "waiting"
+      ? motion.from
+      : motion.kind === "gliding" && box !== undefined
+        ? between(
+            motion.from,
+            box,
+            easeOut(Math.min((performance.now() - motion.start) / GLIDE_MS, 1)),
+          )
+        : motion.at === at
+          ? (box ?? drawn.current?.box)
+          : drawn.current?.box;
+  // While the next step opens, the light stays where it was, and the page it was on.
+  useLayoutEffect(() => {
+    if (box !== undefined && rect !== undefined && motion.at === at)
+      drawn.current = { box: rect, page: pageNow() };
+  });
+  // Until the light leaves for the next part, it keeps the look of the step it stands on: a
+  // settled one stays green as the walk goes on.
+  const held = useRef(settled);
+  const here = motion.at === at && motion.kind !== "waiting";
+  if (here) held.current = settled;
+  const look = here ? settled : held.current;
+  const instant = turning && (!here || motion.kind === "gliding") ? "transition-none" : undefined;
+  if (rect === undefined) return null;
   return (
-    <div {...UI} aria-hidden className="pointer-events-none fixed inset-0 z-[2147483000]">
+    <div
+      key={fades}
+      {...UI}
+      aria-hidden
+      data-dt-motion={motion.kind}
+      className={cx(
+        "pointer-events-none fixed inset-0 z-[2147483000] transition-opacity duration-150",
+        motion.kind === "gone" ? "opacity-0" : "opacity-100 starting:opacity-0",
+      )}
+    >
       <svg className="absolute inset-0 size-full">
         <defs>
           <mask id="blueline-light">
             <rect width="100%" height="100%" fill="white" />
             <rect
-              style={{ x: box.x, y: box.y, width: box.width, height: box.height }}
+              style={{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
               rx="12"
               fill="black"
             />
@@ -254,21 +415,87 @@ export function Light({
         <rect width="100%" height="100%" fill="rgb(0 0 0 / 0.18)" mask="url(#blueline-light)" />
       </svg>
       <div
-        className="absolute rounded-[12px] ring-2 ring-dt-accent"
-        style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
+        data-dt-light={look ? "settled" : "open"}
+        className={cx(
+          "absolute rounded-[12px] ring-2 transition-shadow duration-200",
+          look ? "ring-dt-good" : "ring-dt-accent delay-150",
+          instant,
+        )}
+        style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
       >
-        {place !== undefined && <VariantTab place={place} />}
+        {pulse > 0 && (
+          <span
+            key={pulse}
+            className={cx(
+              "absolute inset-0 animate-dt-pulse rounded-[12px] motion-reduce:hidden",
+              look ? "text-dt-good" : "text-dt-accent",
+            )}
+          />
+        )}
+        <SettleCheck settled={look} instant={instant} />
+        {place !== undefined && <VariantTab place={place} settled={look} instant={instant} />}
       </div>
     </div>
   );
 }
 
-/** The tab on the light's edge: a dot for each variant, the one the page shows bright. */
-function VariantTab({ place }: { readonly place: VariantPlace }) {
+/** The check in the light's corner on a settled step. It draws in as the step settles, and
+ * draws out as undo opens it again; with reduced motion it only fades. */
+function SettleCheck({
+  settled,
+  instant,
+}: {
+  readonly settled: boolean;
+  readonly instant?: string | undefined;
+}) {
+  return (
+    <span
+      data-dt-check={settled ? "on" : "off"}
+      className={cx(
+        "absolute top-0 left-0 grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-dt-good transition-opacity duration-150",
+        settled ? "opacity-100" : "opacity-0 delay-200 motion-reduce:delay-0",
+        instant,
+      )}
+    >
+      <svg viewBox="0 0 20 20" className="size-5" fill="none">
+        <path
+          d="M6 10.5 8.6 13 14 7.5"
+          pathLength={1}
+          stroke="white"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={1}
+          className={cx(
+            "transition-[stroke-dashoffset] duration-250 ease-out motion-reduce:transition-none motion-reduce:[stroke-dashoffset:0]",
+            settled ? "[stroke-dashoffset:0] delay-100" : "[stroke-dashoffset:1]",
+            instant,
+          )}
+        />
+      </svg>
+    </span>
+  );
+}
+
+/** The tab on the light's edge: a dot for each variant, the one the page shows bright. It
+ * takes the light's colour. */
+function VariantTab({
+  place,
+  settled = false,
+  instant,
+}: {
+  readonly place: VariantPlace;
+  readonly settled?: boolean;
+  readonly instant?: string | undefined;
+}) {
   return (
     <span
       title={`${place.label}, ${String(place.at + 1)} of ${String(place.of)}`}
-      className="absolute top-0 right-3 flex h-3.5 -translate-y-1/2 items-center gap-1 rounded-full bg-dt-accent px-1.5 text-[9px] leading-none font-semibold text-white tabular-nums"
+      className={cx(
+        "absolute top-0 right-3 flex h-3.5 -translate-y-1/2 items-center gap-1 rounded-full px-1.5 text-[9px] leading-none font-semibold text-white tabular-nums transition-colors duration-200",
+        settled ? "bg-dt-good" : "bg-dt-accent delay-150",
+        instant,
+      )}
     >
       {place.of <= 6
         ? Array.from({ length: place.of }, (_, i) => (

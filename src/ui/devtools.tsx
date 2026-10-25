@@ -32,7 +32,7 @@ import { Bar } from "./bar";
 import { firstOpen, lastOpen } from "../session/state";
 import { describe, pathTo } from "./geometry";
 import { Layer } from "./layers";
-import { AimHint, Flash, Pins, Pointer, Shift, Light, useBox } from "./overlays";
+import { AimHint, Flash, Pins, Pointer, Shift, Light, toTop, useBox } from "./overlays";
 import { NoteCard } from "./pinned";
 import {
   now,
@@ -48,6 +48,7 @@ import {
 import { Panel } from "./panel";
 import { foldTree, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
+import { settleGate, SETTLE_MS, TURN_MS, TURN_WAIT } from "./settle";
 import { Toasts } from "./toasts";
 import { VariantNote } from "./variant-note";
 import { isPhone, useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
@@ -73,6 +74,23 @@ export interface DevToolsProps<C> {
   readonly navigate?: ((path: string) => void) | undefined;
   /** The app's own dev parts, which can start the review (useReviewControl). */
   readonly children?: React.ReactNode;
+}
+
+/** Where the settle is: while its motion plays, and until the next step shows, another
+ * settle does nothing. */
+const settling = settleGate();
+
+/** On a phone, puts the lit part above the sheet or the bar, once, so the settle shows. */
+function keepLit(target: string | undefined) {
+  const lit = document.querySelector("[data-dt-light]")?.getBoundingClientRect();
+  const element = target === undefined ? null : document.querySelector(target);
+  if (!isPhone() || lit === undefined || !(element instanceof HTMLElement)) return;
+  const tops = [...document.querySelectorAll("[data-dt-dock]")].map(
+    (e) => e.getBoundingClientRect().top,
+  );
+  const floor = Math.min(window.innerHeight, ...tops);
+  // The check stands at the light's top corner: that much must show.
+  if (lit.top < 0 || lit.top + 32 > floor) toTop(element);
 }
 
 /** Whether the reviewer points at an element for a note, from the pin button or the `?` menu,
@@ -269,6 +287,17 @@ export function DevTools<C>({
     const sub = actor.subscribe((s) => saveKept(storageKey, keptOf(s.context)));
     return () => sub.unsubscribe();
   }, [actor, storageKey]);
+  // Undo and redo turn a step's light from the look it had, so the settle runs backwards.
+  useEffect(() => {
+    const sub = actor.on("undone", (e) => {
+      const turned = e.turned;
+      if (turned === undefined) return;
+      settling.turn(turned);
+      // A light that never shows, as in the preview, does not wait to turn.
+      window.setTimeout(() => settling.turned(turned.step), TURN_WAIT);
+    });
+    return () => sub.unsubscribe();
+  }, [actor]);
   // The parts on the page show the reviewer's verdicts, as a deleted variant leaves the
   // lift, and which variants have a note.
   useEffect(() => {
@@ -318,26 +347,50 @@ export function DevTools<C>({
         },
       });
     };
-    /** Settles the step at `at`, or opens it again. A settle keeps the variant the step's part
-     * shows on the page, and sends the step's notes not sent yet at this time. A step the
-     * tree selected is named when the page shows another. */
-    const settle = (at: number) => {
+    /** The settle of the step at `at`, or its opening again. A settle keeps the variant the
+     * step's part shows on the page, and sends the step's notes not sent yet at this time. */
+    const settleOf = (at: number) => {
       const s = actor.getSnapshot();
       const journey = journeyIn(s, info);
       const part = partOn(journey?.steps[at], journey);
-      const step = at === s.context.at ? {} : { step: at };
-      if (part !== undefined && part.labels.length > 1) {
-        const verdicts = parts.verdicts(part.name);
-        const shown = parts.current().shown[part.name] ?? parts.shown(part.name);
-        const variant = variantOf(part.labels, shown, verdicts);
-        return actor.send({
+      if (part === undefined || part.labels.length <= 1) return {};
+      const verdicts = parts.verdicts(part.name);
+      const shown = parts.current().shown[part.name] ?? parts.shown(part.name);
+      return { keep: { part: part.name, variant: variantOf(part.labels, shown, verdicts) } };
+    };
+    /** Settles the step at `at`, or opens it again. A settle shows that it took first: the
+     * light turns green and its check draws, and then the walk goes on. While that plays, and
+     * until the next step shows, another settle does nothing (settle.ts). A step the tree
+     * selected is named when the page shows another. */
+    const settle = (at: number) => {
+      const s = actor.getSnapshot();
+      const step = journeyIn(s, info)?.steps[at];
+      if (step === undefined) return;
+      const send = (keep: ReturnType<typeof settleOf>) =>
+        actor.send({
           type: "settle",
-          ...step,
-          keep: { part: part.name, variant },
+          ...(at === actor.getSnapshot().context.at ? {} : { step: at }),
+          ...keep,
           at: now(),
         });
-      }
-      actor.send({ type: "settle", ...step, at: now() });
+      // Opening a settled step again goes at once; its light turns back where it is.
+      if (s.context.feedback[step.id]?.settled === true) return send(settleOf(at));
+      if (!settling.begin(step.id)) return;
+      // The variant the reviewer saw as they settled.
+      const keep = settleOf(at);
+      const go = () => {
+        const was = actor.getSnapshot().context;
+        if (!was.active) return settling.reset();
+        send(keep);
+        const then = actor.getSnapshot().context;
+        // The walk stayed, or ended: nothing is left to wait for.
+        if (!then.active || (then.at === was.at && then.run === was.run)) settling.reset();
+        else settling.sent(`${String(was.run)}-${String(was.at)}`);
+      };
+      const lit = document.querySelector("[data-dt-light]");
+      if (at !== s.context.at || lit === null) return go();
+      keepLit(step.target?.[0]);
+      window.setTimeout(go, SETTLE_MS);
     };
     const noteOpen = () => actor.getSnapshot().context.opened !== undefined;
     const act = (action: Action) => {
@@ -758,12 +811,47 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
       pin: { what: describe(element), selector },
     });
   };
+  // A settled step's light is green with its check, and so is one whose settle plays. A
+  // light that undo or redo took back shows its old look until it stands on the part, and
+  // then turns.
+  const key = `${String(run)}-${String(at)}`;
+  const settledHere = useSession(
+    (s) => step !== undefined && s.context.feedback[step.id]?.settled === true,
+  );
+  const motion = useSyncExternalStore(settling.subscribe, settling.current);
+  const turning = useSyncExternalStore(settling.subscribe, settling.turning);
+  const stepId = step?.id;
+  const turns = turning !== undefined && turning.step === stepId;
+  const look =
+    turning !== undefined && turns
+      ? turning.settled
+      : settledHere || (motion.kind === "playing" && motion.step === stepId);
+  const placed = (on: string) => {
+    settling.shown(on);
+    if (on === key && stepId !== undefined && settling.turning()?.step === stepId)
+      window.setTimeout(() => settling.turned(stepId), TURN_MS);
+  };
+  // With the walk ended or the light hidden, nothing waits for the light.
+  useEffect(() => {
+    if (!active) settling.reset();
+    else if (preview && ready) settling.shown(key);
+  }, [active, preview, ready, key]);
   return (
     <>
       <Panel />
+      {active && !preview && step !== undefined && (
+        <Light
+          box={box}
+          at={key}
+          ready={ready}
+          settled={look}
+          place={place}
+          turning={turns}
+          onPlaced={placed}
+        />
+      )}
       {active && ready && !preview && step !== undefined && (
         <>
-          {box !== undefined && <Light box={box} place={place} />}
           <Pins pins={pins} open={opened} onOpen={(id) => actor.send({ type: "pin", id })} />
           {openedNote !== undefined && (openedNote.pin?.variant === undefined || !lifted) && (
             <NoteCard note={openedNote} number={pins.indexOf(openedNote) + 1} />
