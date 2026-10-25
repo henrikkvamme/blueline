@@ -173,6 +173,22 @@ Each step leaves the tool working.
    leaves its repository.
 7. **Next.js.** Prove `blueline dev` and the server in a Next.js app.
 
+## Evals
+
+Evals come after the build, once the design and the behaviour are agreed in real use.
+
+- Each fixture is a small synthetic app: React with Vite, Vue with Vite, SvelteKit,
+  Next.js and plain HTML.
+- A task is a short prompt for one level, such as "let me review the home page" or "give
+  me two designs for the header".
+- A scripted reviewer posts notes and settles through the page's routes. It checks that
+  the agent replies, makes the change and applies the verdicts.
+- Mechanical checks come first: the overlay loads, each target is on the page, the
+  variants render, and the replies arrive in time. A judge model then scores the journeys'
+  words and the variants against a rubric, and Henrik checks a few runs.
+- Most runs use Claude Code. Some runs use other harnesses (Codex, T3), to prove that
+  nothing depends on one agent.
+
 ## To verify while building
 
 - T3's MCP steer for an outside process: the public docs do not show it yet.
