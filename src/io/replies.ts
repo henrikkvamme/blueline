@@ -1,0 +1,34 @@
+import { Schema } from "effect";
+// The agent's side runs this file in Node, which needs the extension.
+import { BlockSchema } from "../notes/blocks.ts";
+
+/*
+ * The agent's answers, by note ID, as the status file has them: the page reads them
+ * (channel.ts), and the agent's side writes them (bin/channel.ts).
+ */
+
+export const ReplySchema = Schema.Struct({
+  state: Schema.Literals(["working", "replied"]),
+  /** The agent settles a note only after the reviewer said it is right. */
+  settled: Schema.optional(Schema.Boolean),
+  /** When the agent settled it, in ms: a message the reviewer wrote after it opens the note
+   * again, and the settle no longer counts. */
+  settledAt: Schema.optional(Schema.Finite),
+  /** What the agent shows while it works, as a plan: each working reply puts its own in place
+   * of the last, and the reply ends it. */
+  progress: Schema.optional(Schema.Array(BlockSchema)),
+  replies: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        text: Schema.String,
+        variant: Schema.optional(Schema.String),
+        /** What the reply shows besides its words: a question, variants, a table (blocks.ts). */
+        blocks: Schema.optional(Schema.Array(BlockSchema)),
+      }),
+    ),
+  ),
+});
+export type Reply = typeof ReplySchema.Type;
+
+export const RepliesSchema = Schema.Record(Schema.String, ReplySchema);
+export type Replies = typeof RepliesSchema.Type;

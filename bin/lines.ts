@@ -1,0 +1,177 @@
+import { Option, Schema } from "effect";
+import type { Reply } from "../src/io/replies.ts";
+import type { Block } from "../src/notes/blocks.ts";
+
+/*
+ * The plain parts of channel.ts, without files or a clock, so a test can run them.
+ */
+
+export const USAGE = `Usage:
+  blueline review <feedback.jsonl> --url <page> [--journey <id>] [--step <id>] [--as <name>]
+  blueline listen <feedback.jsonl> [--journey <id>] [--as <name>]
+  blueline reply <status.json> <note id> working [--blocks <file.json>]
+  blueline reply <status.json> <note id> replied <text> [--variant <label>] [--blocks <file.json>]
+  blueline reply <status.json> <note id> settled
+  blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]`;
+
+/** What the command line asks for. */
+export type Command =
+  | {
+      readonly kind: "listen";
+      readonly file: string;
+      readonly journey: string | undefined;
+      readonly name: string;
+    }
+  /** Checks the app answers, says the link for the reviewer, then listens. */
+  | {
+      readonly kind: "review";
+      readonly file: string;
+      /** The app's page to review, on the dev server. */
+      readonly url: string;
+      /** The page's own review, `page`, when none is named. */
+      readonly journey: string;
+      readonly step: string | undefined;
+      readonly name: string;
+    }
+  | {
+      readonly kind: "reply";
+      readonly file: string;
+      readonly id: string;
+      readonly state: "working" | "settled" | "replied";
+      readonly text: string;
+      readonly variant: string | undefined;
+      /** A JSON file with the blocks the reply shows (src/notes/blocks.ts). */
+      readonly blocks: string | undefined;
+    }
+  | {
+      readonly kind: "apply";
+      readonly file: string;
+      readonly part: string;
+      /** The variant to keep when the reviewer kept more than one. */
+      readonly keep: string | undefined;
+      /** Where the code is; the working directory by default. */
+      readonly src: string;
+    };
+
+/** The command in the arguments, or none when they make no command. */
+export function commandOf(args: readonly string[]): Command | undefined {
+  const words: string[] = [];
+  const flags = new Map<string, string>();
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] ?? "";
+    const value = args[i + 1];
+    if (arg.startsWith("--") && value !== undefined) {
+      flags.set(arg.slice(2), value);
+      i += 1;
+    } else words.push(arg);
+  }
+  const [kind, file, id, state, text] = words;
+  if (kind === "listen" && file !== undefined && words.length === 2) {
+    const journey = flags.get("journey");
+    return { kind, file, journey, name: flags.get("as") ?? journey ?? "agent" };
+  }
+  const url = flags.get("url");
+  if (kind === "review" && file !== undefined && url !== undefined && words.length === 2) {
+    const journey = flags.get("journey") ?? "page";
+    const step = flags.get("step");
+    return { kind, file, url, journey, step, name: flags.get("as") ?? journey };
+  }
+  const part = flags.get("part");
+  if (kind === "apply" && file !== undefined && part !== undefined && words.length === 2)
+    return { kind, file, part, keep: flags.get("keep"), src: flags.get("src") ?? "." };
+  if (kind !== "reply" || file === undefined || id === undefined) return undefined;
+  const variant = flags.get("variant");
+  const blocks = flags.get("blocks");
+  if (state === "working" && words.length === 4)
+    return { kind, file, id, state, text: "", variant, blocks };
+  if (state === "settled" && words.length === 4)
+    return { kind, file, id, state, text: "", variant, blocks: undefined };
+  if (state === "replied" && text !== undefined && words.length === 5)
+    return { kind, file, id, state, text, variant, blocks };
+  return undefined;
+}
+
+/** A note line from the feedback file, with the fields the listener reads. */
+export interface Line {
+  readonly raw: string;
+  /** Where the line starts, in bytes from the start of the read. */
+  readonly start: number;
+  readonly kind?: string | undefined;
+  readonly journey?: string | undefined;
+  readonly sentAt?: string | undefined;
+  readonly settled?: boolean | undefined;
+  /** The steps still open after a settle. */
+  readonly left?: number | undefined;
+}
+
+const NEWLINE = 10;
+
+/** The fields of a note line the listener reads; the line has more. */
+const LineSchema = Schema.fromJsonString(
+  Schema.Struct({
+    kind: Schema.optional(Schema.String),
+    journey: Schema.optional(Schema.String),
+    sentAt: Schema.optional(Schema.String),
+    settled: Schema.optional(Schema.Boolean),
+    left: Schema.optional(Schema.Int),
+  }),
+);
+const decodeLine = Schema.decodeUnknownOption(LineSchema);
+
+/** The whole lines in `bytes`, and how many bytes they use: a line the server is still
+ *  writing stays for the next read. A line that is not JSON is skipped. */
+export function takeLines(bytes: Uint8Array): { lines: Line[]; used: number } {
+  const used = bytes.lastIndexOf(NEWLINE) + 1;
+  const lines: Line[] = [];
+  const encoder = new TextEncoder();
+  let start = 0;
+  for (const raw of new TextDecoder().decode(bytes.subarray(0, used)).split("\n")) {
+    const line = decodeLine(raw);
+    if (Option.isSome(line)) lines.push({ raw, start, ...line.value });
+    start += encoder.encode(raw).length + 1;
+  }
+  return { lines, used };
+}
+
+/** Whether a line needs the agent now. A settle only tells where the review is, so it waits
+ *  for the next line that does, and saves the agent a turn; the last settle ends the
+ *  review, and the agent applies the kept variants. */
+export const wakes = (line: Line) =>
+  line.kind !== "settle" || (line.settled === true && line.left === 0);
+
+/** How long ago a note was sent, in words. */
+export function ageOf(sentAt: string | undefined, now: number): string {
+  const at = sentAt === undefined ? Number.NaN : Date.parse(sentAt);
+  if (Number.isNaN(at)) return "at an unknown time";
+  const minutes = Math.round((now - at) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours} h ago` : `${Math.round(hours / 24)} days ago`;
+}
+
+/** Whether a note that came only now was sent long before: the page or the server held it. */
+export const cameLate = (sentAt: string | undefined, now: number, lateMs: number) =>
+  sentAt !== undefined && now - Date.parse(sentAt) > lateMs;
+
+/** A note's answer after a reply command: working, one more reply, or settled. A working
+ *  reply's blocks are its progress, in place of the last; a reply or a settle ends it. */
+export function replyAfter(
+  was: Reply | undefined,
+  command: Extract<Command, { kind: "reply" }>,
+  /** The time now, in ms: a settle keeps it. */
+  now: number,
+  blocks?: readonly Block[],
+): Reply {
+  const { progress: _, ...before }: Reply = was ?? { state: "working" };
+  if (command.state === "working")
+    return { ...before, state: "working", ...(blocks === undefined ? {} : { progress: blocks }) };
+  if (command.state === "settled")
+    return { ...before, state: "replied", settled: true, settledAt: now };
+  const reply = {
+    text: command.text,
+    ...(command.variant === undefined ? {} : { variant: command.variant }),
+    ...(blocks === undefined ? {} : { blocks }),
+  };
+  return { ...before, state: "replied", replies: [...(before.replies ?? []), reply] };
+}

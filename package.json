@@ -1,0 +1,80 @@
+{
+  "name": "@henrikkvamme/blueline",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "blueline": "./bin/channel.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./choices": "./src/choices.ts",
+    "./variants": "./src/part/variants.tsx",
+    "./vite": "./src/vite.ts",
+    "./workshop": "./src/workshop/workshop.tsx",
+    "./styles.css": "./src/styles.css"
+  },
+  "publishConfig": {
+    "bin": {
+      "blueline": "./dist/bin/channel.js"
+    },
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./choices": {
+        "types": "./dist/choices.d.ts",
+        "default": "./dist/choices.js"
+      },
+      "./variants": {
+        "types": "./dist/variants.d.ts",
+        "default": "./dist/variants.js"
+      },
+      "./vite": {
+        "types": "./dist/vite.d.ts",
+        "default": "./dist/vite.js"
+      },
+      "./workshop": {
+        "types": "./dist/workshop.d.ts",
+        "default": "./dist/workshop.js"
+      },
+      "./styles.css": "./dist/styles.css"
+    }
+  },
+  "scripts": {
+    "pack": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && vp pack",
+    "typecheck": "node ../../node_modules/@typescript/native/bin/tsc --noEmit -p tsconfig.json && node ../../node_modules/@typescript/native/bin/tsc --noEmit -p tsconfig.node.json"
+  },
+  "dependencies": {
+    "@xstate/react": "6.1.0",
+    "lucide-react": "1.46.0",
+    "sonner": "2.0.8",
+    "typescript": "5.9.3",
+    "xstate": "5.33.3"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.0.0-rc.115",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@xstate/graph": "3.0.4",
+    "effect": "4.0.0-rc.115",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.2"
+  },
+  "peerDependencies": {
+    "effect": "4.0.0-rc.115",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3"
+  }
+}

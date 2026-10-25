@@ -1,0 +1,53 @@
+/*
+ * The dev tools' look: dark, so they never read as part of the app, and their own roles, so
+ * they need nothing of the app's theme. An app imports this file after Tailwind.
+ */
+@source "./";
+
+@theme inline {
+  --color-dt-ground: var(--dt-ground);
+  --color-dt-panel: var(--dt-panel);
+  --color-dt-raised: var(--dt-raised);
+  --color-dt-line: var(--dt-line);
+  --color-dt-text: var(--dt-text);
+  --color-dt-muted: var(--dt-muted);
+  --color-dt-faint: var(--dt-faint);
+  --color-dt-accent: var(--dt-accent);
+  --color-dt-good: var(--dt-good);
+  --color-dt-warn: var(--dt-warn);
+  --color-dt-bad: var(--dt-bad);
+  --radius-dt-panel: 14px;
+  --radius-dt-control: 8px;
+  --radius-dt-mark: 5px;
+  --shadow-dt-float: 0 18px 48px -12px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+.blueline,
+.blueline-portal {
+  color-scheme: dark;
+  --dt-ground: #111114;
+  --dt-panel: #18181c;
+  --dt-raised: #24242a;
+  --dt-line: #2c2c33;
+  --dt-text: #f2f2f4;
+  --dt-muted: #a3a3ad;
+  --dt-faint: #6b6b75;
+  --dt-accent: #4a6cf7;
+  --dt-good: #3fb27f;
+  --dt-warn: #e0a43b;
+  --dt-bad: #e5534b;
+  /* On a phone: where the bar stands, above the page's own bottom bar (`--dt-floor`, which
+     the tools measure) and the screen's rounded corners; and where the cards and the
+     sidebar end, above the bar. */
+  --dt-base: max(calc(var(--dt-floor, 0px) + 8px), calc(env(safe-area-inset-bottom) + 8px));
+  --dt-above-bar: calc(var(--dt-base) + 60px);
+  font-feature-settings: "tnum";
+}
+
+/* A printed page shows the app, never the dev tools. */
+@media print {
+  .blueline,
+  .blueline-portal {
+    display: none;
+  }
+}
