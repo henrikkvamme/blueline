@@ -2,5 +2,9 @@
   // The browser code and the Node code have their own projects. `vp check` finds a file's
   // project from here, so each file is checked with its own options.
   "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" },
+    { "path": "./examples/review-demo" }
+  ]
 }

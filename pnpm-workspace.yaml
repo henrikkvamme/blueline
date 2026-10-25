@@ -1,3 +1,6 @@
+packages:
+  - examples/*
+
 strictPeerDependencies: true
 strictDepBuilds: true
 # A fresh clone has no node_modules; scripts install first.

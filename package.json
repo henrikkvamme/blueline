@@ -51,10 +51,11 @@
   "scripts": {
     "prepare": "effect-tsgo patch --typescript-package @typescript/native --oxlint",
     "check": "vp check && pnpm run typecheck",
-    "typecheck": "node node_modules/@typescript/native/bin/tsc -p tsconfig.app.json && node node_modules/@typescript/native/bin/tsc -p tsconfig.node.json",
+    "typecheck": "node node_modules/@typescript/native/bin/tsc -p tsconfig.app.json && node node_modules/@typescript/native/bin/tsc -p tsconfig.node.json && node node_modules/@typescript/native/bin/tsc -p examples/review-demo",
     "test": "vp test run",
     "pack": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && vp pack",
-    "verify": "pnpm run check && pnpm test && pnpm run pack"
+    "verify": "pnpm run check && pnpm test && pnpm run pack",
+    "demo": "pnpm --filter review-demo dev"
   },
   "dependencies": {
     "@xstate/react": "6.1.0",

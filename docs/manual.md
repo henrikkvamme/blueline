@@ -17,7 +17,8 @@ package's peers. Four places use it:
   opens a step's world.
 - `variants` from `@henrikkvamme/blueline/variants` on each part with more than one design.
 
-The agent's command is `blueline`.
+The agent's command is `blueline`. `examples/review-demo` is a small app set up this way, with
+one journey over two pages and one part with variants; `pnpm run demo` starts it on port 4310.
 
 This setup is the one the code has now. [design.md](design.md) gives the setup that
 replaces it: `blueline dev`, a Vite plugin or a script tag, and no peers.

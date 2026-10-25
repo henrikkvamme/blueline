@@ -15,6 +15,7 @@ With Node 24 and pnpm, from the repository root:
 - `pnpm test` runs the tests.
 - `pnpm run pack` builds the published files in `dist`.
 - `pnpm run verify` runs all of them.
+- `pnpm run demo` starts the review demo (`examples/review-demo`) at `http://localhost:4310`.
 
 - [docs/manual.md](docs/manual.md) is the manual for the code as it is now.
 - [GLOSSARY.md](GLOSSARY.md) gives the words that the tool, its docs and its agents use.
