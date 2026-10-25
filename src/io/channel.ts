@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ImageSchema } from "../notes/note";
 import { ListeningSchema } from "./listening";
 import { RepliesSchema } from "./replies";

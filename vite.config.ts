@@ -1,12 +1,36 @@
+import { recommended } from "@effect/tsgo/oxlint-presets";
 import { defineConfig } from "vite-plus";
 
 /*
- * `vp pack` builds the package as it is published: the browser parts and the dev server's
- * plugin with their types, and the agent's command. The workspace's apps import the source
- * (package.json `exports`); a published copy reads `dist` (`publishConfig`). The three run
- * at once, so none cleans `dist`: the package's `pack` script empties it first.
+ * One config for the package's tools. `vp check` formats, lints and type checks; `vp test`
+ * runs the tests; `vp pack` builds the package as it is published.
  */
 export default defineConfig({
+  lint: {
+    extends: [recommended],
+    options: { typeAware: true, typeCheck: true, denyWarnings: true },
+    ignorePatterns: ["dist/**"],
+    overrides: [
+      {
+        // Tool configuration, and the dev server's plugin, run before the application
+        // runtime exists.
+        files: ["*.config.ts", "src/vite.ts"],
+        rules: { "effecttsgo/process-env": "off", "effecttsgo/node-builtin-import": "off" },
+      },
+    ],
+  },
+  fmt: {
+    ignorePatterns: ["dist/**", "pnpm-lock.yaml"],
+  },
+  test: {
+    include: ["test/**/*.test.ts"],
+  },
+  /*
+   * The browser parts and the dev server's plugin with their types, and the agent's
+   * command. The source is the package's `exports`; a published copy reads `dist`
+   * (`publishConfig`). The three run at once, so none cleans `dist`: the `pack` script
+   * empties it first.
+   */
   pack: [
     {
       entry: {
@@ -16,7 +40,7 @@ export default defineConfig({
         workshop: "src/workshop/workshop.tsx",
       },
       platform: "browser",
-      tsconfig: "tsconfig.json",
+      tsconfig: "tsconfig.app.json",
       dts: true,
       clean: false,
       copy: [{ from: "src/styles.css", to: "dist" }],
@@ -26,6 +50,8 @@ export default defineConfig({
       platform: "node",
       tsconfig: "tsconfig.node.json",
       dts: true,
+      // The plugin's types name Vite's `Plugin`: the app that loads the plugin has Vite.
+      deps: { neverBundle: ["vite"] },
       fixedExtension: false,
       clean: false,
     },

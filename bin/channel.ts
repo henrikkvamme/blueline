@@ -40,7 +40,7 @@ import {
   Schema,
   Stdio,
 } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { reviewLink } from "../src/io/link.ts";
 import { HEARTBEAT_MS, ListeningSchema, type Listening } from "../src/io/listening.ts";
 import { ReplySchema } from "../src/io/replies.ts";

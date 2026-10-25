@@ -1,0 +1,11 @@
+strictPeerDependencies: true
+strictDepBuilds: true
+# A fresh clone has no node_modules; scripts install first.
+verifyDepsBeforeRun: install
+# `effect-tsgo patch` rewrites installed compiler binaries; do not share them with the store.
+packageImportMethod: copy
+
+# Vite+ replaces Vite 8 with a package that carries Vite+'s release version.
+peerDependencyRules:
+  allowedVersions:
+    vite: 1.4.0

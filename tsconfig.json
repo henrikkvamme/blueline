@@ -1,11 +1,6 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": [],
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true
-  },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts"],
-  "exclude": ["src/vite.ts"]
+  // The browser code and the Node code have their own projects. `vp check` finds a file's
+  // project from here, so each file is checked with its own options.
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
 }
