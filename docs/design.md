@@ -27,16 +27,16 @@ the agent what to do. Both name the first app's paths.
 
 The only full review in the transcripts is on the dev dashboard, on 24 and 25 October 2026.
 
-| Time | What happened | Layer |
-| --- | --- | --- |
-| 24 Oct 19:12 | The agent starts a Monitor on the notes by hand. The Monitor expires at 30 minutes, and nothing starts it again. | delivery |
-| 25 Oct 11:41 | Henrik writes two notes. The page says "Sent, but no agent listens". The app gives no journeys. | delivery, app |
-| 11:59 | The notes arrive 18 minutes late, after the agent repairs the service that sends them. | delivery |
-| 12:20 | The agent writes 12 steps by hand in about 25 minutes. Each step polls the page for a selector. | app |
-| 12:25 | Settle does not go to the next step. Henrik presses `y` again, which opens the step again. | overlay |
-| 12:29 | The app's `h j k l` take Blueline's keys. | overlay |
-| 13:09 | The notes arrive as queued messages. Henrik: "it should steer". | delivery |
-| 13:25 | Henrik asks for progress. The agent posts plans by hand, and each plan is a new reply. | delivery |
+| Time         | What happened                                                                                                    | Layer         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------- |
+| 24 Oct 19:12 | The agent starts a Monitor on the notes by hand. The Monitor expires at 30 minutes, and nothing starts it again. | delivery      |
+| 25 Oct 11:41 | Henrik writes two notes. The page says "Sent, but no agent listens". The app gives no journeys.                  | delivery, app |
+| 11:59        | The notes arrive 18 minutes late, after the agent repairs the service that sends them.                           | delivery      |
+| 12:20        | The agent writes 12 steps by hand in about 25 minutes. Each step polls the page for a selector.                  | app           |
+| 12:25        | Settle does not go to the next step. Henrik presses `y` again, which opens the step again.                       | overlay       |
+| 12:29        | The app's `h j k l` take Blueline's keys.                                                                        | overlay       |
+| 13:09        | The notes arrive as queued messages. Henrik: "it should steer".                                                  | delivery      |
+| 13:25        | Henrik asks for progress. The agent posts plans by hand, and each plan is a new reply.                           | delivery      |
 
 These parts worked, and they stay:
 
@@ -48,18 +48,18 @@ These parts worked, and they stay:
 
 ## Decisions
 
-| Decision | Choice | Why |
-| --- | --- | --- |
-| Package | `@henrikkvamme/blueline`, one package with subpaths: `/vite`, `/react`, `/foldkit` | One version and one maintainer. `blueline` on npm is taken. |
-| Licence | MIT, public | Cleared by the first app's owner |
-| Effect | The latest v4 release, never a release candidate. Internal. | The app's own Effect version must not matter. |
-| XState | The latest release. Internal. | Same reason |
-| Overlay | Today's React UI, bundled in a shadow root ([ADR 0001](adr/0001-bundle-the-overlay-in-a-shadow-root.md)) | The app needs no React, Tailwind or Effect. |
-| Mount | `blueline dev -- <cmd>` first, then a Vite plugin and a script tag ([ADR 0004](adr/0004-a-wrapper-command-is-the-first-way-in.md)) | Level 0 needs no code. The plugin and the tag cover the apps that a proxy breaks. |
-| Delivery | One server per machine ([ADR 0003](adr/0003-one-server-owns-delivery.md)) | Notes must arrive with no agent that listens. |
-| No registered agent | The server starts one: the repository's last T3 thread while its cache is warm, else a new thread with a handoff | A note never waits unseen. |
-| A note mid-turn | It joins at the agent's next tool boundary | The agent sees it in seconds and loses no work. |
-| Agent side | Nothing to install ([ADR 0002](adr/0002-notes-carry-their-own-instructions.md)) | A plugin comes only if this shows limits. |
+| Decision            | Choice                                                                                                                             | Why                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Package             | `@henrikkvamme/blueline`, one package with subpaths: `/vite`, `/react`, `/foldkit`                                                 | One version and one maintainer. `blueline` on npm is taken.                       |
+| Licence             | MIT, public                                                                                                                        | Cleared by the first app's owner                                                  |
+| Effect              | The latest v4 release, never a release candidate. Internal.                                                                        | The app's own Effect version must not matter.                                     |
+| XState              | The latest release. Internal.                                                                                                      | Same reason                                                                       |
+| Overlay             | Today's React UI, bundled in a shadow root ([ADR 0001](adr/0001-bundle-the-overlay-in-a-shadow-root.md))                           | The app needs no React, Tailwind or Effect.                                       |
+| Mount               | `blueline dev -- <cmd>` first, then a Vite plugin and a script tag ([ADR 0004](adr/0004-a-wrapper-command-is-the-first-way-in.md)) | Level 0 needs no code. The plugin and the tag cover the apps that a proxy breaks. |
+| Delivery            | One server per machine ([ADR 0003](adr/0003-one-server-owns-delivery.md))                                                          | Notes must arrive with no agent that listens.                                     |
+| No registered agent | The server starts one: the repository's last T3 thread while its cache is warm, else a new thread with a handoff                   | A note never waits unseen.                                                        |
+| A note mid-turn     | It joins at the agent's next tool boundary                                                                                         | The agent sees it in seconds and loses no work.                                   |
+| Agent side          | Nothing to install ([ADR 0002](adr/0002-notes-carry-their-own-instructions.md))                                                    | A plugin comes only if this shows limits.                                         |
 
 ### v1 must work for
 
@@ -91,12 +91,12 @@ an adapter that can change.
 
 Each level adds to the one before it. An app uses the lowest level that does the job.
 
-| Level | The app holds | The reviewer gets |
-| --- | --- | --- |
-| 0 | Nothing with `blueline dev`, else one plugin line or a script tag | Page notes, pins, screenshots, chat |
-| 1 | `blueline.config.ts`: journeys as data | Journeys and steps |
-| 2 | Parts: `variants()` in React, a Foldkit subscription, or `data-blueline-part` | Variants, states, the lift, `blueline apply` |
-| 3 | An adapter in code, whose functions return Promises | Scenarios, acting as a person, setup in code |
+| Level | The app holds                                                                 | The reviewer gets                            |
+| ----- | ----------------------------------------------------------------------------- | -------------------------------------------- |
+| 0     | Nothing with `blueline dev`, else one plugin line or a script tag             | Page notes, pins, screenshots, chat          |
+| 1     | `blueline.config.ts`: journeys as data                                        | Journeys and steps                           |
+| 2     | Parts: `variants()` in React, a Foldkit subscription, or `data-blueline-part` | Variants, states, the lift, `blueline apply` |
+| 3     | An adapter in code, whose functions return Promises                           | Scenarios, acting as a person, setup in code |
 
 A step at Level 1 is data, so the server can send it to the page and reload it when the file
 changes. A step's actions are `open` a path, `click`, `type`, `press`, `wait` for a selector
@@ -121,8 +121,14 @@ export default defineConfig({
           do: [{ open: "/" }, { click: '[data-card="sources"]' }, { wait: ".ov-dock" }],
           target: [".ov-stages", ".ov-cells", ".ov-dock"],
           variants: [
-            { label: "Folded in Intake", do: [{ emit: "dash:review", detail: { sourcesLook: "fold" } }] },
-            { label: "To do column", do: [{ emit: "dash:review", detail: { sourcesLook: "column" } }] },
+            {
+              label: "Folded in Intake",
+              do: [{ emit: "dash:review", detail: { sourcesLook: "fold" } }],
+            },
+            {
+              label: "To do column",
+              do: [{ emit: "dash:review", detail: { sourcesLook: "column" } }],
+            },
           ],
         },
       ],
