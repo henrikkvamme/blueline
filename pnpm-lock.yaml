@@ -200,9 +200,6 @@ importers:
       '@typescript/native':
         specifier: npm:typescript@7.0.2
         version: typescript@7.0.2
-      '@xstate/graph':
-        specifier: 3.0.4
-        version: 3.0.4(xstate@5.33.3)
       effect:
         specifier: 4.0.6
         version: 4.0.6
@@ -942,11 +939,6 @@ packages:
     engines: {node: '>=20.0.0'}
     cpu: [x64]
     os: [win32]
-
-  '@xstate/graph@3.0.4':
-    resolution: {integrity: sha512-b12RA7E//+7FJVrD09Td+BhHRJbeKZnK+98xXBd+JmccG360xVP1lyzVhUZPgBgwPdmIGBJqhKzmWYJQ9c8ojQ==}
-    peerDependencies:
-      xstate: ^5.19.4
 
   '@xstate/react@6.1.0':
     resolution: {integrity: sha512-ep9F0jGTI63B/jE8GHdMpUqtuz7yRebNaKv8EMUaiSi29NOglywc2X2YSOV/ygbIK+LtmgZ0q9anoEA2iBSEOw==}
@@ -1883,10 +1875,6 @@ snapshots:
 
   '@voidzero-dev/vite-plus-win32-x64-msvc@1.4.0':
     optional: true
-
-  '@xstate/graph@3.0.4(xstate@5.33.3)':
-    dependencies:
-      xstate: 5.33.3
 
   '@xstate/react@6.1.0(@types/react@19.3.0)(react@19.3.1)(xstate@5.33.3)':
     dependencies:
