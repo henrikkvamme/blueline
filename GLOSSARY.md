@@ -1,0 +1,113 @@
+# Blueline
+
+Blueline is a review of a web app in development by a person and a coding agent. These are
+the words that the tool, its docs and its agents use. Each thing has one name.
+
+## The review
+
+**Review**:
+One walk over an app in development, by one reviewer, with an agent that answers.
+_Avoid_: Session, audit
+
+**Journey**:
+An ordered list of steps that follows one flow across pages or people.
+_Avoid_: Tour, flow, scenario
+
+**Group**:
+A set of steps in a journey that belong together, such as one scenario.
+_Avoid_: Section, chapter
+
+**Step**:
+One thing in a journey to look at, with what to look for and what to try.
+_Avoid_: Stop, item
+
+**Page review**:
+The review of one page with no journey: one step for each part that the page shows.
+_Avoid_: Ad-hoc review
+
+**Open step**:
+A step that the reviewer has not settled.
+
+**Settle**:
+The reviewer's statement that a step is right as it shows now.
+_Avoid_: Approve, accept, done
+
+## Parts
+
+**Part**:
+A piece of the page that has more than one design.
+_Avoid_: Component, widget, slot
+
+**Variant**:
+One way that a part could look.
+_Avoid_: Option, alternative, design
+
+**State**:
+One thing that a part could show, such as empty or accepted.
+_Avoid_: Mode, case
+
+**Verdict**:
+The variants that the reviewer kept and deleted for one part.
+_Avoid_: Decision, choice
+
+## Notes and chat
+
+**Note**:
+Words that the reviewer writes on a pin. A note waits until a message sends it.
+_Avoid_: Comment, annotation
+
+**Pin**:
+A numbered mark on an element of the page, which a note is about.
+_Avoid_: Marker, anchor
+
+**Message**:
+Words that the reviewer sends to the agent, with the notes that wait.
+_Avoid_: Post
+
+**Chat**:
+The messages and replies of one step or one page.
+_Avoid_: Thread, conversation
+
+**Reply**:
+The agent's answer in a chat.
+_Avoid_: Response, comment
+
+## On the screen
+
+**Bar**:
+The row of controls at the bottom centre of the page.
+
+**Sidebar**:
+The tree of pages, journeys and steps at the right side of the page.
+
+**Step card**:
+The card beside the lit part, with the step's words and its chat.
+
+**Light**:
+The frame around the part that a step is about.
+_Avoid_: Highlight, spotlight
+
+**Lift**:
+The view that shows a part's variants in a row and its states in a column.
+_Avoid_: Compare view, grid
+
+**Preview**:
+The page with every Blueline control hidden except one eye.
+
+## Agents
+
+**Server**:
+The one Blueline process on a machine. It keeps the notes and delivers them to agents.
+_Avoid_: Dispatcher, daemon, channel
+
+**Delivery**:
+Getting a note to an agent.
+_Avoid_: Dispatch, push
+
+**Registered agent**:
+An agent that the server knows will read the notes of a repository.
+_Avoid_: Listener
+
+**Level**:
+How much of Blueline an app holds in its own code, from 0 (none) to 3 (an adapter).
+_Avoid_: Tier, mode

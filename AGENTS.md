@@ -1,0 +1,10 @@
+# Working in Blueline
+
+- Use the words in `GLOSSARY.md`, one word for each thing. Add a word there when a new
+  term is agreed.
+- `docs/design.md` holds the agreed design and the plan. Record a decision that is hard to
+  reverse as an ADR in `docs/adr/`.
+- Use the latest stable releases of Effect v4 and XState, never a release candidate. Keep
+  both internal: the public API uses Promises and plain data.
+- Commits: an imperative subject of at most 72 characters, and a body that says why. No
+  agent attribution.
