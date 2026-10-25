@@ -152,6 +152,43 @@ app's own code at Levels 2 and 3 finds it there, and the app does not bundle the
 Blueline takes a key in the capture phase while its sidebar or one of its fields has the
 focus. Ctrl combinations always belong to Blueline. Other keys go to the app first.
 
+## Requirements from the dev dashboard review
+
+Henrik's second review of the dev dashboard, on 2026-10-25, found these problems. The move
+must fix each one or design it out. The plan step that does it is in brackets.
+
+1. **A settle keeps the variant shown, for every kind of variant.** A settle recorded the
+   kept variant only for a part made with `variants()`. On a step with its own variants
+   (`DevStep.variants` with `apply`), the line had no `keep` and no `parts`, so the agent had
+   to ask which variant Henrik kept. Now each settle and each note carries the variant that
+   the step and each of its parts show, by label. A step variant has no code call for
+   `blueline apply` to change, so the line tells the agent to make that variant the app's
+   own. [2]
+2. **`v` lifts the design on a step with its own variants.** On such a step, `v` opened a
+   list in a modal card. The lift draws a part's component once for each variant, and a step
+   variant changes the whole page, so there was nothing to draw. The approach is open: see
+   "To verify while building". [2]
+3. **Delivery steers, and sends each line once.** The launchd service sent notes with
+   `t3 thread send`, which queues behind a busy turn. It also sent the last settle to a
+   thread whose agent had already read it: it waited for a live listener's agent to reply
+   to a note, and a settle has no note to reply to. Now every line, settles too, has an ID.
+   The server is the only sender. It records which agent got each line, and it never sends
+   a line again. The T3 adapter steers a busy turn (`t3_thread_send` with `mode: steer`,
+   through T3's MCP), and does not use the CLI. [4]
+4. **No watcher that must be kept alive.** A listener under Claude Code's Monitor stopped
+   after 30 minutes, and the agent had to start it again. Now the server delivers to a
+   registered agent through its harness, so nothing in the agent must keep running. A bare
+   session can run `blueline listen --once` as a background command. It ends at the first
+   note, which wakes the agent, and the note says to run it again. [4]
+5. **Progress shows by default.** The server marks a note `working` when it delivers it.
+   The note's own instructions tell the agent to post its plan with
+   `blueline reply ... working --blocks <file>` and to update that plan in place. [4, 6]
+6. **The coupling cost of an app without React.** The dev dashboard, a Foldkit app, needed
+   a `dash:review` window event and a dev-only field in its model to let Blueline set its
+   state. A Level 1 step's `emit` removes the import of Blueline. The event and the model
+   field stay in the app: that is the price of state that the address does not hold. A
+   Foldkit part adapter at Level 2 lets the dashboard's variants become parts. [2, 5]
+
 ## Plan
 
 Each step leaves the tool working.
@@ -190,6 +227,10 @@ Evals come after the build, once the design and the behaviour are agreed in real
   nothing depends on one agent.
 
 ## To verify while building
+
+- How `v` lifts a step's own variants (requirement 2). One way: apply each variant in turn,
+  copy the step's target, and show the copies side by side, still and at true size. The
+  other way: make such variants parts, through a part adapter for the app's framework.
 
 - T3's MCP steer for an outside process: the public docs do not show it yet.
 - Whether an outside process can reach a running Codex TUI through the app-server.
