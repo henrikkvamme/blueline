@@ -1,5 +1,5 @@
 /*
- * A swipe across the part under review shows the next or the previous variant, as j and k
+ * A swipe across the part under review shows the next or the previous variant, as h and l
  * do. A swipe must not fight the page's own scroll: it counts only when the finger moved far
  * along one axis, much more than across it, so a scroll up or down is never a swipe. Plain
  * numbers, no DOM, so the rule is tested alone.

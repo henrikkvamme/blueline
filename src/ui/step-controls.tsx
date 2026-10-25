@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Layers } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { NO_VERDICTS, partOn, parts, variantOf, varietyOf } from "../part/store";
 import { cx } from "./cx";
@@ -58,13 +58,14 @@ export function useVariantPlace():
 export const ICON =
   "grid size-8 shrink-0 place-items-center rounded-dt-control text-dt-muted hover:bg-dt-raised hover:text-dt-text disabled:opacity-40 max-sm:size-11";
 
-/** Goes to the step before or after, settled too, as h and l do. */
+/** Goes to the step before or after, settled too, as k and j do: up and down, as the steps
+ * stand in the tree, while the variants go across. */
 export function StepArrow({ by }: { readonly by: -1 | 1 }) {
   const { actor } = useTools();
   const { journey, at } = useStep();
   const last = Math.max((journey?.steps.length ?? 0) - 1, 0);
   const to = Math.min(Math.max(at + by, 0), last);
-  const Icon = by < 0 ? ChevronLeft : ChevronRight;
+  const Icon = by < 0 ? ChevronUp : ChevronDown;
   return (
     <button
       type="button"
@@ -112,7 +113,7 @@ export function SettleButton({ compact = false }: { readonly compact?: boolean }
 }
 
 /** Which variant the page shows, of how many, with the previous and the next beside it, as
- * j and k and a swipe on the part go. */
+ * h and l and a swipe on the part go. */
 export function VariantSwitch({
   place,
 }: {

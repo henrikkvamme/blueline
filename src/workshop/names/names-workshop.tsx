@@ -65,7 +65,7 @@ const WORDS: readonly Term[] = [
   },
   { id: "group", name: "Group", what: "Steps that belong together; the headings in the tree." },
   { id: "step", name: "Step", what: "One thing to look at in a journey." },
-  { id: "openStep", name: "Open step", what: "A step not settled yet. H and L go to these." },
+  { id: "openStep", name: "Open step", what: "A step not settled yet. J and K go to these." },
   {
     id: "settle",
     name: "Settle",

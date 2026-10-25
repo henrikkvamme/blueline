@@ -104,7 +104,7 @@ Enter in a message field sends, and in a note keeps the note; then the keys are 
 so `y` or `i` comes next. Escape in a field goes to vim's normal mode, and a second Escape
 goes to the tree and unfolds it, so you see where you are; in the lift's note it leaves the
 field. While the tree shows, it has the keys when no field has them. On a step it folds, and
-the page has the keys, so `h` and `l` walk the steps.
+the page has the keys, so `j` and `k` walk the steps.
 
 Escape backs out one level at a time, from the page and the tree: it closes what is open
 over the page, then leaves the step for the page, then hides the tools.
@@ -138,11 +138,31 @@ Ctrl+P is the **preview**, on a step and off one: it hides the tools, the panel 
 leaves only an eye that shows them again. Escape in the tree off a step does the same, so
 the panel and the note card come back together. A second Ctrl+P, Escape or `i` shows them
 with the panel as it was, and comes back to the field, in its mode and at its place; Ctrl+B
-shows them with the panel shown. In the preview the keys turn as the tree has them: `j` and `k` go to the step after and
-before, and `h` and `l` show the step's variants one by one, to compare them with the page
-alone. Off the preview, `h` and `l` go over the steps, and `j` and `k` over the variants.
-Ctrl+H and Ctrl+L show the previous and the next variant, in the preview and off it. An app
-with its own `h`, `j`, `k` and `l` takes those keys first, and leaves these to the tools.
+shows them with the panel shown. The keys do not change in the preview.
+
+## The keys of a walk
+
+One rule holds on the page, in the lift and in the tree: across is the variant, down is the
+step.
+
+| Key            | Where                 | What it does                                        |
+| -------------- | --------------------- | --------------------------------------------------- |
+| `j`, `k`       | the page              | the step after, the step before                     |
+| `h`, `l`       | the page              | the previous, the next variant, on a step with more |
+| `J`, `K`       | the page              | the open step after, before: not settled            |
+| Ctrl+J, Ctrl+K | the page              | the step after, before, as `j` and `k`              |
+| Ctrl+H, Ctrl+L | the page and the tree | the previous, the next variant, as `h` and `l`      |
+| `y`, Enter     | the page              | settle the step, then go on to the next open step   |
+| `j`, `k`       | the tree              | the row below, above                                |
+| `h`, `l`       | the tree              | close the row or go up, open it or go down into it  |
+| Ctrl+J, Ctrl+K | the tree              | the open step below, above                          |
+| Enter          | the tree              | open the selected row                               |
+
+An app with its own `h`, `j`, `k` and `l` takes those keys first, and leaves the Ctrl keys
+to the tools. Enter settles only while no control of the app has the focus: on the app's
+button, link or field, Enter is the app's, so a press still clicks it. A button of the
+tools' that a click left the focus on does not take Enter; one that Tab went to does. A
+held `y` or Enter settles once: its repeats do nothing.
 
 ## Variants of a part
 

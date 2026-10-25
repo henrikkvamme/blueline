@@ -575,13 +575,15 @@ function focusTree(actor: SessionActor) {
  * element the keyboard went to, as Tab does. */
 function isLoose(at: Element | null): boolean {
   return (
-    at === null || at === document.body || (zoneOf(at) === "page" && !at.matches(":focus-visible"))
+    at === null ||
+    at === document.body ||
+    ((zoneOf(at) === "page" || zoneOf(at) === "control") && !at.matches(":focus-visible"))
   );
 }
 
 /** While the tree shows, it has the focus when no field has it, so j and k work at once. The
  * preview and the lift take the keys from it. Folded, as on a step, it gives them back to the
- * page, so h and l walk the steps. */
+ * page, so j and k walk the steps. */
 function TreeFocus() {
   const { actor } = useTools();
   useEffect(() => {
@@ -625,7 +627,7 @@ function Keys() {
         [...BINDINGS, ...commandBindings(commands)],
         viewOf(actor.getSnapshot(), adapter),
         zoneOf(document.activeElement),
-        { key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey },
+        { key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, repeat: e.repeat },
       );
       if (action === undefined) return;
       e.preventDefault();
@@ -738,7 +740,7 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
   const openedNote = pins.find((n) => n.id === opened);
   // A note on a variant shows in the lift while it is up, and beside the part when it is down.
   const lifted = useSyncExternalStore(parts.subscribe, () => parts.current().lifting) !== undefined;
-  // A swipe across the part shows its next or previous variant, as j and k do.
+  // A swipe across the part shows its next or previous variant, as h and l do.
   useSwipe(
     box,
     active && ready && view.variants > 1 && view.layer === "none" && !lifted && !pointing,

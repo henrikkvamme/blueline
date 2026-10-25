@@ -37,7 +37,7 @@ const VIEWS: readonly View[] = LAYERS.filter((l) => l !== "go").flatMap((layer) 
     ),
   ),
 );
-const ZONES: readonly Zone[] = ["page", "panel", "field", "list"];
+const ZONES: readonly Zone[] = ["page", "control", "panel", "field", "list"];
 const KEYS = [..."abcdefghijklmnopqrstuvwxyzHJKLSY*12?".split(""), "Enter", "Escape", " "];
 
 describe("the keys", () => {
@@ -101,15 +101,16 @@ describe("the keys", () => {
       for (const zone of ZONES)
         for (const key of KEYS) {
           expect(dispatch(bindings, view, zone, { key, meta: true })).toBeUndefined();
-          // Ctrl+J and Ctrl+K select the open steps in the tree, and Ctrl+H and Ctrl+L
-          // show the variants of a step with more than one.
-          const variants =
-            view.active && view.variants > 1 && zone !== "field" && zone !== "list"
-              ? ["h", "l"]
-              : [];
+          // Ctrl+J and Ctrl+K go down and up the steps on the page, and select the open
+          // steps in the tree; Ctrl+H and Ctrl+L show the variants of a step with more than one.
+          const page = zone === "page" || zone === "control";
+          const steps = (page && view.active) || zone === "panel" ? ["j", "k"] : [];
+          const variants = view.active && view.variants > 1 && (page || zone === "panel");
           const own = [
-            ...(zone === "panel" ? ["r", "b", "p", "j", "k"] : ["r", "b", "p"]),
-            ...variants,
+            ...(page || zone === "panel" ? ["r", "b", "p"] : []),
+            ...(view.active ? ["b", "p"] : []),
+            ...steps,
+            ...(variants ? ["h", "l"] : []),
           ];
           if (!own.includes(key))
             expect(dispatch(bindings, view, zone, { key, ctrl: true })).toBeUndefined();
@@ -119,8 +120,11 @@ describe("the keys", () => {
 
   it("leave h, j, k and l to the page while no review runs", () => {
     for (const view of VIEWS.filter((v) => !v.active))
-      for (const key of ["h", "j", "k", "l", "H", "L"])
-        expect(dispatch(bindings, view, "page", { key })).toBeUndefined();
+      for (const zone of ["page", "control"] as const)
+        for (const key of ["h", "j", "k", "l", "J", "K", "Enter"]) {
+          expect(dispatch(bindings, view, zone, { key })).toBeUndefined();
+          expect(dispatch(bindings, view, zone, { key, ctrl: true })).toBeUndefined();
+        }
   });
 
   it("give each key at most one meaning in a zone", () => {
@@ -140,7 +144,7 @@ describe("the keys", () => {
           for (const key of binding.keys) {
             const does = typeof binding.does === "function" ? binding.does(key) : binding.does;
             expect(dispatch(bindings, view, zone, { key, ctrl: binding.ctrl === true })).toEqual(
-              key === "Escape" && (zone === "page" || view.layer !== "none")
+              key === "Escape" && (zone === "page" || zone === "control" || view.layer !== "none")
                 ? expect.anything()
                 : does,
             );
@@ -181,35 +185,45 @@ describe("the keys", () => {
     }
   });
 
-  it("walk the steps with h and l, and the variants with j and k; in the preview, the other way", () => {
-    const go = (by: number) => ({ kind: "event", event: { type: "go", by } });
-    const variant = (by: number) => ({ kind: "variant", by });
-    for (const view of VIEWS.filter((v) => v.active && v.layer === "none")) {
-      const keys = (key: string) => dispatch(bindings, view, "page", { key });
-      const many = view.variants > 1;
-      if (view.preview) {
-        expect(keys("j")).toEqual(go(1));
-        expect(keys("k")).toEqual(go(-1));
-        expect(keys("l")).toEqual(many ? variant(1) : undefined);
-        expect(keys("h")).toEqual(many ? variant(-1) : undefined);
-      } else {
-        expect(keys("l")).toEqual(go(1));
-        expect(keys("h")).toEqual(go(-1));
-        expect(keys("j")).toEqual(many ? variant(1) : undefined);
-        expect(keys("k")).toEqual(many ? variant(-1) : undefined);
-      }
-    }
-  });
-
-  it("show the variants with Ctrl+H and Ctrl+L, in the preview and off it", () => {
+  it("go across to the variants and down to the steps, in the preview and off it", () => {
+    const go = (by: number, open?: boolean) => ({
+      kind: "event",
+      event: { type: "go", by, ...(open === undefined ? {} : { open }) },
+    });
     const variant = (by: number) => ({ kind: "variant", by });
     for (const view of VIEWS.filter((v) => v.active && v.layer === "none"))
+      for (const zone of ["page", "control"] as const)
+        for (const ctrl of [false, true]) {
+          const keys = (key: string) => dispatch(bindings, view, zone, { key, ctrl });
+          const many = view.variants > 1;
+          expect(keys("j")).toEqual(go(1));
+          expect(keys("k")).toEqual(go(-1));
+          expect(keys("l")).toEqual(many ? variant(1) : undefined);
+          expect(keys("h")).toEqual(many ? variant(-1) : undefined);
+          // J and K pass over the settled steps.
+          if (!ctrl) {
+            expect(keys("J")).toEqual(go(1, true));
+            expect(keys("K")).toEqual(go(-1, true));
+            expect(keys("H")).toBeUndefined();
+            expect(keys("L")).toBeUndefined();
+          }
+        }
+  });
+
+  it("show the variants with Ctrl+H and Ctrl+L, and keep Ctrl+J and Ctrl+K for the tree's open steps", () => {
+    const variant = (by: number) => ({ kind: "variant", by });
+    for (const view of VIEWS.filter((v) => v.active && v.layer === "none")) {
       for (const zone of ["page", "panel"] as const) {
         const keys = (key: string) => dispatch(bindings, view, zone, { key, ctrl: true });
         const many = view.variants > 1;
         expect(keys("l")).toEqual(many ? variant(1) : undefined);
         expect(keys("h")).toEqual(many ? variant(-1) : undefined);
       }
+      expect(dispatch(bindings, view, "panel", { key: "j", ctrl: true })).toEqual({
+        kind: "event",
+        event: { type: "cursorOpen", by: 1 },
+      });
+    }
     const rows = helpRows(
       bindingsFor(
         bindings,
@@ -218,8 +232,39 @@ describe("the keys", () => {
       ),
     );
     expect(
-      rows.filter((r) => r.key === "Ctrl+H" || r.key === "Ctrl+L").map((r) => r.label),
-    ).toEqual(["Previous variant", "Next variant"]);
+      rows
+        .filter((r) => ["Ctrl+H", "Ctrl+L", "Ctrl+J", "Ctrl+K"].includes(r.key))
+        .map((r) => r.label),
+    ).toEqual(["Previous variant", "Next variant", "Step after", "Step before"]);
+  });
+
+  it("settle with Enter as with y, on the page with no layer open, and leave Enter to the app's control", () => {
+    const settle = { kind: "event", event: { type: "settle" } };
+    for (const view of VIEWS) {
+      const enter = (zone: Zone) => dispatch(bindings, view, zone, { key: "Enter" });
+      expect(enter("page")).toEqual(view.active && view.layer === "none" ? settle : undefined);
+      // A focused button, link or field of the app's keeps Enter, so it still clicks.
+      expect(enter("control")).toBeUndefined();
+      expect(enter("field")).toBeUndefined();
+      // The tree keeps its own Enter.
+      if (view.layer === "none") expect(enter("panel")).toEqual({ kind: "pick" });
+      // y settles from a control of the app's too: it is no key of a control.
+      if (view.active && view.layer === "none")
+        expect(dispatch(bindings, view, "control", { key: "y" })).toEqual(settle);
+    }
+  });
+
+  it("settle once for a held key: the key's repeats do nothing", () => {
+    for (const view of VIEWS.filter((v) => v.active && v.layer === "none")) {
+      for (const zone of ["page", "control", "panel"] as const)
+        expect(dispatch(bindings, view, zone, { key: "y", repeat: true })).toBeUndefined();
+      expect(dispatch(bindings, view, "page", { key: "Enter", repeat: true })).toBeUndefined();
+      // A held j still walks on, as it settles nothing.
+      expect(dispatch(bindings, view, "page", { key: "j", repeat: true })).toEqual({
+        kind: "event",
+        event: { type: "go", by: 1 },
+      });
+    }
   });
 
   it("hide and show the panel with Ctrl+B, and preview with Ctrl+P, from every zone in a review", () => {
@@ -228,11 +273,13 @@ describe("the keys", () => {
         // With no review on, Ctrl+B hides or shows the panel from the page, after the page's
         // own keys, and from the tree; Ctrl+P previews from the page.
         expect(dispatch(bindings, view, zone, { key: "b", ctrl: true })).toEqual(
-          view.active || zone === "page" || zone === "panel" ? { kind: "panel" } : undefined,
+          view.active || zone === "page" || zone === "control" || zone === "panel"
+            ? { kind: "panel" }
+            : undefined,
         );
         // The tree is the tools' own, so it has Ctrl+P with no review on too.
         expect(dispatch(bindings, view, zone, { key: "p", ctrl: true })).toEqual(
-          view.active || zone === "page" || zone === "panel"
+          view.active || zone === "page" || zone === "control" || zone === "panel"
             ? { kind: "event", event: { type: "preview" } }
             : undefined,
         );
@@ -391,7 +438,7 @@ describe("the keys", () => {
       }
   });
 
-  it("walk the review with h and l on the page, and the panel's tree with them", () => {
+  it("walk the review with j and k on the page, and the panel's tree with them", () => {
     const view: View = {
       layer: "none",
       active: true,
@@ -400,7 +447,7 @@ describe("the keys", () => {
       people: true,
       preview: false,
     };
-    expect(dispatch(bindings, view, "page", { key: "l" })).toEqual({
+    expect(dispatch(bindings, view, "page", { key: "j" })).toEqual({
       kind: "event",
       event: { type: "go", by: 1 },
     });

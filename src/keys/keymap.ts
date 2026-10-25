@@ -6,12 +6,14 @@ import type { Event, Layer } from "../session/machine";
  * nothing or hides one that does something.
  *
  * What a key does depends on where the focus is, its zone, read from the page when the key
- * comes: h, j, k and l walk the review on the page, and move the selection in the panel's tree.
+ * comes: on the page j and k go down and up the steps and h and l across the variants, and in
+ * the panel's tree they move the selection.
  * g opens the g menu, as LazyVim's which-key: the key after it, as m in g m, does the thing.
  */
 
-/** Where the focus is. A field and an open list (a picker, the menu) keep their keys. */
-export type Zone = "page" | "panel" | "field" | "list";
+/** Where the focus is. A field and an open list (a picker, the menu) keep their keys. A
+ * control of the app's, as a button or a link, has the page's keys but Enter, its own. */
+export type Zone = "page" | "control" | "panel" | "field" | "list";
 
 /** What the keys need to know of the session. */
 export interface View {
@@ -71,6 +73,9 @@ export interface Binding {
    * for each way, and a tap does either. */
   readonly each?: readonly [string, string];
   readonly group: Group;
+  /** Whether a held key does it once: its repeats do nothing, so a held y never settles a
+   * step the reviewer has not seen. */
+  readonly once?: boolean;
   /** Where the key works; "go" is the key after g, on the page and in the panel's tree. */
   readonly zone: "page" | "panel" | "go";
   /** For a key after g: works only when g came from there. */
@@ -81,57 +86,37 @@ export interface Binding {
 
 const event = (e: Event): Action => ({ kind: "event", event: e });
 const active = (v: View) => v.active;
-// The preview turns the keys as the tree has them: j and k go down and up the steps, and
-// h and l go across the step's variants, to compare them quickly with the page alone.
 const walking = (v: View) => v.active && !v.preview;
-const looking = (v: View) => v.active && v.preview;
 
 export const BINDINGS: readonly Binding[] = [
-  // The review, on the page.
-  {
-    keys: ["h", "l"],
-    label: "Step before, after",
-    each: ["Step before", "Step after"],
-    group: "Review",
-    zone: "page",
-    when: walking,
-    does: (k) => event({ type: "go", by: k === "l" ? 1 : -1 }),
-  },
+  // The review, on the page. One rule holds here, in the lift and in the tree: across is the
+  // variant, down is the step. The preview keeps the same keys.
   {
     keys: ["j", "k"],
-    label: "In the preview: step after, before",
-    each: ["In the preview: step after", "In the preview: step before"],
+    label: "Step after, before",
+    each: ["Step after", "Step before"],
     group: "Review",
     zone: "page",
-    when: looking,
+    when: active,
     does: (k) => event({ type: "go", by: k === "j" ? 1 : -1 }),
   },
   {
     keys: ["h", "l"],
-    label: "In the preview: previous, next variant",
-    each: ["In the preview: previous variant", "In the preview: next variant"],
+    label: "Previous, next variant",
+    each: ["Previous variant", "Next variant"],
     group: "Review",
     zone: "page",
-    when: (v) => looking(v) && v.variants > 1,
+    when: (v) => active(v) && v.variants > 1,
     does: (k) => ({ kind: "variant", by: k === "l" ? 1 : -1 }),
   },
   {
-    keys: ["H", "L"],
-    label: "Open step before, after: not settled",
-    each: ["Open step before: not settled", "Open step after: not settled"],
+    keys: ["J", "K"],
+    label: "Open step after, before: not settled",
+    each: ["Open step after: not settled", "Open step before: not settled"],
     group: "Review",
     zone: "page",
     when: active,
-    does: (k) => event({ type: "go", by: k === "L" ? 1 : -1, open: true }),
-  },
-  {
-    keys: ["j", "k"],
-    label: "Next, previous variant",
-    each: ["Next variant", "Previous variant"],
-    group: "Review",
-    zone: "page",
-    when: (v) => walking(v) && v.variants > 1,
-    does: (k) => ({ kind: "variant", by: k === "j" ? 1 : -1 }),
+    does: (k) => event({ type: "go", by: k === "J" ? 1 : -1, open: true }),
   },
   // An app with its own h, j, k and l takes them first; it leaves these to the tools.
   {
@@ -143,6 +128,16 @@ export const BINDINGS: readonly Binding[] = [
     zone: "page",
     when: (v) => active(v) && v.variants > 1,
     does: (k) => ({ kind: "variant", by: k === "l" ? 1 : -1 }),
+  },
+  {
+    keys: ["j", "k"],
+    ctrl: true,
+    label: "Step after, before",
+    each: ["Step after", "Step before"],
+    group: "Review",
+    zone: "page",
+    when: active,
+    does: (k) => event({ type: "go", by: k === "j" ? 1 : -1 }),
   },
   {
     keys: ["v"],
@@ -162,11 +157,14 @@ export const BINDINGS: readonly Binding[] = [
     does: event({ type: "reset" }),
   },
   {
-    keys: ["y"],
+    // Enter is a control's own key: on the app's button, link or field it is the app's
+    // (zoneOf gives "control"), so a press there still clicks.
+    keys: ["y", "Enter"],
     label: "Settle the step: it is right, as it shows; then the next. Or open it again",
     group: "Review",
     zone: "page",
-    when: active,
+    once: true,
+    when: (v) => active(v) && v.layer === "none",
     does: event({ type: "settle" }),
   },
   {
@@ -236,6 +234,7 @@ export const BINDINGS: readonly Binding[] = [
     label: "Settle the selected step, or open it again; then go on to the next open one",
     group: "Panel",
     zone: "panel",
+    once: true,
     when: active,
     does: { kind: "settleSelected" },
   },
@@ -369,7 +368,17 @@ const keyOf = (b: Binding, key: string) => (b.ctrl === true ? `Ctrl+${key}` : ke
  * The bindings that work in this zone now; "go" gives the g menu's. The tree has the focus
  * while it shows, so it has the page's keys too, but the ones it uses itself, as j and k.
  */
-export const bindingsFor = (bindings: readonly Binding[], view: View, zone: Zone | "go") => {
+export const bindingsFor = (
+  bindings: readonly Binding[],
+  view: View,
+  zone: Zone | "go",
+): readonly Binding[] => {
+  // A control of the app's keeps Enter, so a press on it does what the app says.
+  if (zone === "control")
+    return bindingsFor(bindings, view, "page").flatMap((b) => {
+      const keys = b.keys.filter((k) => k !== "Enter");
+      return keys.length === 0 ? [] : [keys.length === b.keys.length ? b : { ...b, keys }];
+    });
   const usable = (b: Binding) => b.when === undefined || b.when(view);
   const own = bindings.filter((b) => b.zone === zone && usable(b));
   if (zone !== "panel") return own;
@@ -397,6 +406,8 @@ export interface Key {
   readonly meta?: boolean;
   readonly ctrl?: boolean;
   readonly alt?: boolean;
+  /** Whether the key is held, and this is its repeat. */
+  readonly repeat?: boolean;
 }
 
 /** Whose element has the focus: the tools', as their fields and the panel's tree, or a field of
@@ -460,7 +471,7 @@ export function dispatch(
           : undefined;
   const usable = bindingsFor(bindings, view, zone).filter((b) => (b.ctrl === true) === ctrl);
   const binding = usable.find((b) => b.keys.includes(key.key));
-  if (binding === undefined) return undefined;
+  if (binding === undefined || (binding.once === true && key.repeat === true)) return undefined;
   return typeof binding.does === "function" ? binding.does(key.key) : binding.does;
 }
 
@@ -477,7 +488,20 @@ export function zoneOf(element: Element | null): Zone {
   const zone = element.closest("[data-dt-zone]")?.getAttribute("data-dt-zone");
   if (zone === "panel" || zone === "list") return zone;
   if (element.closest("[role=dialog],[role=listbox],[role=menu]") !== null) return "list";
-  return "page";
+  return isControl(element) ? "control" : "page";
+}
+
+/** What takes Enter itself: a button, a link, a field, or an element with a tabindex of its
+ * own. */
+const CONTROL =
+  "button, a[href], area[href], input, select, textarea, summary, [contenteditable], [tabindex]";
+
+/** Whether the focused element is a control that Enter presses: any of the app's; of the
+ * tools', one the keyboard went to, as Tab does, and not one a click left the focus on. */
+function isControl(element: Element): boolean {
+  if (!element.matches(CONTROL)) return false;
+  if (element.closest(".blueline, .blueline-portal") === null) return true;
+  return element.matches(":focus-visible");
 }
 
 /** Whose element has the focus: the tools', for a field in their root and the tree, or the
