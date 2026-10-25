@@ -153,6 +153,36 @@ app's own code at Levels 2 and 3 finds it there, and the app does not bundle the
   needs no proxy.
 - A script tag by hand works in any server that you control.
 
+### The panel and its layers
+
+Agreed on 2026-10-25, after Henrik's first review of the demo app.
+
+- **One panel.** The step card moves into the sidebar. The panel shows the step's header
+  (the step before and after, the step's number and title, Settle), the step's words, and
+  the step's chat with its message field. While a step is open, the tree of pages and
+  journeys folds to one line at the panel's top. Off a step, the panel shows the page's
+  chat in the same place.
+- **The panel pushes the page aside.** The page narrows by the panel's width, so the
+  panel covers nothing. One visible button on the panel and Ctrl+B hide it and show it
+  again. An element that the app pins to the right edge can still sit under the panel.
+- **The bar is the folded panel.** When the panel is hidden, the bar shows the step's
+  number and title, the step before and after, and Settle. The bar and the panel never
+  show at once.
+- **A pin's note card stays beside its pin** while the reviewer writes. A sent note joins
+  the chat in the panel.
+- **Three layers, each hidden on its own.** The page is at the bottom, the light is over
+  it, and the panel is over the light.
+
+| Action                       | The walk                          | Light | Panel                                                   |
+| ---------------------------- | --------------------------------- | ----- | ------------------------------------------------------- |
+| Ctrl+B or the panel's button | stays on the step                 | stays | hides or shows                                          |
+| Ctrl+P                       | stays on the step                 | hides | hides, and only the eye shows                           |
+| Esc, with no field focused   | leaves the step for the page view | off   | shows the page's chat                                   |
+| The last settle              | ends: the journey is done         | off   | shows the page's chat, and the journey's row is checked |
+
+Leaving a step changes the place. Hiding changes only the view. So Esc moves the reviewer,
+and Ctrl+B and Ctrl+P only hide.
+
 ### Keys
 
 Blueline takes a key in the capture phase while its sidebar or one of its fields has the
