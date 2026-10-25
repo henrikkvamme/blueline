@@ -10,7 +10,7 @@ export function RequestPage({ id }: { readonly id: string }) {
   const [decided, setDecided] = useState<string>();
   if (request === undefined)
     return (
-      <main className="mx-auto flex max-w-3xl flex-col gap-4 px-8 py-10">
+      <main className="mx-auto flex max-w-3xl flex-col gap-4 px-8 py-10 max-sm:px-4">
         <Link to="/" className="text-sm text-slate-500 hover:text-slate-900">
           Requests
         </Link>
@@ -24,7 +24,7 @@ export function RequestPage({ id }: { readonly id: string }) {
     ["Sent", request.submitted],
   ];
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-8 py-10">
+    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-8 py-10 max-sm:px-4">
       <Link to="/" className="self-start text-sm text-slate-500 hover:text-slate-900">
         Requests
       </Link>

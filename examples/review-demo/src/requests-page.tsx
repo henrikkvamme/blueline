@@ -10,7 +10,7 @@ export function RequestsPage() {
   const rows = shown === "All" ? REQUESTS : REQUESTS.filter((r) => r.status === shown);
   const tabs: readonly (Status | "All")[] = ["All", ...STATUSES];
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 px-8 py-10">
+    <main className="mx-auto flex max-w-5xl flex-col gap-6 px-8 py-10 max-sm:px-4">
       <h1 className="text-2xl font-semibold text-slate-900">Requests</h1>
       <nav data-review="status-tabs" aria-label="Status" className="flex gap-1">
         {tabs.map((tab) => {
@@ -38,7 +38,7 @@ export function RequestsPage() {
         <thead className="text-slate-500">
           <tr className="border-b border-slate-200">
             <th className="py-2 pr-4 font-normal">Request</th>
-            <th className="py-2 pr-4 font-normal">Asked by</th>
+            <th className="py-2 pr-4 font-normal max-sm:hidden">Asked by</th>
             <th className="py-2 pr-4 font-normal">Status</th>
             <th className="py-2 pr-4 text-right font-normal">Waiting</th>
             <th className="py-2 text-right font-normal">Amount</th>
@@ -53,7 +53,7 @@ export function RequestsPage() {
                   <span className="text-slate-500 tabular-nums">{r.id}</span>
                 </Link>
               </td>
-              <td className="py-3 pr-4 text-slate-700">
+              <td className="py-3 pr-4 text-slate-700 max-sm:hidden">
                 {r.requester}
                 <span className="block text-slate-500">{r.team}</span>
               </td>

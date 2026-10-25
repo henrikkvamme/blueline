@@ -232,6 +232,9 @@ export const GLIDE_MS = 300;
  * glides there all the same. */
 const SCROLL_WAIT = 900;
 
+/** How near the screen's edge the check's middle may come, in px: it shows whole. */
+const CHECK_EDGE = 12;
+
 /** How long the light fades out or in, in ms. */
 const FADE_MS = 150;
 
@@ -432,7 +435,12 @@ export function Light({
             )}
           />
         )}
-        <SettleCheck settled={look} instant={instant} />
+        <SettleCheck
+          settled={look}
+          instant={instant}
+          // On the corner, but never past the screen's edge, as a phone's part stands near it.
+          at={{ x: Math.max(0, CHECK_EDGE - rect.x), y: Math.max(0, CHECK_EDGE - rect.y) }}
+        />
         {place !== undefined && <VariantTab place={place} settled={look} instant={instant} />}
       </div>
     </div>
@@ -444,15 +452,18 @@ export function Light({
 function SettleCheck({
   settled,
   instant,
+  at,
 }: {
   readonly settled: boolean;
   readonly instant?: string | undefined;
+  readonly at: { readonly x: number; readonly y: number };
 }) {
   return (
     <span
       data-dt-check={settled ? "on" : "off"}
+      style={{ left: at.x, top: at.y }}
       className={cx(
-        "absolute top-0 left-0 grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-dt-good transition-opacity duration-150",
+        "absolute grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-dt-good transition-opacity duration-150",
         settled ? "opacity-100" : "opacity-0 delay-200 motion-reduce:delay-0",
         instant,
       )}
