@@ -376,14 +376,23 @@ export function showStill(still: Still, into: Element): HTMLElement | undefined 
       el.style.setProperty("left", `${String(l)}px`, "important");
       el.style.setProperty("top", `${String(t)}px`, "important");
     };
-    // A move of 100 px shows how far a px goes in its containing block, which can be
-    // scaled in the copy; then it moves by what is left, in that block's px.
+    // A move of 100 px on each axis shows where a px goes in its containing block, which
+    // can be scaled, skewed or turned in the copy; then it moves by what is left, in that
+    // block's px.
     const was = where(el);
-    place(left + PROBE, top + PROBE);
-    const moved = where(el);
-    const across = (moved.x - was.x) / PROBE || 1;
-    const down = (moved.y - was.y) / PROBE || 1;
-    place(left + (x - was.x) / across, top + (y - was.y) / down);
+    place(left + PROBE, top);
+    const across = where(el);
+    place(left, top + PROBE);
+    const down = where(el);
+    const a = (across.x - was.x) / PROBE;
+    const b = (across.y - was.y) / PROBE;
+    const c = (down.x - was.x) / PROBE;
+    const d = (down.y - was.y) / PROBE;
+    const det = a * d - b * c;
+    const ex = x - was.x;
+    const ey = y - was.y;
+    if (Math.abs(det) < 1e-6) place(left + ex, top + ey);
+    else place(left + (d * ex - c * ey) / det, top + (a * ey - b * ex) / det);
   }
   return copy;
 }

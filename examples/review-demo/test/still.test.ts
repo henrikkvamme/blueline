@@ -140,22 +140,25 @@ describe("a still copy", () => {
     ]);
   });
 
-  it("keeps a fixed child at its place in a scaled parent", () => {
-    const at = page(
-      '<div id="target" style="width: 120px; height: 120px"><div style="transform: scale(2); transform-origin: 0 0; width: 40px; height: 40px"><p id="pinned" style="position: fixed; left: 10px; top: 10px; margin: 0">x</p></div></div>',
-    );
-    const target = at.querySelector("#target");
-    const pinned = at.querySelector("#pinned");
-    if (target === null || pinned === null) throw new Error("No target");
-    const { copy } = shown([target]);
-    const kept = copy?.querySelector("#pinned")?.getBoundingClientRect();
-    const box = copy?.getBoundingClientRect();
-    const was = pinned.getBoundingClientRect();
-    const from = target.getBoundingClientRect();
-    expect(
-      [(kept?.left ?? 0) - (box?.left ?? 0), (kept?.top ?? 0) - (box?.top ?? 0)].map(Math.round),
-    ).toEqual([was.left - from.left, was.top - from.top].map(Math.round));
-  });
+  it.each(["scale(2)", "skewX(45deg)", "rotate(30deg)"])(
+    "keeps a fixed child at its place in a parent with %s",
+    (transform) => {
+      const at = page(
+        `<div id="target" style="width: 120px; height: 120px"><div style="transform: ${transform}; transform-origin: 0 0; width: 40px; height: 40px"><p id="pinned" style="position: fixed; left: 10px; top: 10px; margin: 0">x</p></div></div>`,
+      );
+      const target = at.querySelector("#target");
+      const pinned = at.querySelector("#pinned");
+      if (target === null || pinned === null) throw new Error("No target");
+      const { copy } = shown([target]);
+      const kept = copy?.querySelector("#pinned")?.getBoundingClientRect();
+      const box = copy?.getBoundingClientRect();
+      const was = pinned.getBoundingClientRect();
+      const from = target.getBoundingClientRect();
+      expect(
+        [(kept?.left ?? 0) - (box?.left ?? 0), (kept?.top ?? 0) - (box?.top ?? 0)].map(Math.round),
+      ).toEqual([was.left - from.left, was.top - from.top].map(Math.round));
+    },
+  );
 
   it("keeps the size of an inline element out of the box, so a scrolled line stays put", () => {
     const at = page(
