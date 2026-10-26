@@ -283,6 +283,8 @@ export interface EnterInput {
   readonly at: number;
   readonly variant: number;
   readonly fresh: boolean;
+  /** The opening's run, as `Entered` has it. */
+  readonly run: number;
   readonly leaving: Entered | undefined;
   /** The variants the step's settle kept on its parts, by the part's name: the page shows
    * them, so a settled step opens as it was settled. None for an open step. */
@@ -1325,6 +1327,7 @@ export const sessionMachine = setup({
                   at: context.at,
                   variant: variantOf(context),
                   fresh: context.fresh,
+                  run: context.run,
                   leaving: context.leaving,
                   kept: keptParts(context.feedback[stepOf(context)?.id ?? ""]),
                 }),

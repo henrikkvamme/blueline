@@ -316,7 +316,11 @@ function configWatch() {
             for (const l of listeners) l();
           }, 50);
         });
-        watcher.on("error", () => watcher.close());
+        // A root that goes away ends its watch; the next page to listen starts another.
+        watcher.on("error", () => {
+          watcher.close();
+          if (watched.get(root)?.watcher === watcher) watched.delete(root);
+        });
         entry = { watcher, listeners };
         watched.set(root, entry);
       }
@@ -326,7 +330,7 @@ function configWatch() {
         listeners.delete(listener);
         if (listeners.size > 0) return;
         watcher.close();
-        watched.delete(root);
+        if (watched.get(root)?.watcher === watcher) watched.delete(root);
       };
     },
     close: () => {
@@ -339,13 +343,21 @@ type ConfigWatch = ReturnType<typeof configWatch>;
 
 /** Sends the page an event each time the app's config changes, while it listens. */
 function events(app: App, watching: ConfigWatch, response: ServerResponse) {
+  let stop: () => void;
+  try {
+    stop = watching.listen(app.root, () => response.write("event: change\ndata:\n\n"));
+  } catch (error) {
+    // A root that is gone, or that the server may not read, has nothing to watch.
+    return end(response, 404, {
+      error: `Blueline cannot watch ${app.root}: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+  response.once("close", stop);
   response.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-store",
   });
   response.write(": listening\n\n");
-  const stop = watching.listen(app.root, () => response.write("event: change\ndata:\n\n"));
-  response.once("close", stop);
 }
 
 async function listApps(apps: Apps, url: URL, request: IncomingMessage, response: ServerResponse) {

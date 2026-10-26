@@ -71,6 +71,15 @@ const onStep = (page: Page) =>
     return `${at} ${title}`;
   });
 
+/** Starts the journey once: a start that `waitForFunction` polls would run again on the page
+ * that a step's action loads. */
+async function start(page: Page, step?: string) {
+  await page.waitForFunction(() => window.blueline !== undefined, undefined, { timeout: 15_000 });
+  await page.evaluate((at) => {
+    window.blueline?.start("j", at);
+  }, step);
+}
+
 /** Marks the page, so a test sees when it loads again. */
 const mark = (page: Page) => page.evaluate(() => Reflect.set(window, "marked", true));
 const marked = (page: Page) => page.evaluate(() => Reflect.get(window, "marked") === true);
@@ -107,9 +116,7 @@ describe("a config through the Vite plugin", { timeout: 30_000 }, () => {
     const url = await vite(root);
     const page = await browser.newPage();
     await page.goto(`${url}/app/`);
-    await page.waitForFunction(() => window.blueline?.start("j", "b") === true, undefined, {
-      timeout: 15_000,
-    });
+    await start(page, "b");
     await expect.poll(() => onStep(page)).toBe("2 Step b");
     await mark(page);
     writeFileSync(
@@ -135,15 +142,52 @@ describe("a config through the Vite plugin", { timeout: 30_000 }, () => {
     const url = await vite(root);
     const page = await browser.newPage();
     await page.goto(`${url}/app/`);
-    await page.waitForFunction(() => window.blueline?.start("j") === true, undefined, {
-      timeout: 15_000,
-    });
+    await start(page);
     await page.waitForURL(`${url}/app/third.html`, { timeout: 10_000 });
     await expect.poll(() => page.title(), { timeout: 10_000 }).toBe("done");
     await expect.poll(() => onStep(page)).toBe("1 Step a");
     // The step went on: it did not open second.html again.
     await page.waitForTimeout(300);
     expect(page.url()).toBe(`${url}/app/third.html`);
+    await page.close();
+  });
+});
+
+describe("a step whose last action loads a new page", { timeout: 30_000 }, () => {
+  let server: ViteDevServer | undefined;
+  afterAll(() => server?.close());
+
+  it("goes on on the new page, and does not open the step's page again", async () => {
+    const root = app({
+      "index.html": html('<a id="next" href="/second.html">Next</a>'),
+      "second.html": html('<p id="there"></p>'),
+      "blueline.config.ts": config(
+        `{ ...${plain("a", "Step a")}, enter: [{ open: "/" }, { click: "#next" }], ready: ["#there"] }`,
+      ),
+    });
+    const plugin: typeof import("../../src/vite") = await import(path.join(DIST, "vite.js"));
+    server = await createServer({
+      root,
+      configFile: false,
+      logLevel: "silent",
+      optimizeDeps: { noDiscovery: true },
+      plugins: [plugin.devtoolsChannel({ serve: { port: served.port, state: served.state } })],
+      server: { port: 0, host: "127.0.0.1" },
+    });
+    await server.listen();
+    const address = server.httpServer?.address();
+    if (typeof address !== "object" || address === null) throw new Error("No port");
+    const url = `http://localhost:${String(address.port)}`;
+    const page = await browser.newPage();
+    const loads: string[] = [];
+    page.on("load", () => loads.push(new URL(page.url()).pathname));
+    await page.goto(`${url}/`);
+    await start(page);
+    await page.waitForURL(`${url}/second.html`, { timeout: 10_000 });
+    await expect.poll(() => onStep(page)).toBe("1 Step a");
+    await page.waitForTimeout(1000);
+    expect(page.url()).toBe(`${url}/second.html`);
+    expect(loads).toEqual(["/", "/second.html"]);
     await page.close();
   });
 });
@@ -174,9 +218,7 @@ describe("a config by a tag by hand", { timeout: 30_000 }, () => {
     });
     const page = await browser.newPage();
     await page.goto(`${origin}/`);
-    await page.waitForFunction(() => window.blueline?.start("j", "b") === true, undefined, {
-      timeout: 15_000,
-    });
+    await start(page, "b");
     await expect.poll(() => onStep(page)).toBe("2 Step b");
     await mark(page);
     writeFileSync(

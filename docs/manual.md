@@ -120,7 +120,8 @@ The actions:
 | `{ emit: name, detail? }`                         | Sends a window `CustomEvent`.                                                                                                                                              |
 
 Each action that names an element waits for it first. When an action loads a new page, as a
-click on a link does, the step goes on on the new page at the next action.
+click on a link does, the step goes on on the new page at the next action. A reload opens the
+step again from its start.
 
 Journey IDs are unique, and step IDs are unique across all journeys: notes, verdicts and
 variants are kept by them, and the review keeps its step and variant when the config

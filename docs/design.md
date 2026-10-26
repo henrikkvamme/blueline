@@ -952,8 +952,13 @@ in step 3.
      `stripTypeScriptTypes` and `es-module-lexer`: Node's prints an experimental warning,
      and TypeScript is a dependency already (`blueline apply`). It loads only for a config
      by hand. The bar marks a step whose phase failed too, as the walk shows the bar and not
-     the panel. An action loads a new page, and the step goes on at the first action that did
-     not end, so an `open` that is the page now ends at once.
+     the panel. When an action loads a new page, the step goes on at the first action that did
+     not end, so an `open` that is the page now ends at once. The tab keeps the place, also
+     once a phase ended, as a link's page can load after it, until the walk leaves the step;
+     a reload by the reviewer does not use it, and opens the step from its start.
+   - **After review.** A variant's `reset` runs in the same chain as a step's leaving, so no
+     two resets run at once. A step whose world never began to open is not left. A leaving
+     that fails marks the step it left.
 5. **Tests.**
    - Node: the config's rules and their reasons; `config.js` with types stripped and its
      import named again, 500 for another import, 403 for another origin and 404 for another

@@ -1,4 +1,4 @@
-import { Clock, DateTime, Effect, Fiber, Schedule } from "effect";
+import { Clock, DateTime, Effect, Fiber, Option, Schedule } from "effect";
 import { fromCallback } from "xstate";
 import { registry } from "../core/registry";
 import { fromResult } from "../core/result";
@@ -130,30 +130,48 @@ export function liveMachine<C>(live: Live<C>) {
   const stepAt = (journey: string, at: number): DevStep<C> | undefined =>
     (journeys().find((j) => j.id === journey) ?? journeys()[0])?.steps[at];
 
-  // Leaving a step runs its reset, then its exit, to their end, one step after another;
-  // the next step's world opens only once they ended.
+  // A step's reset and exit run one after another, each to its end, in one chain: the reset
+  // before a variant, and the reset and exit of a step the walk leaves. The next step's world
+  // opens only once the chain ends.
   let cleaning: Promise<void> = Promise.resolve();
   let pending = 0;
-  const cleanup = (leaving: Entered | undefined): Promise<void> => {
-    const step = leaving === undefined ? undefined : stepAt(leaving.journey, leaving.at);
-    if (step === undefined || (step.reset === undefined && step.exit === undefined))
-      return cleaning;
+  const serial = <A>(effect: Effect.Effect<A, string>): Effect.Effect<A, string> => {
+    pending += 1;
+    const ran = cleaning.then(() => Effect.runPromiseExit(effect));
+    cleaning = ran.then(
+      () => undefined,
+      () => undefined,
+    );
+    void cleaning.finally(() => {
+      pending -= 1;
+    });
+    // The walk may leave while it waits: the effect still runs to its end in the chain.
+    return Effect.promise(() => ran).pipe(Effect.flatMap((exit) => exit));
+  };
+  // The step whose world began to open, by its run: only that step has a world to leave.
+  let opened: Entered | undefined;
+  const same = (a: Entered, b: Entered) =>
+    a.journey === b.journey && a.at === b.at && a.run === b.run;
+  // Says why a step failed, through the actor that runs now.
+  let report: ((event: Event) => void) | undefined;
+  const cleanup = (leaving: Entered | undefined): void => {
+    if (leaving === undefined || opened === undefined || !same(leaving, opened)) return;
+    opened = undefined;
+    const step = stepAt(leaving.journey, leaving.at);
+    if (step === undefined || (step.reset === undefined && step.exit === undefined)) return;
     const context = adapter.context();
     const leave = Effect.gen(function* () {
-      yield* phase(step, "reset", step.reset, context).pipe(
-        Effect.catch((reason) => Effect.logWarning(reason)),
+      const reset = yield* phase(step, "reset", step.reset, context).pipe(
+        Effect.flip,
+        Effect.option,
       );
-      yield* phase(step, "exit", step.exit, context).pipe(
-        Effect.catch((reason) => Effect.logWarning(reason)),
-      );
+      const exit = yield* phase(step, "exit", step.exit, context).pipe(Effect.flip, Effect.option);
+      const reason = Option.getOrUndefined(Option.orElse(reset, () => exit));
+      if (reason === undefined) return;
+      yield* Effect.logWarning(reason);
+      report?.({ type: "trouble", step: step.id, reason });
     });
-    pending += 1;
-    cleaning = cleaning
-      .then(() => Effect.runPromise(leave))
-      .finally(() => {
-        pending -= 1;
-      });
-    return cleaning;
+    void Effect.runPromise(serial(leave));
   };
   // With nothing to clean, the step opens at once, as before.
   const cleaned = Effect.suspend(() =>
@@ -164,8 +182,7 @@ export function liveMachine<C>(live: Live<C>) {
    * the step is ready. A phase that fails stops the ones after it, with its reason. */
   const showVariant = (step: DevStep<C>, index: number, context: C) =>
     Effect.gen(function* () {
-      if (step.reset !== undefined)
-        yield* Effect.uninterruptible(phase(step, "reset", step.reset, context));
+      if (step.reset !== undefined) yield* serial(phase(step, "reset", step.reset, context));
       yield* phase(step, "setup", step.setup, context);
       const variant = step.variants?.[index];
       if (variant?.choice !== undefined) {
@@ -199,8 +216,9 @@ export function liveMachine<C>(live: Live<C>) {
         for (const [part, variant] of Object.entries(input.kept))
           parts.show(part, { variant, state: parts.shown(part).state });
       });
-      void cleanup(input.leaving);
+      cleanup(input.leaving);
       yield* cleaned;
+      opened = { journey: input.journey, at: input.at, variant: input.variant, run: input.run };
       const started = yield* Clock.currentTimeMillis;
       let shown = false;
       yield* troubled(
@@ -240,16 +258,18 @@ export function liveMachine<C>(live: Live<C>) {
 
   const machine = sessionMachine.provide({
     actors: {
-      enterStep: fromCallback<Event, EnterInput>(({ input, sendBack }) =>
-        run(
+      enterStep: fromCallback<Event, EnterInput>(({ input, sendBack }) => {
+        report = sendBack;
+        return run(
           enter(input, sendBack).pipe(
             Effect.andThen(Effect.sync(() => sendBack({ type: "entered" }))),
           ),
-        ),
-      ),
+        );
+      }),
       // The walk left the step for the page: its reset and exit run to their end.
-      leaveStep: fromCallback<Event, Entered | undefined>(({ input }) => {
-        void cleanup(input);
+      leaveStep: fromCallback<Event, Entered | undefined>(({ input, sendBack }) => {
+        report = sendBack;
+        cleanup(input);
         return () => undefined;
       }),
       switchVariant: fromCallback<Event, SwitchInput>(({ input, sendBack }) =>
@@ -326,7 +346,10 @@ export function liveMachine<C>(live: Live<C>) {
     },
   });
   /** Takes the tools off: the step's reset and exit start, and nothing waits for them. */
-  const dispose = (entered: Entered | undefined) => void cleanup(entered);
+  const dispose = (entered: Entered | undefined) => {
+    report = undefined;
+    cleanup(entered);
+  };
   return Object.assign(machine, { dispose });
 }
 

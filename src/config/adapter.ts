@@ -15,6 +15,9 @@ const seconds = (ms: number) => `${String(Math.round(ms / 100) / 10)} s`;
 
 type Code = (context: void, signal: AbortSignal) => Promise<void>;
 
+/** One thing a phase does: an action, a function or the wait for `ready`'s selectors. */
+type Unit = (signal: AbortSignal, doing: Doing) => Promise<void>;
+
 /** Where a phase is in the step; `exit` has none, as the walk leaves the step. */
 interface Place {
   readonly step: string;
@@ -22,21 +25,28 @@ interface Place {
   readonly label?: string;
 }
 
-/** Runs one phase: its actions from where the cursor says, or its function, until the step's
- * timeout. */
+/**
+ * Runs one phase until the step's timeout: its units from where the cursor says, keeping the
+ * place before each and once all ended. `exit` keeps no place: the walk leaves the step, so
+ * no new page load takes it up.
+ */
 function phaseCode(
   cursor: Cursor,
   place: Place | undefined,
   timeout: number,
-  run: (signal: AbortSignal, doing: Doing, start: number) => Promise<void>,
+  units: readonly Unit[],
 ): Code {
   return async (_context, walk) => {
     const start = place === undefined ? 0 : cursor.start(place.step, place.phase, place.label);
     if (start === "skip") return;
+    const keep = (next: number) => {
+      if (place !== undefined) cursor.keep(place.step, place.phase, place.label, next);
+    };
     const own = new AbortController();
     const leave = () => own.abort(walk.reason);
     walk.addEventListener("abort", leave, { once: true });
     let doing = "it";
+    const said = (what: string) => (doing = what);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<never>((_, fail) => {
       timer = setTimeout(() => {
@@ -44,12 +54,21 @@ function phaseCode(
         fail(new Error(`${doing} in ${seconds(timeout)}`));
       }, timeout);
     });
+    const run = async () => {
+      for (const [i, unit] of units.entries()) {
+        if (i < start) continue;
+        keep(i);
+        said("the action");
+        await unit(own.signal, said);
+      }
+      keep(units.length);
+    };
     try {
-      await Promise.race([run(own.signal, (what) => (doing = what), start), late]);
-      cursor.clear();
+      await Promise.race([run(), late]);
+      if (place === undefined) cursor.clear();
     } catch (error) {
       // The walk left the step: no place stays.
-      if (walk.aborted) cursor.clear();
+      if (walk.aborted || place === undefined) cursor.clear();
       throw error;
     } finally {
       clearTimeout(timer);
@@ -58,40 +77,38 @@ function phaseCode(
   };
 }
 
-const ofRun =
-  (cursor: Cursor, place: Place | undefined, run: ConfigRun) =>
-  (signal: AbortSignal, doing: Doing, start: number): Promise<void> => {
-    if (typeof run === "function") return ofCode(run, signal, doing);
-    return (async () => {
-      for (const [i, action] of run.entries()) {
-        if (i < start) continue;
-        if (place !== undefined) cursor.keep(place.step, place.phase, place.label, i);
-        doing("the action");
-        await runAction(action, signal, doing);
-      }
-    })();
+const ofCode =
+  (code: ConfigCode): Unit =>
+  async (signal, doing) => {
+    doing("the function did not end");
+    await code(signal);
   };
 
-const ofCode = async (code: ConfigCode, signal: AbortSignal, doing: Doing) => {
-  doing("the function did not end");
-  await code(signal);
-};
+const unitsOf = (run: ConfigRun | undefined): readonly Unit[] =>
+  run === undefined
+    ? []
+    : typeof run === "function"
+      ? [ofCode(run)]
+      : run.map(
+          (action): Unit =>
+            (signal, doing) =>
+              runAction(action, signal, doing),
+        );
 
-const ofReady =
-  (ready: NonNullable<ConfigStep["ready"]>) =>
-  async (signal: AbortSignal, doing: Doing): Promise<void> => {
-    if (typeof ready === "function") return ofCode(ready, signal, doing);
-    for (const selector of ready) await waitFor(selector, signal, doing);
-  };
+const readyOf = (ready: NonNullable<ConfigStep["ready"]>): readonly Unit[] =>
+  typeof ready === "function"
+    ? [ofCode(ready)]
+    : [
+        async (signal, doing) => {
+          for (const selector of ready) await waitFor(selector, signal, doing);
+        },
+      ];
 
 /** The config's step as the walk runs it. */
 function stepOf(cursor: Cursor, step: ConfigStep): DevStep<void> {
   const timeout = step.timeout ?? TIMEOUT_MS;
-  const code = (phase: Phase, run: ConfigRun | undefined) => {
-    if (run === undefined) return {};
-    const place = { step: step.id, phase };
-    return { [phase]: phaseCode(cursor, place, timeout, ofRun(cursor, place, run)) };
-  };
+  const code = (phase: Phase, units: readonly Unit[]) =>
+    phaseCode(cursor, { step: step.id, phase }, timeout, units);
   const variants = step.variants?.map((variant): DevVariant<void> => {
     const place = { step: step.id, phase: "variant" as const, label: variant.label };
     return {
@@ -99,7 +116,7 @@ function stepOf(cursor: Cursor, step: ConfigStep): DevStep<void> {
       ...(variant.choice === undefined ? {} : { choice: variant.choice }),
       ...(variant.show === undefined
         ? {}
-        : { apply: phaseCode(cursor, place, timeout, ofRun(cursor, place, variant.show)) }),
+        : { apply: phaseCode(cursor, place, timeout, unitsOf(variant.show)) }),
     };
   });
   return {
@@ -111,17 +128,11 @@ function stepOf(cursor: Cursor, step: ConfigStep): DevStep<void> {
     ...(step.person === undefined ? {} : { person: step.person }),
     ...(step.target === undefined ? {} : { target: step.target }),
     ...(step.part === undefined ? {} : { part: step.part }),
-    ...code("setup", step.setup),
-    ...code("reset", step.reset),
-    ...(step.ready === undefined
-      ? {}
-      : {
-          ready: phaseCode(cursor, { step: step.id, phase: "ready" }, timeout, ofReady(step.ready)),
-        }),
-    // The walk leaves the step, so no new page load takes its place up.
-    ...(step.exit === undefined
-      ? {}
-      : { exit: phaseCode(cursor, undefined, timeout, ofRun(cursor, undefined, step.exit)) }),
+    ...(step.setup === undefined ? {} : { setup: code("setup", unitsOf(step.setup)) }),
+    ...(step.reset === undefined ? {} : { reset: code("reset", unitsOf(step.reset)) }),
+    ...(step.ready === undefined ? {} : { ready: code("ready", readyOf(step.ready)) }),
+    // Each step has an exit, as leaving the step drops the place the tab keeps.
+    exit: phaseCode(cursor, undefined, timeout, unitsOf(step.exit)),
     ...(variants === undefined ? {} : { variants }),
   };
 }
@@ -152,7 +163,7 @@ export function configAdapter(
       if (run === undefined) return;
       const timeout = steps.get(step.id)?.timeout ?? TIMEOUT_MS;
       const place = { step: step.id, phase: "enter" as const };
-      await phaseCode(cursor, place, timeout, ofRun(cursor, place, run))(undefined, signal);
+      await phaseCode(cursor, place, timeout, unitsOf(run))(undefined, signal);
     },
     ...(channel === undefined ? {} : { channel }),
   };

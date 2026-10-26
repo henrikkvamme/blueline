@@ -635,3 +635,74 @@ describe("a step's phases", () => {
     actor.stop();
   });
 });
+
+describe("leaving a step, as review found it", () => {
+  it("runs no second reset while the variant's reset still runs", async () => {
+    const first = held();
+    let resets = 0;
+    const { actor, log, ready } = phased({
+      a: {
+        reset: () => {
+          resets += 1;
+          log.push(`reset ${String(resets)}`);
+          // The variant's reset holds; the leaving reset ends at once.
+          return resets === 1 ? first.promise : undefined;
+        },
+      },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await vi.waitFor(() => expect(log).toContain("reset 1"));
+    actor.send({ type: "go", by: 1 });
+    await new Promise((done) => setTimeout(done, 50));
+    expect(log).not.toContain("reset 2");
+    first.end();
+    await ready(1);
+    expect(log.slice(log.indexOf("reset 2"))).toEqual([
+      "reset 2",
+      "exit a",
+      "enter b",
+      "reset b",
+      "setup b",
+      "ready b",
+    ]);
+    actor.stop();
+  });
+
+  it("leaves only a step whose world began to open", async () => {
+    const exit = held();
+    const { actor, log, ready } = phased({
+      a: { exit: () => (log.push("exit a"), exit.promise) },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await ready(0);
+    actor.send({ type: "go", by: 1 });
+    await vi.waitFor(() => expect(log).toContain("exit a"));
+    actor.send({ type: "go", by: 1 });
+    exit.end();
+    await ready(2);
+    expect(log).not.toContain("reset b");
+    expect(log).not.toContain("exit b");
+    actor.stop();
+  });
+
+  it("says why the step it left failed to leave", async () => {
+    const { actor, ready } = phased({
+      a: {
+        exit: () => {
+          throw new Error("close failed");
+        },
+      },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await ready(0);
+    actor.send({ type: "go", by: 1 });
+    await ready(1);
+    await vi.waitFor(() =>
+      expect(actor.getSnapshot().context.trouble).toEqual({ a: "exit failed: close failed" }),
+    );
+    actor.stop();
+  });
+});

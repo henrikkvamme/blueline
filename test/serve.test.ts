@@ -469,6 +469,15 @@ describe("blueline serve for pages", () => {
     );
   });
 
+  it("answers 404 for the events of a root that is gone, and keeps serving", async () => {
+    const root = repository("gone");
+    const a = await registered(root, page);
+    rmSync(root, { recursive: true, force: true });
+    const events = await fetch(`${url}${a.base}events`, { headers: { origin: page } });
+    expect(events.status).toBe(404);
+    expect((await fetch(`${url}/blueline/health`)).status).toBe(200);
+  });
+
   it("serves the built config module to any page", async () => {
     await served?.close();
     const config = path.join(mkdtempSync(path.join(base, "dist-")), "config.js");
