@@ -51,6 +51,22 @@ export interface Lifting {
   readonly judge: Judge;
 }
 
+/** One option the lift shows: a variant of the part in a state, by the state's place, 0 for
+ *  the page's own. */
+export interface StageOption {
+  readonly slot: string;
+  readonly variant: string;
+  readonly state: number;
+}
+
+/** What the lift shows, and the host whose slots show it: the lifted part draws a copy of
+ *  itself for each option, as a light child of the host (lift.tsx). */
+export interface Stage {
+  readonly id: string;
+  readonly host: Element;
+  readonly options: readonly StageOption[];
+}
+
 export interface Parts {
   readonly shown: Readonly<Record<string, Shown>>;
   readonly verdicts: Readonly<Record<string, Verdicts>>;
@@ -58,7 +74,11 @@ export interface Parts {
   readonly noted: Readonly<Record<string, readonly string[]>>;
   readonly instances: readonly Instance[];
   readonly lifting: Lifting | undefined;
+  readonly stage: Stage | undefined;
 }
+
+/** The first state in the lift's column: the part as the page gives it. */
+export const AS_IT_IS = "As it is";
 
 const KEY = `${STORED}.part.`;
 export const NO_VERDICTS: Verdicts = { kept: [], dropped: [] };
@@ -72,7 +92,14 @@ interface State {
 }
 
 const state = shared("parts", (): State => ({
-  now: { shown: {}, verdicts: {}, noted: {}, instances: [], lifting: undefined },
+  now: {
+    shown: {},
+    verdicts: {},
+    noted: {},
+    instances: [],
+    lifting: undefined,
+    stage: undefined,
+  },
   listeners: new Set(),
   declared: new Map(),
 }));
@@ -192,6 +219,7 @@ export const parts = {
       set({
         instances: state.now.instances.filter((i) => i.id !== instance.id),
         lifting: state.now.lifting?.id === instance.id ? undefined : state.now.lifting,
+        stage: state.now.stage?.id === instance.id ? undefined : state.now.stage,
       });
   },
   /** The part in or around the elements, of this name if one is given. With no name, the
@@ -220,8 +248,10 @@ export const parts = {
       others,
     ),
   lift: (id: string, judge: Judge) => set({ lifting: { id, judge } }),
+  /** What the lift shows now, or nothing once it goes. */
+  stage: (stage: Stage | undefined) => set({ stage }),
   /** The part is down on the page again. */
-  land: () => set({ lifting: undefined }),
+  land: () => set({ lifting: undefined, stage: undefined }),
 };
 
 /**

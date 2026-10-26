@@ -1,16 +1,7 @@
-import {
-  isValidElement,
-  lazy,
-  Suspense,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { useId, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { merge, type Patch } from "./merge";
-import { hugs, NO_VERDICTS, parts, rectOf, variantOf } from "./store";
+import { NO_VERDICTS, parts, variantOf } from "./store";
 
 export type { Patch } from "./merge";
 
@@ -32,10 +23,7 @@ export type { Patch } from "./merge";
  * `blueline apply` (bin/blueline.ts).
  */
 
-const Lift = lazy(() => import("./lift").then((m) => ({ default: m.Lift })));
-
-/** The first state in the column: the part as the page gives it. */
-export const AS_IT_IS = "As it is";
+export { AS_IT_IS } from "./store";
 
 export function variants<P extends object>(
   name: string,
@@ -58,19 +46,14 @@ export function variants<P extends object>(
     const shown = now.shown[name] ?? parts.shown(name);
     const verdicts = now.verdicts[name] ?? NO_VERDICTS;
     const variant = variantOf(labels, shown, verdicts);
-    const lifting = now.lifting?.id === id ? now.lifting : undefined;
-    // Where the part stood when it rose, and whether it takes its content's size.
-    const [rose, setRose] = useState<{ readonly from: DOMRect; readonly hug: boolean }>();
+    const lifted = now.lifting?.id === id;
+    // The lift (lift.tsx) shows options; the part draws a copy of itself for each, in the
+    // lift's slot, with its own props and context.
+    const stage = now.stage?.id === id ? now.stage : undefined;
     useLayoutEffect(
       () => parts.add({ id, name, labels, states: names, node: () => node.current }),
       [id],
     );
-    useLayoutEffect(() => {
-      const el = node.current;
-      setRose(
-        lifting === undefined || el === null ? undefined : { from: rectOf(el), hug: hugs(el) },
-      );
-    }, [lifting]);
     const state =
       shown.state !== undefined && names.includes(shown.state) ? shown.state : undefined;
     return (
@@ -78,47 +61,19 @@ export function variants<P extends object>(
         <span
           ref={node}
           data-blueline-part={name}
-          style={{ display: "contents", visibility: lifting === undefined ? undefined : "hidden" }}
+          style={{ display: "contents", visibility: lifted ? "hidden" : undefined }}
         >
           {draw(props, variant, state)}
         </span>
-        {lifting !== undefined && rose !== undefined && (
-          <Suspense fallback={null}>
-            <Lift
-              title={name}
-              variants={labels.filter((l) => !verdicts.dropped.includes(l))}
-              states={[AS_IT_IS, ...names]}
-              render={(at) =>
-                draw(props, at.variant, at.state === 0 ? undefined : names[at.state - 1])
-              }
-              start={{ variant, state: state === undefined ? 0 : names.indexOf(state) + 1 }}
-              from={rose.from}
-              hug={rose.hug}
-              onDrop={lifting.judge.drop}
-              onUndo={lifting.judge.undo}
-              onNote={
-                lifting.judge.note === undefined
-                  ? undefined
-                  : (at) =>
-                      lifting.judge.note?.({
-                        variant: at.variant,
-                        state: at.state === 0 ? undefined : names[at.state - 1],
-                      })
-              }
-              note={isValidElement(lifting.judge.panel) ? lifting.judge.panel : undefined}
-              noted={now.noted[name] ?? []}
-              onPut={(at) =>
-                parts.show(name, {
-                  variant: at.variant,
-                  state: at.state === 0 ? undefined : names[at.state - 1],
-                })
-              }
-              where={() => (node.current === null ? undefined : rectOf(node.current))}
-              onDone={parts.land}
-              docked={lifting.judge.docked}
-            />
-          </Suspense>
-        )}
+        {stage !== undefined &&
+          createPortal(
+            stage.options.map((o) => (
+              <div key={o.slot} slot={o.slot} style={{ display: "contents" }}>
+                {draw(props, o.variant, o.state === 0 ? undefined : names[o.state - 1])}
+              </div>
+            )),
+            stage.host,
+          )}
       </>
     );
   }

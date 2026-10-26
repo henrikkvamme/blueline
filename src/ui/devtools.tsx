@@ -41,6 +41,7 @@ import { useVariantPlace } from "./step-controls";
 import { release, settleGate, TURN_MS, TURN_WAIT } from "./settle";
 import { holdToggle } from "../keys/hold";
 import { openHost, type Host } from "./host";
+import { LiftLayer } from "../part/lift-layer";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
@@ -545,6 +546,7 @@ export function Running({
       <TreeFocus />
       <Review shift={shift} />
       <Toasts />
+      <LiftLayer />
     </div>
   );
   return (

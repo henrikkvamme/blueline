@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cx } from "../../ui/cx";
 import { dropped, parts, type Verdicts } from "../../part/store";
+import { LiftLayer } from "../../part/lift-layer";
 import { variants } from "../../part/variants";
 import {
   Chip,
@@ -146,6 +147,7 @@ export function LiftWorkshop() {
 
   return (
     <div className="flex min-h-screen gap-8 bg-[#f1f1f4] p-8 text-[#16161a]">
+      <LiftLayer />
       <aside className="blueline sticky top-8 flex h-fit w-[300px] shrink-0 flex-col gap-5 rounded-dt-panel bg-dt-panel p-4 text-dt-text shadow-dt-float">
         <div className="flex flex-col gap-1.5">
           <span className="text-[15px] font-semibold">Lift</span>

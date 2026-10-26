@@ -27,6 +27,7 @@ import { Menu, type MenuEntry } from "../ui/menu";
 import { menuTakes } from "../ui/menu-keys";
 import { swipeOf, swipeStarts, type Point } from "../ui/swipe";
 import { liftActionLabel, liftActions, type LiftAction } from "./lift-actions";
+import { parts, type StageOption } from "./store";
 import { elementOf } from "../core/root";
 
 /*
@@ -74,10 +75,10 @@ const same = (a: readonly number[], b: readonly number[]) =>
   a.length === b.length && a.every((x, i) => x === b[i]);
 
 export function Lift({
+  id,
   title,
   variants,
   states,
-  render,
   start,
   from,
   hug,
@@ -91,13 +92,14 @@ export function Lift({
   onDone,
   docked = 0,
 }: {
+  /** The lifted part's own ID, as the part store knows it. */
+  readonly id: string;
   /** What the part is, as "the Submit button". */
   readonly title: string;
   /** The variants' labels, without the ones the reviewer deleted. */
   readonly variants: readonly string[];
   /** The states' names; the first is the part as the page gives it. */
   readonly states: readonly string[];
-  readonly render: (at: At) => ReactNode;
   /** What the page shows now. */
   readonly start: At;
   /** Where the part is on the page. */
@@ -131,8 +133,9 @@ export function Lift({
     return () => {
       setHost(undefined);
       opened.dispose();
+      if (parts.current().stage?.id === id) parts.stage(undefined);
     };
-  }, []);
+  }, [id]);
   // Where the variant shown stands in the row: a deleted one's place, until another shows.
   const place = useRef(0);
   const found = variants.indexOf(at.variant);
@@ -184,14 +187,32 @@ export function Lift({
   const colEls = useRef<(HTMLElement | null)[]>([]);
   const [widths, setWidths] = useState<readonly number[]>([]);
   const [heights, setHeights] = useState<readonly number[]>([]);
+  // The part draws its copies in the options' slots once the lift puts them (variants.tsx),
+  // and they can change size after: each change measures again.
+  const [filled, setFilled] = useState(false);
+  const [resized, setResized] = useState(0);
   useLayoutEffect(() => {
     rowEls.current.length = variants.length;
     const w = variants.map((_, i) => rowEls.current[i]?.offsetWidth ?? 0);
     const h = states.map((_, i) => colEls.current[i]?.offsetHeight ?? 0);
     if (!same(w, widths)) setWidths(w);
     if (!same(h, heights)) setHeights(h);
+    const slots = [...(host?.container.querySelectorAll("slot") ?? [])];
+    setFilled(slots.length > 0 && slots.every((slot) => slot.assignedNodes().length > 0));
   });
-  const measured = widths.length === variants.length && heights.length === states.length;
+  useEffect(() => {
+    if (host === undefined) return;
+    const observer = new ResizeObserver(() => setResized((n) => n + 1));
+    for (const el of [...rowEls.current, ...colEls.current]) if (el !== null) observer.observe(el);
+    const filling = () => setResized((n) => n + 1);
+    host.container.addEventListener("slotchange", filling);
+    return () => {
+      observer.disconnect();
+      host.container.removeEventListener("slotchange", filling);
+    };
+  }, [host, variants.length, states.length]);
+  const measured =
+    filled && resized >= 0 && widths.length === variants.length && heights.length === states.length;
 
   useEffect(() => {
     if (!turning) return;
@@ -443,6 +464,18 @@ export function Lift({
   const occurrence = (way: Axis, i: number): At =>
     way === "variant" ? { ...at, variant: variants[i] ?? "" } : { ...at, state: i };
 
+  // The options the lift shows, for the part to draw a copy of itself in each one's slot.
+  const options: readonly StageOption[] = (["variant", "state"] as const).flatMap((way) =>
+    (way === "variant" ? variants : states).map((_, i) => {
+      const o = occurrence(way, i);
+      return { slot: slotOf(way, i, variants), variant: o.variant, state: o.state };
+    }),
+  );
+  const shows = JSON.stringify(options);
+  useLayoutEffect(() => {
+    if (host !== undefined) parts.stage({ id, host: host.element, options });
+  }, [host, shows]);
+
   /** One option on one way's line. */
   const option = (way: Axis, i: number) => {
     const label = variants[i] ?? "";
@@ -521,19 +554,8 @@ export function Lift({
 
   if (host === undefined) return null;
   // The stage and its bar in the lift's shadow root; each option's copy of the part on the
-  // page, as a light child of the host that the option's slot shows, so the page's CSS and
-  // the part's context draw it.
-  const previews = (["variant", "state"] as const).flatMap((way) =>
-    (way === "variant" ? variants : states).map((_, i) => {
-      const name = slotOf(way, i, variants);
-      return (
-        <div key={name} slot={name} style={{ display: "contents" }}>
-          {render(occurrence(way, i))}
-        </div>
-      );
-    }),
-  );
-  const chrome = (
+  // page, as a light child of the host that the option's slot shows (variants.tsx).
+  return createPortal(
     <div
       className={cx("fixed inset-0 z-[2147483005]", leaving && "pointer-events-none")}
       role="dialog"
@@ -659,13 +681,8 @@ export function Lift({
           />
         )}
       </div>
-    </div>
-  );
-  return (
-    <>
-      {createPortal(chrome, host.container)}
-      {createPortal(previews, host.element)}
-    </>
+    </div>,
+    host.container,
   );
 }
 
