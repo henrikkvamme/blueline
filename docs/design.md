@@ -176,6 +176,15 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 - **The chat fills the rest, and scrolls.** It is the step's chat. When the page's chat has
   messages, a quiet button at the chat's top opens it, and **Back to the step** returns. Tab
   in the message field also switches.
+- **The message field wraps as a chat app's does.** While the words fit on one line, the
+  field is one row: + and the pin at the left, the field, and send at the right. Once the
+  words wrap, the field spans the box on top and grows down, and the buttons go to a row under
+  it. It goes back to one row when the words fit again. A copy of the words out of sight, at
+  the one row's width, says which form, before the browser paints, so nothing flickers. Only
+  the layout changes, so the field keeps its focus, caret and scroll. The box grows upward
+  into the chat, and the foot under it does not move. The vim mode's badge stands on the
+  box's top edge at the left, over no word in either form. A note card's field works the
+  same way.
 - **A fixed foot.** Under the message field, a bar holds the step before, Settle and the step
   after, as a left and a right chevron. Settle is the one primary button, as wide as the room
   between the chevrons. On a step that lists variants it names the variant it keeps, as

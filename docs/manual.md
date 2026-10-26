@@ -61,7 +61,9 @@ On a step, the step fills the rest of the panel. A faint line gives the step's n
 group. Under it are the step's title, what to look at and what to try. When the step has
 more than one variant, the **Variants** list shows them as rows, with **Lift** at its right.
 The raised row is the variant that the page shows. A click on a row shows that variant, as
-`j` and `k` do. Then comes the step's chat, which scrolls, and the message field. At the
+`j` and `k` do. Then comes the step's chat, which scrolls, and the message field. The field
+is one row while your words fit on one line. When they wrap, the words take the whole width
+and the buttons move to a row under them. At the
 foot are the step before, **Settle** and the step after, as a left and a right chevron. On a
 step that lists variants, Settle names the variant that it keeps, as **Keep Cards**, and the
 name changes with the variant shown. A settled step's button reads **Kept Cards**, or

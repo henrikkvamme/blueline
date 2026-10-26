@@ -352,6 +352,41 @@ const imagesIn = (files: FileList | null | undefined) =>
   [...(files ?? [])].filter((f) => f.type.startsWith("image/"));
 
 /**
+ * Whether the words wrap in the composer's one row: they are measured at the width the field
+ * has beside the buttons, in a copy out of sight, before the browser paints, so the switch to
+ * two rows and back never flickers. The width comes from the row and the buttons as they
+ * are, also while the field spans two rows, so the same words always give the same form.
+ */
+function useWrap(draft: string) {
+  const row = useRef<HTMLDivElement>(null);
+  const lead = useRef<HTMLDivElement>(null);
+  const trail = useRef<HTMLDivElement>(null);
+  const measure = useRef<HTMLDivElement>(null);
+  const [wraps, setWraps] = useState(false);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const box = row.current;
+    if (box === null) return;
+    const observer = new ResizeObserver(() => setWidth(box.clientWidth));
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const box = row.current;
+    const copy = measure.current;
+    if (box === null || copy === null || lead.current === null || trail.current === null) return;
+    const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
+    const room = box.clientWidth - lead.current.offsetWidth - trail.current.offsetWidth - 2 * gap;
+    copy.style.width = `${String(Math.max(0, room))}px`;
+    // A last new line still makes a line of its own.
+    copy.textContent = `${draft}\u200b`;
+    const line = parseFloat(getComputedStyle(copy).lineHeight) || 20;
+    setWraps(copy.scrollHeight > line * 1.5);
+  }, [draft, width]);
+  return { row, lead, trail, measure, wraps };
+}
+
+/**
  * The composer, as in a chat app: one box with the field and its buttons. The + button and a
  * paste or a drop add screenshots. In the step's composer Enter sends now, with the step's
  * pointed notes; in a pointed note Enter sends it at once, and Cmd+Enter, or Ctrl+Enter off a
@@ -496,6 +531,7 @@ export function Composer({
   };
   const chips = hasShots(draft, images.length);
   const mirror = useRef<HTMLDivElement>(null);
+  const { row, lead, trail, measure, wraps } = useWrap(draft);
   return (
     <div
       onDragOver={(e) => {
@@ -536,29 +572,45 @@ export function Composer({
           ))}
         </ul>
       )}
-      {/* One row that never changes: the words keep their place and wrap at one width, and
-          the box grows down around them, with the buttons at its bottom. */}
-      <div className="flex items-end gap-1">
-        <button
-          type="button"
-          aria-label="Add a screenshot"
-          title="Add a screenshot, or paste one"
-          onClick={() => picker.current?.click()}
-          className={TOOL}
-        >
-          <Plus className="size-4" aria-hidden />
-        </button>
-        {sends && (
+      {/* While the words fit on one line, one row: the buttons beside the field. Once they
+          wrap, the field spans the box on top and grows down, and the buttons go to a row
+          under it. Only the grid changes, so the field keeps its focus, caret and scroll. */}
+      <div
+        ref={row}
+        className="relative grid items-end gap-1"
+        style={{
+          gridTemplateColumns: "auto minmax(0, 1fr) auto",
+          gridTemplateAreas: wraps ? '"field field field" "lead . trail"' : '"lead field trail"',
+        }}
+      >
+        {/* The words at the one row's width, out of sight: they say when the words wrap. */}
+        <div
+          ref={measure}
+          aria-hidden
+          className="pointer-events-none invisible absolute top-0 left-0 px-1 text-[13px] leading-5 wrap-break-word whitespace-pre-wrap max-sm:text-[16px] max-sm:leading-6"
+        />
+        <div ref={lead} className="flex items-end gap-1" style={{ gridArea: "lead" }}>
           <button
             type="button"
-            aria-label="Point at an element for a note"
-            title="Point at an element for a note"
-            onClick={() => perform({ kind: "aim", on: true })}
+            aria-label="Add a screenshot"
+            title="Add a screenshot, or paste one"
+            onClick={() => picker.current?.click()}
             className={TOOL}
           >
-            <MapPin className="size-4" aria-hidden />
+            <Plus className="size-4" aria-hidden />
           </button>
-        )}
+          {sends && (
+            <button
+              type="button"
+              aria-label="Point at an element for a note"
+              title="Point at an element for a note"
+              onClick={() => perform({ kind: "aim", on: true })}
+              className={TOOL}
+            >
+              <MapPin className="size-4" aria-hidden />
+            </button>
+          )}
+        </div>
         <input
           ref={picker}
           type="file"
@@ -570,7 +622,7 @@ export function Composer({
             e.target.value = "";
           }}
         />
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0" style={{ gridArea: "field" }}>
           {/* Normal mode's block cursor is a selected letter, so an empty field draws one. */}
           {mode === "normal" && draft === "" && (
             <span
@@ -672,60 +724,62 @@ export function Composer({
             )}
           />
         </div>
-        {!sends && sendsNote && (
-          // Keeps the note on its pin, to go with the next message, as Cmd+Enter does.
-          <button
-            type="button"
-            title="Send with the next message"
-            disabled={draft.trim() === "" && images.length === 0}
-            onClick={() => leave("later")}
-            className="h-7 shrink-0 rounded-dt-control px-2 text-[12px] text-dt-muted hover:bg-dt-raised hover:text-dt-text disabled:opacity-40 disabled:hover:bg-transparent max-sm:h-11 max-sm:px-3 max-sm:text-[14px]"
-          >
-            Later
-          </button>
-        )}
-        {!sends && (
-          // Sends the note, or keeps it for the message in the chat's field, as Enter does.
-          <button
-            type="button"
-            aria-label={sendsNote ? "Send the note now" : "Keep the note for the message"}
-            disabled={sendsNote && draft.trim() === "" && images.length === 0}
-            onClick={() => leave("enter")}
-            className={cx(
-              "grid size-7 shrink-0 place-items-center rounded-dt-control max-sm:size-11",
-              sendsNote
-                ? "bg-dt-accent text-white hover:bg-dt-accent/85 disabled:bg-dt-raised disabled:text-dt-faint"
-                : "bg-dt-raised text-dt-text hover:bg-dt-line",
-            )}
-          >
-            {sendsNote ? (
+        <div ref={trail} className="flex items-end gap-1" style={{ gridArea: "trail" }}>
+          {!sends && sendsNote && (
+            // Keeps the note on its pin, to go with the next message, as Cmd+Enter does.
+            <button
+              type="button"
+              title="Send with the next message"
+              disabled={draft.trim() === "" && images.length === 0}
+              onClick={() => leave("later")}
+              className="h-7 shrink-0 rounded-dt-control px-2 text-[12px] text-dt-muted hover:bg-dt-raised hover:text-dt-text disabled:opacity-40 disabled:hover:bg-transparent max-sm:h-11 max-sm:px-3 max-sm:text-[14px]"
+            >
+              Later
+            </button>
+          )}
+          {!sends && (
+            // Sends the note, or keeps it for the message in the chat's field, as Enter does.
+            <button
+              type="button"
+              aria-label={sendsNote ? "Send the note now" : "Keep the note for the message"}
+              disabled={sendsNote && draft.trim() === "" && images.length === 0}
+              onClick={() => leave("enter")}
+              className={cx(
+                "grid size-7 shrink-0 place-items-center rounded-dt-control max-sm:size-11",
+                sendsNote
+                  ? "bg-dt-accent text-white hover:bg-dt-accent/85 disabled:bg-dt-raised disabled:text-dt-faint"
+                  : "bg-dt-raised text-dt-text hover:bg-dt-line",
+              )}
+            >
+              {sendsNote ? (
+                <ArrowUp className="size-4" aria-hidden />
+              ) : (
+                <Check className="size-4" aria-hidden />
+              )}
+            </button>
+          )}
+          {sends && (
+            <button
+              type="button"
+              aria-label={
+                draft.trim() !== "" || pointed === 0
+                  ? "Send now"
+                  : pointed === 1
+                    ? "Send the note now"
+                    : `Send ${String(pointed)} notes now`
+              }
+              disabled={!canSend}
+              onClick={() => {
+                const command = commands[at];
+                if (command === undefined) send();
+                else run(command);
+              }}
+              className="grid size-7 shrink-0 place-items-center rounded-dt-control bg-dt-accent text-white hover:bg-dt-accent/85 disabled:bg-dt-raised disabled:text-dt-faint max-sm:size-11"
+            >
               <ArrowUp className="size-4" aria-hidden />
-            ) : (
-              <Check className="size-4" aria-hidden />
-            )}
-          </button>
-        )}
-        {sends && (
-          <button
-            type="button"
-            aria-label={
-              draft.trim() !== "" || pointed === 0
-                ? "Send now"
-                : pointed === 1
-                  ? "Send the note now"
-                  : `Send ${String(pointed)} notes now`
-            }
-            disabled={!canSend}
-            onClick={() => {
-              const command = commands[at];
-              if (command === undefined) send();
-              else run(command);
-            }}
-            className="grid size-7 shrink-0 place-items-center rounded-dt-control bg-dt-accent text-white hover:bg-dt-accent/85 disabled:bg-dt-raised disabled:text-dt-faint max-sm:size-11"
-          >
-            <ArrowUp className="size-4" aria-hidden />
-          </button>
-        )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
