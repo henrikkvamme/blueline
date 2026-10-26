@@ -698,36 +698,74 @@ the script tag in front of it.
 
 1. **The channel as one handler.** The four routes the Vite plugin serves now, `feedback`,
    `images`, `status` and `listening`, move into one Node request handler for one app's
-   files, with the same rules: a note is JSON from the page or from a tool, gets its ID
-   and version (`stamped`), and is appended; an image is at most 20 MB of a known type. The
-   plugin uses the handler until B2. It stays plain Node, with `.ts` imports, as Node loads
-   the plugin's source directly.
+   files, with the same rules for the body: a note is JSON, gets its ID and version
+   (`stamped`), and is appended; an image is at most 20 MB of a known type. Who may write is
+   not the handler's rule: it takes an `allowed(request)` check. The plugin gives its own,
+   `fromPage`, the page of the dev server's own host; the server gives the app's
+   registered origins. The plugin uses the handler until B2. It stays plain Node, with
+   `.ts` imports, as Node loads the plugin's source directly.
 2. **One server for each machine.** `blueline serve` listens on `127.0.0.1` on one known
-   port, 4399, or `BLUELINE_PORT`. `GET /blueline/health` says it is Blueline, with its
-   version and process ID. A second `serve` that finds the port taken asks it: if Blueline
-   answers, it says so and exits 0; anything else is an error that names the port. Node's
-   `http` serves; Effect runs the command and closes the server on a signal.
+   port, 4399, or `BLUELINE_PORT`. Every request, the health check and registration too,
+   must name the server in its `Host`: `127.0.0.1`, `localhost` or `[::1]`, with the port.
+   Any other `Host` gets 421 before any route runs, so a page that rebinds a name of its own
+   to the loopback address reads nothing. `GET /blueline/health` answers
+   `{ blueline: true, protocol, version, pid }`; `protocol` is 1 and changes only when the
+   routes or the registration change. A second `serve` that finds the port taken asks it
+   for at most one second: the same protocol says so and exits 0; another protocol is an
+   error that names both; no answer, or one that is not Blueline's, is an error that names
+   the port. Node's `http` serves; Effect runs the command and closes the server on a
+   signal.
 3. **Registration.** A dev server sends `POST /blueline/register` with its root, its
-   origin, its process ID and, if it has them, its files. A request from a browser, one
-   with an `Origin`, cannot register. The server finds the repository: the real path of
-   `git rev-parse --show-toplevel` from the root, so a worktree is its own repository. An
-   app is one root: the same root again is the same app, with one more origin, as two dev
-   servers for one repository; another root in the same repository is another app. The
-   app's name is the repository's folder name, then the root's path inside it, in
-   lowercase with hyphens, and a number when another repository took it. The answer gives
-   the app's name, its base `/blueline/<app>/` and its files, by default in
-   `<root>/.blueline/`. The server keeps the apps in memory. A dev server's registration
-   ends when its process no longer runs, checked on each request; no timer ends it.
-4. **Routes and origins.** `/blueline/<app>/<route>` runs the channel handler on the app's
-   files. A request with an `Origin` must come from one of the app's registered origins:
-   then the answer allows that origin (CORS, `Vary: Origin`), and an `OPTIONS` preflight
-   for a JSON or image `POST` is answered. Any other origin gets 403, and an unknown app 404. A request with no `Origin`, from the agent's tools, is served as now.
-5. **Tests.** In Node, on a server started in the test on a free port: two repositories
-   get two apps with their own files; two dev servers for one root are one app with two
-   origins, and a third origin gets 403; a root inside a repository gets the name with its
-   path; a preflight and a `POST` from a registered origin get the CORS headers; a browser
-   cannot register; a registration ends once its process is gone; a second `serve` finds
-   the first. The plugin's channel tests still pass on the handler.
+   origin and, if it has them, its files; a request with an `Origin`, from a browser,
+   cannot register. The response sends one JSON line, the app, and then stays open: the
+   registration lasts while it is open, and ends when the dev server stops, however it
+   stops. No process ID or timer decides it, so a reused process ID cannot keep it. A dev
+   server whose registration ends while it runs, as when `serve` restarts, registers
+   again; that client is the plugin's, in B2.
+   - **The app.** An app is one root, by its real path. The repository is the real path of
+     `git rev-parse --show-toplevel` from the root, so a worktree is its own repository.
+     The same root again is the same app; another root in the same repository is another
+     app.
+   - **Its origins.** Each registration owns the origin it gave. The app's origins are
+     those of its open registrations, so when one of two dev servers stops, its origin
+     goes and the other's stays; two registrations with one origin keep it until both end.
+   - **Its name.** The repository's folder name, then the root's path inside it, in
+     lowercase with hyphens. A name that another root has, in any repository, gets the
+     next free number, so `apps/foo-bar` and `apps/foo/bar` are two names.
+   - **Its files.** By default `<root>/.blueline/feedback.jsonl`, `status.json`,
+     `images/` and `feedback.jsonl.listening.json`, as `blueline listen` writes it. A
+     relative path given is from the root. The first registration of a root sets them; a
+     later one with other files gets 409, and the files stay.
+   - **The answer:** the app's name, its base `/blueline/<app>/`, its files and the
+     protocol.
+4. **What the server keeps.** An app stays after its registrations end, with no origins,
+   so its notes can still be read and answered. The server writes the apps, each with its
+   root, repository, name and files, to `apps.json` in Blueline's state folder:
+   `$XDG_STATE_HOME/blueline`, by default `~/.local/state/blueline`, or `BLUELINE_STATE`.
+   It reads the file when it starts, so a name stays the same across restarts.
+   `GET /blueline/apps?repository=<path>`, from a tool only, lists a repository's apps and
+   their files, for the agent's side in C2, which registers by repository (ADR 0005).
+5. **Routes and origins.** `/blueline/<app>/<route>` runs the channel handler on the app's
+   files. A request with an `Origin` must come from one of the app's origins: then the
+   answer allows that origin (CORS, `Vary: Origin`), and an `OPTIONS` preflight for a JSON
+   or image `POST` is answered. Any other origin gets 403, with nothing written, and an
+   unknown app 404. A request with no `Origin` and a loopback `Host` is a tool's, and is
+   served as now.
+6. **Tests.** In Node, on a server started in the test on a free port, with temporary
+   repositories and state folder:
+   - The handler, through the plugin's check and through the server's: each route over
+     HTTP, a note appended with its ID, an image written and read back, JSON that does not
+     parse, a type that is not JSON or not an image, an image over the limit, other routes,
+     and a refused write that writes nothing.
+   - The server: two repositories get two apps with their own files; two dev servers for
+     one root are one app, and when one stops only its origin goes; a third origin gets
+     403; `apps/foo-bar` and `apps/foo/bar` get two names; a symlink to a root is the same
+     app; other files for a known root get 409; a browser cannot register; another `Host`
+     gets 421, also with no `Origin`; a preflight and a `POST` from an origin get the CORS
+     headers; an app and its name are kept across a restart, and listed for its
+     repository.
+   - A second `serve`: it finds the first, refuses another protocol, and fails in time on
+     a listener that is not Blueline or does not answer.
 
 ## Evals
 
