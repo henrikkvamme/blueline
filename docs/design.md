@@ -617,39 +617,73 @@ it. An app of any framework gives that code to `part`, from the main entry and a
 const rows = part("Request rows", {
   variants: ["Table", "Cards"], // the first is the one the app ships
   states: ["Empty"],
-  // Draws the part into `into`, as `shown` says, and returns what takes it out again.
-  show: (into, { variant, state }) => draw(into, variant, state),
-  // Who draws the marked element on the page: Blueline by default, or the app.
-  page: "blueline",
+  // Draws a copy of the part into `into`: the variant, in a state or the page's own, of the
+  // part whose element on the page is `source`. Returns what takes it out again.
+  show: (into, { variant, state, source }) => mountRows(into, rowsOf(source), variant, state),
 });
-rows.shown(); // { variant, state }
-rows.subscribe(() => render()); // for `page: "app"`
+// The app draws the marked element on the page from what the reviewer shows.
+rows.subscribe(() => render(rows.shown())); // shown(): { variant, state }
 rows.dispose();
 ```
 
-1. **The core part.** `src/part/part.ts`, with no React. A MutationObserver finds each
-   element marked with a declared part's name, and each one is an instance in the store, as
-   a React part is. The element's own content is the first variant with no state. While
-   the reviewer shows another, Blueline moves that content aside and calls `show` on the
-   element; back on the first, it puts the content back. With `page: "app"`, Blueline does
-   not touch the element: the app reads `shown` and draws it. While the part is lifted,
-   Blueline makes a light child of the lift's host for each option, with its slot, and
-   calls `show` into it; the cleanup runs when the option goes. An instance goes when its
-   element leaves the page, and `dispose` takes the part and its copies away.
-2. **Parts in markup.** An element marked `data-blueline-part` with `<template
-   data-blueline-variant="<label>">` children, and optionally `data-blueline-state`, is a
-   part with no code: its variants and states are its templates', and `show` clones the
-   template. The element's own content, outside the templates, is the first variant.
+Each framework can start a view in a given element: Elm's `init({ node })`, Vue's `mount`,
+Svelte's `mount`, Solid's `render`, Lit's `render`, React's `createRoot`. So `show` is the
+contract for the lift's copies. Copies that an app draws inside its own one tree would need
+a host the app gives; that waits until an app needs it (To verify).
+
+1. **The core part.** `src/part/part.ts`, with no React. `part` declares the part's
+   variants, states and `show` in the shared store. One MutationObserver, shared by every
+   copy of Blueline on the page, finds each element marked with a declared name, except in
+   a Blueline host (`[data-blueline-host]`) and in an element that a registered instance
+   already holds. Each element is an instance in the store, as a React part is. An element
+   that leaves the page, checked once its mutations are done, ends its instance, so a move
+   keeps it. The app draws the element on the page; Blueline never changes it. While the
+   part is lifted, Blueline keeps one copy for each slot of the lift's stage: a light child
+   of the lift's host with the slot's name, filled by `show` with the instance's element as
+   `source`. When a slot's variant or resolved state changes, the copy's cleanup runs and
+   `show` draws it again; a slot that goes is cleaned up and removed. Every copy is cleaned
+   up when the part lands, when its instance ends, when the page's owner changes, and on
+   `dispose`.
+2. **Parts in markup.** A part with no code, for static HTML. Blueline owns the element's
+   content: the app does not change it.
+
+   ```html
+   <div data-blueline-part="Request rows" data-blueline-variant="Table">
+     <table>
+       …
+     </table>
+     <!-- Table, as it is -->
+     <template data-blueline-state="Empty">…</template>
+     <!-- Table, Empty -->
+     <template data-blueline-variant="Cards">…</template>
+     <!-- Cards, as it is -->
+     <template data-blueline-variant="Cards" data-blueline-state="Empty">…</template>
+   </div>
+   ```
+
+   The element's `data-blueline-variant` names its own content, the first variant; it is
+   needed once a template names another. The variants are that label, then each template's
+   label in order; the states are the templates' state names in order. A template with no
+   variant is the first variant's. A variant with no template for a state shows that
+   variant as it is. `show` clones the template; on the page, Blueline moves the element's
+   own content aside while another variant or a state shows, and puts it back after.
+
 3. **React on the same store.** `variants()` keeps drawing its copies with portals, so
-   each copy keeps the app's props and React context, and it registers through the same
-   store calls as `part`. The observer skips an element that a registered instance holds,
-   so a React part is never counted twice.
-4. **Tests.** Browser tests on a page with no React and no Tailwind: a part from code and
-   one from markup; `v` lifts each, its slots hold the copies `show` drew, Enter puts the
-   variant on the page, Escape on the first puts the page's content back, an element that
-   leaves the page ends its instance, and `dispose` removes the copies. The demo's React
-   tests still pass. `blueline apply` for a part outside `variants()` stays open (To
-   verify).
+   each copy keeps the app's props and React context. Its element is registered by its
+   layout effect before the observer runs, so the observer skips it.
+4. **Tests.** Browser tests on a page with no React and no Tailwind:
+   - a code part with two instances of different content: `v` lifts one, and each slot's
+     copy shows that instance's content in its variant and state, also after moves on both
+     lines; Enter puts the variant on the page through `subscribe`;
+   - a markup part: its base content, a named state, and a missing combination, on the
+     page and in the lift; going back to the base puts the page's content back;
+   - a marked part inside a copy, and in a Blueline host, is not an instance; an element
+     moved in the page keeps its instance; one removed ends it and its copies;
+   - a part declared by one copy of the module and found by the other's observer;
+   - `dispose`, landing and an owner change clean up every copy.
+
+   The demo's React tests also check the copies' content after moves on both lines.
+   `blueline apply` for a part outside `variants()` stays open (To verify).
 
 ## Evals
 
@@ -678,5 +712,7 @@ Evals come after the build, once the design and the behaviour are agreed in real
 
 - T3's MCP steer for an outside process: the public docs do not show it yet.
 - Whether an outside process can reach a running Codex TUI through the app-server.
+- Whether an app that draws one tree, as Elm or Foldkit, wants its lift copies in that tree,
+  with a host the app gives, instead of a view started by `show`.
 - How `blueline apply` treats a part that is marked with `data-blueline-part` and not a
   `variants()` call.
