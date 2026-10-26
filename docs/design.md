@@ -869,50 +869,101 @@ must do:
 ### D1 in steps
 
 D1 lets an app give its journeys as data, in `blueline.config.ts` in its root, with no adapter
-code. The config becomes an adapter on the page, so the walk stays as it is.
+code. The config becomes an adapter on the page, so the walk stays as it is, with the changes
+in step 3.
 
-1. **The config.** `@henrikkvamme/blueline/config` gives `defineConfig` and its types, with
-   no code to run beyond it. A journey has an `id`, a `title` and its steps. A step has what
-   a `DevStep` has, with `group` as one string, and these, each a list of actions or an
-   async function that gets an `AbortSignal`:
+1. **The config.** `@henrikkvamme/blueline/config` gives `defineConfig`, which gives its
+   argument back, and its types; it has no other code. A journey has an `id`, a `title` and
+   its steps. A step has what a `DevStep` has, with `group` as one string, which is both
+   the group's ID and its title. It also has these, each a list of actions or an async
+   function that gets an `AbortSignal`:
    - `enter`: opens the step's world, as a path to open and a click;
    - `setup`: opens the part, again before each variant;
-   - `reset`: takes a variant's state off; it runs to its end;
+   - `reset`: takes a variant's state off;
    - `exit`: runs when the walk leaves the step, after `reset`;
    - `ready`: the selectors that show the step is ready, or a function;
-   - `timeout`: how long to wait, 5 seconds by default.
+   - `timeout`: how many milliseconds each of these may take, 5000 by default.
 
-   A variant has a `label`, a `choice` or `show`, actions or a function.
+   A variant has a `label`, unique in its step, and a `choice` or `show`, actions or a
+   function. Journey IDs are unique, and step IDs are unique across all journeys, as notes,
+   verdicts and variants are kept by them. `page` and IDs that start with `page:` or
+   `place:` are the page's own review's. A config that breaks a rule is not used: the page
+   has its own review only, the panel's tree says why in place of the journeys, and the
+   console says it too.
 
-2. **Actions.** `{ open: path }` goes to the path with a new page load, unless the page is
-   on it; the walk takes the step up again on the new page, where `open` finds it there.
-   `{ click: selector }`, `{ type: text, into: selector }`, which sets the value as a person
-   types it, so a framework's input handler runs, and `{ press: key, on?: selector }` wait
-   for their element first. `{ wait: selector }` waits for it, and `{ emit: name, detail }`
-   sends a window `CustomEvent`. Each wait ends at the step's `timeout` with a reason, such
-   as "No .ov-dock after 5 s".
-3. **The walk.** `DevStep` gets `ready` and `exit`, for an adapter in code too. Before each
-   variant the walk runs the step's `reset`, then `setup`, then the variant, then waits for
-   `ready`. When it leaves the step, it runs `reset`, then `exit`. A step whose code fails or
-   is not ready in time keeps the reason: its row in the tree and its card show it, in the
-   panel's error colour, until the step opens again. The console still has the cause.
+2. **Actions.**
+   - `{ open: path }` may only be the first action of `enter`. It goes to the path with a
+     new page load, unless the page is there already.
+   - `{ click: selector }` clicks the element. `{ type: text, into: selector }` focuses
+     the field and sets its value with the browser's own setter of the field's kind, then
+     sends a bubbling `input` and `change` event, as a framework such as React reads them.
+   - `{ press: key, on?: selector, shift?, ctrl?, alt?, meta? }` sends `keydown` and `keyup`
+     with that key to the element, or to the focused one. These events have no default
+     action in a browser, so `press` runs the app's own key handlers only; on a field in a
+     form, Enter that no handler stopped submits the form (`requestSubmit`). Tab is not an
+     action: focus a field by its selector. Blueline's own keys do not act on an event that
+     an action sends.
+   - `{ wait: selector }` waits for the element, and `{ emit: name, detail }` sends a
+     window `CustomEvent`.
+   - Each action that names an element waits for it first.
+   - **A new page load in a step.** Before each action, the walk keeps where it is in the
+     step, for the tab. When an action loads a new page, as a link does, the walk takes the
+     step up again on the new page, after the action that loaded it, and does not run the
+     step's actions again from the start.
+3. **The walk.** `DevStep` gets `ready`, `exit` and `timeout`, for an adapter in code too.
+   - **Order.** Before each variant the walk runs the step's `reset`, then `setup`, then the
+     variant, then waits for `ready`. When it leaves the step, it runs `reset`, then `exit`,
+     and `exit` runs even when `reset` failed.
+   - **Leaving is a step of the machine.** The walk leaves a step, to another, on Escape, on
+     Finish and when the tools stop, and the next step's world opens only after `reset`
+     and `exit` end. When the reviewer goes on again while the walk leaves, it opens only
+     the newest step. When the tools are taken off, `reset` and `exit` start, and the tools
+     do not wait for them.
+   - **Time.** Each phase has the step's `timeout`. Its signal aborts at the deadline, and a
+     function that does not end by then fails the phase, as "ready did not end in 5 s". A
+     phase that fails stops the phases after it. When the walk leaves a step, the pending
+     phase's signal aborts.
+   - **The reason.** A failed or late phase keeps its reason in the session's state, by the
+     step's ID, until the step opens again; a run that the walk cancelled keeps none. The
+     step's row in the tree and its card show it, in the panel's error colour. The console
+     still has the cause.
+   - **A page that loads late.** When the step's targets go after it is ready, the walk runs
+     the variant's whole order again, reset, setup, the variant and ready, a few times, as
+     the old `keep` ran only `setup`.
+   - **The place.** The browser keeps the step by its ID and the variant by its label, so a
+     changed config keeps the place. When the step is gone, the walk takes the step at the
+     place it had, or the journey's first; when the variant is gone, the first. A review kept
+     before D1, by place only, is read as before.
 4. **The page gets the config.** The config module is an adapter for `mountPage`
    (`configAdapter`), with the page's routes.
    - **Vite plugin.** When the root has `blueline.config.ts` (or `.js`), the plugin's tag
-     imports it through Vite, so it may import the app's code. A change to it reloads the
-     page, as Vite does for a module with no hot update; the review keeps its place.
-   - **A tag by hand.** The server serves `/blueline/<app>/config.js` from the app's root:
-     the TypeScript's types stripped by Node, and its one import, of
-     `@henrikkvamme/blueline/config`, taken out. A config with another import gets 500 and a
-     reason that names the Vite plugin. The tag sends the page an event when the file
-     changes (`/blueline/<app>/events`, server-sent), and the page loads again.
+     imports it through Vite, from the dev server's `base`, so it may import the app's code.
+     A change to it loads the page again, as Vite does for a module with no hot update; the
+     review keeps its place (step 3).
+   - **A tag by hand.** The server serves `/blueline/<app>/config.js` from the app's root,
+     its TypeScript types stripped by Node. Its import of `@henrikkvamme/blueline/config` is
+     kept, and its specifier names the server's `/blueline/config.js`, the built config
+     module. The server finds the imports with `es-module-lexer`; a config with another
+     import gets 500 and a reason that names the Vite plugin. `/blueline/<app>/events` sends
+     the page an event when the file changes (server-sent), and the page loads again. Both
+     routes keep B2's rules: the server's own `Host`, and the app's origins only, with CORS.
 5. **Tests.**
-   - Node: the config's types; the server's `config.js` with types stripped, its import
-     taken out, 500 for another import, and the event when the file changes.
+   - Node: the config's rules and their reasons; `config.js` with types stripped and its
+     import named again, 500 for another import, 403 for another origin and 404 for another
+     app; the event when the file changes, refused to another origin.
    - Browser, on a page with no React: each action, with a wait that ends in time and says
-     why; `open` on a new page load; the order reset, setup, show, ready for each variant,
-     and reset, exit on leaving; a step that is not ready shows its reason on its row and
-     its card, and loses it when it opens again; a config from the Vite plugin's tag.
+     why; `press` on an app's key handler and Enter that submits a form, and Blueline's keys
+     that ignore it; the order of the phases for each variant and on leaving, with the
+     reviewer going on fast while the walk leaves; a function that never ends; a reason on
+     the row and the card that goes when the step opens again; the target that the page
+     draws again after the step is ready keeps the variant.
+   - Browser, with React: `type` into a React-controlled field, and the component's state
+     after it draws again.
+   - End to end, in Node with Playwright's Chromium on a real dev server and `blueline serve`:
+     the plugin's tag with a `base` of `/app/` mounts the config; a config edit loads the
+     page again on the same step, also with steps put in another order; `open` and a link
+     that loads a new page in a step go on after it; a tag by hand runs the served
+     `config.js` and loads again when the file changes.
 
 ## Evals
 
