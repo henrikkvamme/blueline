@@ -94,9 +94,14 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
     changed();
   };
 
+  // A link from the agent starts its review, on its step. It is read before the machine
+  // starts: the kept review's step would open its own page first, and the link would go with
+  // the address it had. While the link waits, the kept review opens no step.
+  let linked = linkedReview(location.href);
+  const stored = loadKept(storageKey);
   const actor = createActor(liveMachine({ adapter, shift, path }), {
     input: {
-      kept: loadKept(storageKey),
+      kept: linked === undefined ? stored : { ...stored, active: false },
       journeys: shapesOf(info.journeys),
       now: now(),
       place: placeId(path()),
@@ -114,13 +119,14 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
     return true;
   };
 
-  // A link from the agent starts its review, on its step, and leaves the address clean. Its
-  // journey may be the page's own, whose parts come after the session starts.
+  // The link's journey may be the page's own, whose parts come after the session starts. Once
+  // it starts, the address is clean.
   const followLink = () => {
-    const linked = linkedReview(location.href);
-    if (linked === undefined || !info.journeys.some((j) => j.id === linked.journey)) return;
-    history.replaceState(history.state, "", linked.rest);
-    start(linked.journey, linked.step);
+    const link = linked;
+    if (link === undefined || !info.journeys.some((j) => j.id === link.journey)) return;
+    linked = undefined;
+    history.replaceState(history.state, "", link.rest);
+    start(link.journey, link.step);
   };
 
   // The parts on the page show the reviewer's verdicts, as a deleted variant leaves the

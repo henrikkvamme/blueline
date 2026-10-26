@@ -83,6 +83,24 @@ describe("a session", () => {
     expect(address).toBe("http://localhost/");
   });
 
+  it("follows a link when the kept review is on a step that opens another page", () => {
+    kept.set("test", JSON.stringify({ journey: "prep", active: true, at: 2 }));
+    address = "http://localhost/?review=prep&step=a";
+    const opened: string[] = [];
+    const moving: DevAdapter<null> = {
+      ...adapter,
+      // The step's page opens at once, as a router's push does.
+      enter: (s) => {
+        opened.push(s.id);
+        address = `http://localhost/${s.id}`;
+        return null;
+      },
+    };
+    session = startSession({ adapter: moving, storageKey: "test", path: () => "/" });
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 0 });
+    expect(opened).toEqual(["a"]);
+  });
+
   it("starts idle with no link, and keeps the review in the browser's storage", () => {
     address = "http://localhost/";
     session = start();
