@@ -489,13 +489,35 @@ Each step leaves the tool working.
    Steps and adapters take Promises. React, Tailwind and Effect are no longer peers.
 3. **Server.** Add `blueline serve`, `blueline dev`, the Vite plugin and the script tag.
    The dev dashboard drops its import aliases. Level 0 works in any app with no code.
-4. **Delivery.** Add registered agents and the delivery adapters: T3 with steer, the Codex
-   app-server, and starting an agent. Retire the launchd service.
+4. **Delivery.** Pull first: `blueline mcp` and harness hooks for an agent in a turn. Wake
+   adapters (`claude`, `codex`, `t3`, `command`) only for an idle agent. Retire the launchd
+   service. ADR 0005 records the change from ADR 0003's push design and the cache rules.
 5. **Journeys as data.** Add `blueline.config.ts`. The dev dashboard moves its steps there.
 6. **Agent guide.** Add `blueline guide` and `blueline doctor`. Notes carry their own
    instructions. The React app at work moves to the npm package, and the old package
    leaves its repository.
 7. **Next.js.** Prove `blueline dev` and the server in a Next.js app.
+
+### Build order (2026-10-26)
+
+Step 1 is done. Steps 2 to 5 now land together, so that the dev dashboard runs on the
+agnostic package. First, the `review-demo` branch merges into `main`. Then each slice lands
+on `main` with its tests, and the demo works after each.
+
+| Slice | What                                                                                                                                                                                                          | Depends on | Owns                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------- |
+| A1    | Core API. `src/core`: the session machine, the part store, the registry, the channel client, the keymap. No React import. `mount(options)` with Promises; the core on `window.blueline`. Effect stays inside. | -          | `src/core`, `src/session`, `src/keys`    |
+| A2    | Bundled overlay. React, the UI and its CSS bundled into one script that mounts in a shadow root. No React, Tailwind or Effect peer.                                                                           | A1         | `src/ui`, `src/part/lift.tsx`, the build |
+| A3    | Parts without React. A plain part API, `blueline.part(name, { variants, states, show })`, and `data-blueline-part`. `variants()` in `/react` uses it.                                                         | A1         | `src/part`, `/react`                     |
+| B1    | `blueline serve`: one process for each machine, the same routes, `.blueline/` for each repository, and the overlay script.                                                                                    | A2         | `bin/serve`, `src/io`                    |
+| B2    | Ways in: the Vite plugin (a script tag and a proxy to the server, which it starts), a script tag by hand, `blueline dev -- <cmd>`.                                                                            | B1         | `src/vite.ts`, `bin/dev`                 |
+| C1    | `blueline mcp`: `wait_for_feedback`, `reply`, `apply`, read from the files, so it does not wait for B1. The tools and their words never change, for the prompt cache.                                         | research   | `bin/mcp`, `src/mcp`                     |
+| C2    | Hooks and wake adapters, and ADR 0005. Retire the launchd service.                                                                                                                                            | C1, B1     | `src/deliver`, the dotfiles service      |
+| D1    | `blueline.config.ts`: journeys as data, with the actions `open`, `click`, `type`, `press`, `wait` and `emit`; the server sends it to the page and reloads it on change.                                       | A1, B1     | `src/config`                             |
+| E1    | The dev dashboard on the package: the Vite plugin in place of its aliases and React island, its journeys in `blueline.config.ts`, its own event through `emit`. Merge after the other session's edits land.   | B2, D1     | the dashboard repository                 |
+
+C1 runs beside A and B, in its own worktree. The rest goes in order, one slice at a time.
+The React app at work and Next.js (steps 6 and 7) come after E1.
 
 ## Evals
 
