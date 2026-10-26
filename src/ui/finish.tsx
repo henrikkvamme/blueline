@@ -3,6 +3,7 @@ import { isListened } from "../io/listening";
 import { handoffJourney } from "../notes/handoff";
 import type { Note } from "../notes/note";
 import { Blocks } from "./blocks";
+import { allSettled } from "./progress";
 import { Thread } from "./composer";
 import { cx } from "./cx";
 import { useNotes, useSession, useStep, useTools } from "./session";
@@ -85,10 +86,7 @@ export function FinishView() {
       className="flex min-h-0 flex-1 flex-col max-sm:flex-initial"
     >
       <div className={BODY}>
-        <Head
-          title={`All ${String(steps.length)} steps settled`}
-          line="Finish to send the review to the agent."
-        />
+        <Head title={allSettled(steps.length)} line="Finish to send the review to the agent." />
         <Summary steps={steps} />
       </div>
       <Foot>
@@ -134,7 +132,7 @@ export function HandoffView({ note }: { readonly note: Note }) {
       className="flex min-h-0 flex-1 flex-col max-sm:flex-initial"
     >
       <div className={BODY}>
-        <Head title="Sent to the agent" line={`All ${String(steps.length)} steps settled.`} />
+        <Head title="Sent to the agent" line={`${allSettled(steps.length)}.`} />
         <Summary steps={steps} />
         <AgentAnswer note={note} journey={journeyId} />
       </div>

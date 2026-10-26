@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_DOTS, progressOf } from "../src/ui/progress";
+import { allSettled, MAX_DOTS, progressOf } from "../src/ui/progress";
 
 describe("the journey's progress", () => {
   it("shows a dot for each step up to ten steps", () => {
@@ -29,5 +29,12 @@ describe("the journey's progress", () => {
 
   it("keeps the step's place on the bar when the walk stands past its end", () => {
     expect(progressOf(12, 0, 40, false)).toMatchObject({ label: "12 of 12" });
+  });
+});
+
+describe("the finish's words", () => {
+  it("count the steps, and say one step in the singular", () => {
+    expect(allSettled(5)).toBe("All 5 steps settled");
+    expect(allSettled(1)).toBe("The step is settled");
   });
 });

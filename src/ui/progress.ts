@@ -37,3 +37,7 @@ export function progressOf(
     label: `${String(here === undefined ? steps : here + 1)} of ${String(steps)}`,
   };
 }
+
+/** The finish's words for a journey with every step settled. A page review often has one. */
+export const allSettled = (steps: number) =>
+  steps === 1 ? "The step is settled" : `All ${String(steps)} steps settled`;
