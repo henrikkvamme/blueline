@@ -10,6 +10,7 @@ import { applyCommand } from "./apply-run.ts";
 import { commandOf, USAGE } from "./lines.ts";
 import { listen, review } from "./listen.ts";
 import { reply } from "./reply.ts";
+import { serve } from "./serve.ts";
 
 const program = Effect.gen(function* () {
   const command = commandOf(yield* (yield* Stdio.Stdio).args);
@@ -24,6 +25,8 @@ const program = Effect.gen(function* () {
       return yield* review(command);
     case "reply":
       return yield* reply(command);
+    case "serve":
+      return yield* Effect.scoped(serve);
     case "apply":
       // What the agent must decide, as a plain line, and no stack.
       return yield* applyCommand(command).pipe(

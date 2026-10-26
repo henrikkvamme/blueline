@@ -4,7 +4,8 @@
     "lib": ["ES2023"],
     "types": ["node"],
     "allowImportingTsExtensions": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "resolveJsonModule": true
   },
   "include": ["bin/*.ts", "scripts/*.ts", "src/vite.ts", "src/server/*.ts", "vite.config.ts"]
 }

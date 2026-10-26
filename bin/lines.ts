@@ -13,10 +13,13 @@ export const USAGE = `Usage:
   blueline reply <status.json> <note id> working [--blocks <file.json>]
   blueline reply <status.json> <note id> replied <text> [--variant <label>] [--blocks <file.json>]
   blueline reply <status.json> <note id> settled
-  blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]`;
+  blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
+  blueline serve`;
 
 /** What the command line asks for. */
 export type Command =
+  /** Serves every app's channel on the machine (src/server/serve.ts). */
+  | { readonly kind: "serve" }
   | {
       readonly kind: "listen";
       readonly file: string;
@@ -67,6 +70,7 @@ export function commandOf(args: readonly string[]): Command | undefined {
     } else words.push(arg);
   }
   const [kind, file, id, state, text] = words;
+  if (kind === "serve" && words.length === 1 && flags.size === 0) return { kind };
   if (kind === "listen" && file !== undefined && words.length === 2) {
     const journey = flags.get("journey");
     return { kind, file, journey, name: flags.get("as") ?? journey ?? "agent" };

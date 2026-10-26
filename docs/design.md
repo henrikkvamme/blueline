@@ -723,8 +723,8 @@ the script tag in front of it.
    server whose registration ends while it runs, as when `serve` restarts, registers
    again; that client is the plugin's, in B2.
    - **The app.** An app is one root, by its real path. The repository is the real path of
-     `git rev-parse --show-toplevel` from the root, so a worktree is its own repository.
-     The same root again is the same app; another root in the same repository is another
+     `git rev-parse --show-toplevel` from the root, so a worktree is its own repository; a
+     root outside `git` is its own repository. The same root again is the same app; another root in the same repository is another
      app.
    - **Its origins.** Each registration owns the origin it gave. The app's origins are
      those of its open registrations, so when one of two dev servers stops, its origin
@@ -734,8 +734,9 @@ the script tag in front of it.
      next free number, so `apps/foo-bar` and `apps/foo/bar` are two names.
    - **Its files.** By default `<root>/.blueline/feedback.jsonl`, `status.json`,
      `images/` and `feedback.jsonl.listening.json`, as `blueline listen` writes it. A
-     relative path given is from the root. The first registration of a root sets them; a
-     later one with other files gets 409, and the files stay.
+     relative path given is from the root. While a dev server has the app registered, a
+     registration with other files gets 409, and the files stay; once none has it, the
+     next registration's files are the app's.
    - **The answer:** the app's name, its base `/blueline/<app>/`, its files and the
      protocol.
 4. **What the server keeps.** An app stays after its registrations end, with no origins,

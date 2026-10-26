@@ -502,6 +502,19 @@ last settle, which leaves no step open, wakes the agent: the review is done, and
 applies the kept variants. The tools send that settle only when the reviewer finishes the
 review, so the agent wakes once, at the end. A listener that starts again still has the settles it held.
 
+### One server for the machine
+
+`blueline serve` keeps every app's channel on the machine, on `127.0.0.1:4399`, or the port in
+`BLUELINE_PORT`. Start it once: a second `blueline serve` finds the first, says so and exits.
+
+A dev server registers its app's root and its page's origin with `POST /blueline/register`, and the page then reaches the
+app's channel under `/blueline/<app>/`. The app's name is its repository's folder and its
+path there, such as `shop-apps-web`; a worktree is its own repository. The notes stay in the
+app's `.blueline/` folder. A page may use the channel only from an origin that a running dev
+server registered; the agent's tools, which send no origin, always may. The server answers
+only a request to its own address, so another site cannot reach it by a name of its own. It
+keeps its apps in `~/.local/state/blueline/apps.json`, or in `BLUELINE_STATE`.
+
 ### Answer the review
 
 The last settle, the one that Finish sends, has an `id` and a `reply` hint. The `id` is the
