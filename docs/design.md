@@ -163,24 +163,26 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 - **Its top line.** The journey's title, in muted text, is a button that unfolds the tree.
   After it come the journey's progress as dots, one for each step: green when settled, grey
   when open, and the step shown as a wider blue pill. Then **More** and **Hide**. More holds
-  Reset the step, Hide the tools (the preview), Undo and the `?` keys. Hide stays visible,
-  beside Ctrl+B.
+  Reset the step, Next reply, Hide the tools (the preview), Undo and the `?` keys. Next reply
+  is grey when no reply is new. Hide stays visible, beside Ctrl+B.
 - **The step fills the panel.** A faint line gives the step's number and group. Under it are
   the step's title, large, then what to look at and what to try, in muted words.
 - **One control for the variants.** When the step has more than one variant, of its part or
   its own, a **Variants** list shows them as radio rows, with a quiet **Lift** at its right.
   The row of the variant shown is raised. A click on a row shows that variant on the page, as
-  `h` and `l` do. A deleted variant has no row. The states show only in the lift.
+  `j` and `k` do. A deleted variant has no row. The states show only in the lift.
 - **The chat fills the rest, and scrolls.** It is the step's chat. When the page's chat has
   messages, a quiet button at the chat's top opens it, and **Back to the step** returns. Tab
   in the message field also switches.
 - **A fixed foot.** Under the message field, a bar holds the step before, Settle and the step
-  after. Settle is the one primary button, as wide as the room between the arrows. On a
+  after, as a left and a right chevron. Settle is the one primary button, as wide as the room
+  between the chevrons. On a
   settled step it reads **Settled** in green, keeps its width, and opens the step again. The
   foot does not move from step to step. A click on a step control leaves the focus where it
   was, so Enter still settles.
 - **Off a step**, the panel shows the tree and the page's chat, with the same top line, type
-  sizes, row height and radius.
+  sizes, row height and radius. One quiet line parts the tree from the chat. The message
+  field's words name the chat, as "A message on this page".
 - **The panel pushes the page aside.** The page narrows by the panel's width, so the
   panel covers nothing. One visible button on the panel and Ctrl+B hide it and show it
   again. An element that the app pins to the right edge can still sit under the panel.
@@ -195,52 +197,83 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 | Action                       | The walk                          | Light                       | Panel                                                  |
 | ---------------------------- | --------------------------------- | --------------------------- | ------------------------------------------------------ |
 | Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                         |
-| Ctrl+P                       | stays on the step                 | hides                       | hides, and only the eye shows                          |
+| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                          |
 | Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                                  |
 | A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step                                    |
 | The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                       |
 | Finish review                | ends: the journey is done         | off                         | shows the page's chat, and the journey goes to Settled |
 
 Leaving a step changes the place. Hiding changes only the view. So Esc moves the reviewer,
-and Ctrl+B and Ctrl+P only hide.
+and Ctrl+B and `p` only hide.
 
 ### Keys
 
+Agreed with Henrik on 2026-10-26.
+
 Blueline takes a key in the capture phase while its panel or one of its fields has the
-focus. Ctrl combinations always belong to Blueline. Other keys go to the app first.
+focus. Ctrl combinations always belong to Blueline. Other keys go to the app first. No key
+needs AltGr or Option on a Norwegian Mac, so no key is `[ ] { } \ | @ $ ~` or a backtick.
 
-One rule holds everywhere, as in the lift and the tree: across is the variant, down is the
-step.
+The keys move the way things stand on the screen, and each arrow key does what its vim key
+does. On a step, the panel's foot goes across: the step before, Settle and the step after.
+The variants stand in a list down the panel.
 
-- `h` and `l` show the previous and the next variant. Ctrl+H and Ctrl+L do the same when
-  the app takes `h` and `l`.
-- `j` and `k` go to the step after and before. Ctrl+J and Ctrl+K do the same.
-- Enter and `y` settle the step and go on to the next open step. Enter settles only when no
-  control of the app has the focus, so Enter on the app's own button still clicks it.
+| Key                               | What it does                                              |
+| --------------------------------- | --------------------------------------------------------- |
+| `h`, `l`, ←, →                    | the step before, the step after                           |
+| `j`, `k`, ↓, ↑                    | the next, the previous variant in the panel's list        |
+| `1` to `9`                        | the variant with that number                              |
+| `H`, `L`, Shift+←, Shift+→        | the open step before, after: settled steps are skipped    |
+| `g g`, `G`                        | the first, the last open step                             |
+| `y`, Enter                        | settle the step and go on to the next open step           |
+| `v`, Space                        | lift the part; again, put it back                         |
+| `i`                               | write a message                                           |
+| `m`, then a click                 | pin a note on the element clicked; Esc stops              |
+| `u`, Ctrl+Z, Cmd+Z                | undo                                                      |
+| Ctrl+R, Ctrl+Shift+Z, Cmd+Shift+Z | redo                                                      |
+| Esc                               | back one level                                            |
+| `p`                               | the preview: a tap hides or shows the tools; held, a peek |
+| Ctrl+B                            | hide the panel, or show it again                          |
+| `?`                               | the keys                                                  |
+
+- The arrow keys and Space act only on a step, and only while the focus is on the page
+  itself. On a field, a select, a slider, tabs or another control that uses them, they stay
+  the app's. Off a step, they scroll the page.
+- Enter settles only when no control of the app has the focus, so Enter on the app's own
+  button still clicks it. A held `y` or Enter settles once.
+- `p` acts at once as it goes down. When it comes up after 200 ms or more, it acts again, so
+  a hold only peeks.
+- The lift keeps its own keys: across through the variants with `h`, `l`, ← and →, and down
+  through the states with `j`, `k`, ↓ and ↑. `v`, Space and Esc put the part back. The tree
+  keeps its own keys too: `j` and `k` select a row, `l` and `h` open and close it, and
+  Ctrl+J and Ctrl+K select the open steps. In the tree, the arrows scroll.
 
 ### Settle
 
-A settle shows that it took. The light's outline turns green, a clear green and not the blue
-accent, and a check draws in its corner, for about 400 ms. The step's row in the tree gets
-its check. Then the walk goes on to the next open step. Undo runs the same motion
-backwards. With reduced motion, the colour changes with no movement, and the check only
-fades in. On a phone, the same motion shows above the sheet. A settled step keeps its green
-light.
+A settle goes on at once. The session settles the step, and the panel shows the next open
+step. The step's row in the tree gets its check. At the same time the old part shows that
+the settle took: its outline turns green, a clear green and not the blue accent, and a check
+draws in at its corner. The outline and the check then fade, while the light glides from the
+old part to the new one. The whole motion takes about 250 ms. With reduced motion, nothing
+moves: the green outline and the check only fade, and the light fades in on the new part. On
+a phone, the same motion shows above the sheet. A settled step keeps its green light, so a
+walk back to it shows that it is settled. Undo runs the motion backwards: the light comes
+back to the step green, and turns blue as its check draws out.
 
 A settle never lands on a step the reviewer has not seen: a key's auto-repeat does nothing,
-and while the motion plays, and until the next step's light is in place, another settle does
-nothing.
+and until the next step's light is in place, another settle does nothing. So a held `y`, or
+a quick burst of `y`, settles one step.
 
-After a settle, and on `j` and `k`, the light moves to the next part: it waits while the
-page scrolls there, glides from the old part's box to the new one in about 300 ms, eased
-out, and gives one soft pulse. On another page it fades in instead. With reduced motion it
-fades, with no glide or pulse.
+On `h` and `l`, the light moves to the next part: it waits while the page scrolls there,
+glides from the old part's box to the new one in about 250 ms, eased out, and gives one soft
+pulse. After a settle it glides at once, and follows the part as the page scrolls. On another
+page it fades in instead.
 
-The last settle does not end the walk. The panel shows the finish in place of the step:
-"All 5 steps settled", the kept variant of each part, the number of notes sent, a primary
-**Finish review**, with a send icon, in the place of Settle, and a back arrow in the place of
-the step before. Enter presses Finish, but only an Enter pressed after the finish shows. The
-back arrow, Escape and undo open the last step again. The last step's
+The last settle does not end the walk. The light turns green where it stands, and the
+panel shows the finish in place of the step: "All 5 steps settled", the kept variant of each part, the number of notes sent, a primary
+**Finish review**, with a send icon, in the place of Settle, and a back chevron in the place
+of the step before. Enter presses Finish, but only an Enter pressed after the finish shows.
+The back chevron, Escape and undo open the last step again. The last step's
 settle line, the one with `left: 0`, waits until Finish, so the agent wakes once. A reload
 keeps the finish.
 

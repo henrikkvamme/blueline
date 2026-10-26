@@ -31,8 +31,8 @@ tab shows each part on a map of the screen.
 - Parts: the **panel** on the right, with the **tree** of pages and journeys, the step and
   the chat; the **message field** at the bottom of the panel; the **bar** at the bottom
   centre, the panel's folded form, full on a step and small at other times; the **light**
-  around the step's part; a **pin**, the numbered mark of Alt+click, and its **note card**;
-  the **lift** (`v`); the **preview** (Ctrl+P).
+  around the step's part; a **pin**, the numbered mark of `m` or Alt+click, and its **note
+  card**; the **lift** (`v` or Space); the **preview** (`p`).
 - Words: a **review** walks a **journey** of **steps** in **groups**; an **open step** is
   not settled yet, and **settle** (`y` or Enter) says a step is right as it shows; **finish** ends the review once every step is settled. A **part** has
   **variants**. Each step and each page has one **chat** with the agent. A **note** is
@@ -52,16 +52,19 @@ The panel stands at the right, and the page narrows by its width, so the panel c
 nothing. Its top line holds the journey's title, the journey's progress, **More** and the
 button that hides the panel. The title unfolds the tree. The progress has a dot for each
 step: green when settled, grey when open, and a wider blue pill for the step shown. More holds
-Reset the step, Hide the tools, Undo and the keys (`?`).
+Reset the step, Next reply, Hide the tools, Undo and the keys (`?`). Next reply is grey when
+no reply is new.
 
 On a step, the step fills the rest of the panel. A faint line gives the step's number and
 group. Under it are the step's title, what to look at and what to try. When the step has
 more than one variant, the **Variants** list shows them as rows, with **Lift** at its right.
 The raised row is the variant that the page shows. A click on a row shows that variant, as
-`h` and `l` do. Then comes the step's chat, which scrolls, and the message field. At the
-foot are the step before, **Settle** and the step after. The foot stays in one place from
-step to step. A click on a variant row, Lift, an arrow or Settle leaves the focus where it
-was, so Enter settles next. Off a step, the panel shows the tree and the page's chat.
+`j` and `k` do. Then comes the step's chat, which scrolls, and the message field. At the
+foot are the step before, **Settle** and the step after, as a left and a right chevron. The foot stays in one place from
+step to step. A click on a variant row, Lift, a chevron or Settle leaves the focus where it
+was, so Enter settles next. Off a step, the panel shows the tree and, past one quiet line,
+the page's chat. The message field's words name the chat: "A message on this page" or "A
+message on this step".
 
 The button at the panel's top right and Ctrl+B hide the panel, and show it again. Hiding
 changes only the view: the walk stays on its step, and the light stays on the part. The
@@ -73,7 +76,7 @@ right edge can still sit under the panel.
 | Action                       | The walk                          | Light                       | Panel                                                  |
 | ---------------------------- | --------------------------------- | --------------------------- | ------------------------------------------------------ |
 | Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                         |
-| Ctrl+P                       | stays on the step                 | hides                       | hides, and only the eye shows                          |
+| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                          |
 | Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                                  |
 | A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step; the step's row gets its check     |
 | The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                       |
@@ -81,26 +84,26 @@ right edge can still sit under the panel.
 
 ## Settle
 
-A settle shows that it took. The light turns green and a check draws in its corner, for
-about 400 ms. Then the step's row in the tree gets its check, and the walk goes on to the
-next open step. The light waits while the page scrolls to the next part, glides there in
-about 300 ms and pulses once, so you see where to look next. On another page it fades out,
-and in on the new part. A settled step keeps its green light and its check, so a walk back
-to it shows that it is settled.
+A settle goes on at once: the panel shows the next open step, and the step's row in the
+tree gets its check. At the same time, the part you settled shows that the settle took: its
+outline turns green and a check draws in at its corner, then both fade. The light glides
+from that part to the next one and pulses once, so you see where to look next. The whole
+motion takes about 250 ms. On another page the light fades out, and in on the new part. A
+settled step keeps its green light and its check, so a walk back to it shows that it is
+settled.
 
 `u` runs the motion backwards: the light comes back to the step green, and turns blue as
-its check draws out. With reduced motion, the light does not glide or pulse: it fades, the
-colour changes, and the check only fades.
+its check draws out. With reduced motion, nothing glides or pulses: the green outline and
+the check only fade, and the light fades in on the new part.
 
-While a settle's motion plays, and until the next step shows with its light in place,
-another `y`, Enter or check does nothing, so a held or quick key never settles a step you
-have not seen.
+Until the next step shows with its light in place, another `y`, Enter or check does
+nothing, so a held or quick key never settles a step you have not seen.
 
 When the last open step settles, the review does not end at once. The panel shows the
 finish in place of the step: how many steps are settled, the variant kept of each part, and
 how many notes went to the agent. **Finish review**, or Enter, ends the review: the tools go
 back to the page, a short message says the journey is done, and the journey goes down to
-**Settled**. The back arrow, where the step before was, Escape or `u` opens the last step
+**Settled**. The back chevron, where the step before was, Escape or `u` opens the last step
 again. The Enter that settled the
 last step does not also finish: Finish takes only an Enter pressed after the finish shows.
 A reload keeps the finish. Each change of a step's settled state, undo and redo too, writes
@@ -133,8 +136,8 @@ screen narrower than 640 px, the panel is a sheet at the bottom, above the page'
 bar, and its tree stays folded until you tap its line. Hidden, it folds to the bar, which
 takes the screen's width in the same place. The note card stands above the bar as a sheet.
 A swipe to the left or the right across the lit part shows the next or the previous
-variant, as `l` and `h` do. The step arrows in the sheet and the bar go to the step before
-and after. Settle, between the arrows in the sheet's foot and a check in the bar, settles: the light turns green above the sheet, as on a wide
+variant, as `j` and `k` do. The chevrons in the sheet and the bar go to the step before
+and after. Settle, between the chevrons in the sheet's foot and a check in the bar, settles: the light turns green above the sheet, as on a wide
 screen. When the sheet would cover the light's corner, the page scrolls the part up once.
 Every button there is at least 44 px. On the lift, a swipe across goes through the variants, and a swipe up or down goes
 through the states. The pin in the message field points at an element for a note, as
@@ -146,7 +149,7 @@ Enter in a message field sends, and in a note keeps the note; then the keys are 
 so `y` or `i` comes next. Escape in a field goes to vim's normal mode, and a second Escape
 goes to the tree and unfolds it, so you see where you are; in the lift's note it leaves the
 field. While the tree shows, it has the keys when no field has them. On a step it folds, and
-the page has the keys, so `j` and `k` walk the steps.
+the page has the keys, so `h` and `l` walk the steps.
 
 Escape backs out one level at a time, from the page and the tree: it closes what is open
 over the page, then leaves the step for the page, then hides the tools.
@@ -166,7 +169,8 @@ its message in the chat has it.
   and opens its chat, a journey starts, a step opens on its page, and a note opens where it
   is.
 - `y` settles the selected step and goes on to the next open step, as on the page. The
-  page's other keys, as `v`, work as on the page too.
+  page's other keys, as `v`, `H` and `L`, work as on the page too. The arrows scroll the
+  tree.
 - On a step, a click on the folded line unfolds the tree, and so does a key of the tree's
   while the line has the keys. A step opened from it folds it again.
 
@@ -176,35 +180,45 @@ thin ring while it has the keys.
 Ctrl+B hides the panel and shows it again, from a field too. A field in the panel that had
 the keys gets them back when the panel shows again, in its mode and at its place.
 
-Ctrl+P is the **preview**, on a step and off one: it hides the tools, the panel too, and
-leaves only an eye that shows them again. Escape in the tree off a step does the same, so
-the panel and the note card come back together. A second Ctrl+P, Escape or `i` shows them
-with the panel as it was, and comes back to the field, in its mode and at its place; Ctrl+B
-shows them with the panel shown. The keys do not change in the preview.
+`p` is the **preview**, on a step and off one: it hides the tools, the panel too, and
+leaves only an eye that shows them again. Hide the tools in More does the same, and so does
+Escape in the tree off a step, so the panel and the note card come back together. A second
+`p`, Escape or `i` shows them with the panel as it was, and comes back to the field, in its
+mode and at its place; Ctrl+B shows them with the panel shown. Hold `p` to peek: the tools
+hide at once and come back when you let go after 200 ms or more. A tap keeps them hidden.
+The keys do not change in the preview. After `g`, `p` is this page's chat, notes and parts.
 
 ## The keys of a walk
 
-One rule holds on the page, in the lift and in the tree: across is the variant, down is the
-step.
+The keys move the way things stand on the screen. On a step, the panel's foot goes across:
+the step before, Settle and the step after. The variants stand in a list down the panel.
+Each arrow key does what its vim key does. No key needs AltGr or Option on a Norwegian Mac.
 
-| Key            | Where                 | What it does                                        |
-| -------------- | --------------------- | --------------------------------------------------- |
-| `j`, `k`       | the page              | the step after, the step before                     |
-| `h`, `l`       | the page              | the previous, the next variant, on a step with more |
-| `J`, `K`       | the page              | the open step after, before: not settled            |
-| Ctrl+J, Ctrl+K | the page              | the step after, before, as `j` and `k`              |
-| Ctrl+H, Ctrl+L | the page and the tree | the previous, the next variant, as `h` and `l`      |
-| `y`, Enter     | the page              | settle the step, then go on to the next open step   |
-| `j`, `k`       | the tree              | the row below, above                                |
-| `h`, `l`       | the tree              | close the row or go up, open it or go down into it  |
-| Ctrl+J, Ctrl+K | the tree              | the open step below, above                          |
-| Enter          | the tree              | open the selected row                               |
+| Key                               | Where    | What it does                                              |
+| --------------------------------- | -------- | --------------------------------------------------------- |
+| `h`, `l`, ←, →                    | the page | the step before, the step after                           |
+| `j`, `k`, ↓, ↑                    | the page | the next, the previous variant, on a step with more       |
+| `1` to `9`                        | the page | the variant with that number                              |
+| `H`, `L`, Shift+←, Shift+→        | the page | the open step before, after: settled steps are skipped    |
+| `g g`, `G`                        | the page | the first, the last open step                             |
+| `y`, Enter                        | the page | settle the step, then go on to the next open step         |
+| `v`, Space                        | the page | lift the part                                             |
+| `i`                               | the page | write a message                                           |
+| `m`                               | the page | point at an element: a click pins a note there; Esc stops |
+| `u`, Ctrl+Z, Cmd+Z                | the page | undo                                                      |
+| Ctrl+R, Ctrl+Shift+Z, Cmd+Shift+Z | the page | redo                                                      |
+| `p`                               | the page | the preview: a tap hides or shows the tools; held, a peek |
+| `j`, `k`                          | the tree | the row below, above                                      |
+| `h`, `l`                          | the tree | close the row or go up, open it or go down into it        |
+| Ctrl+J, Ctrl+K                    | the tree | the open step below, above                                |
+| Enter                             | the tree | open the selected row                                     |
 
-An app with its own `h`, `j`, `k` and `l` takes those keys first, and leaves the Ctrl keys
-to the tools. Enter settles only while no control of the app has the focus: on the app's
-button, link or field, Enter is the app's, so a press still clicks it. A button of the
-tools' that a click left the focus on does not take Enter; one that Tab went to does. A
-held `y` or Enter settles once: its repeats do nothing.
+The arrow keys and Space act only on a step, and only while the focus is on the page
+itself: on the app's field, select, slider, tabs or another control that uses them, they
+are the app's. Off a step, they scroll the page. Enter settles only while no control of the
+app has the focus: on the app's button, link or field, Enter is the app's, so a press still
+clicks it. A button of the tools' that a click left the focus on does not take Enter; one
+that Tab went to does. A held `y` or Enter settles once: its repeats do nothing.
 
 ## Variants of a part
 
@@ -233,8 +247,9 @@ export const SuggestionView = variants<SuggestionProps>(
 - A review step finds the part in its `target`. When the target holds more than one part,
   name it with the step's `part`.
 
-On the step, `v` lifts the part: variants in a row, states in a column. `Enter` puts the
-variant shown on the page, `d` deletes one, `u` undoes, `i` writes a note on the variant
+On the step, `v` or Space lifts the part: variants in a row, states in a column. `h` and
+`l`, or ← and →, go through the variants, and `j` and `k`, or ↓ and ↑, through the states.
+`v`, Space or Escape puts the part back. `Enter` puts the variant shown on the page, `d` deletes one, `u` undoes, `i` writes a note on the variant
 shown, and `R` goes to the next variant with a note. Settling the step with `y` keeps the
 variant the page shows, sends the step's notes not sent yet, and goes on to the next open
 step, also from the tree or the Settle button; `y` on a settled step opens it again and
@@ -256,7 +271,7 @@ next reply, or goes through the notes on the page when no reply is new.
 ## Notes on a page
 
 Off a step, the panel is a chat with the agent on the page. `i` goes to its message field,
-and Alt+click writes a note on an element. A note waits: the bar counts the ones not sent,
+and `m`, then a click, or Alt+click writes a note on an element. A note waits: the bar counts the ones not sent,
 and the next message takes them all, in it. Enter in an empty message field sends the
 notes alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
 answers in the panel's chat. `blueline review` listens to it.
