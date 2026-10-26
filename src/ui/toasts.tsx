@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { toast, Toaster } from "sonner";
+import { useEffect, useState } from "react";
 import { STORED } from "../io/stored";
 import { UI } from "./geometry";
 import { placePath } from "../part/page";
@@ -9,22 +8,39 @@ import { useTools } from "./session";
 
 /*
  * Short messages at the top of the screen: the agent answered, an undo, the preview, or a
- * send that failed. A reply to a finished review is news too: its journey's row marks it, and Open shows its hand-off. Sonner stacks them and lets each go. The dev tools have their own
- * toaster, by its ID, so the app's toasts and theirs stay apart.
+ * send that failed. A reply to a finished review is news too: its journey's row marks it, and
+ * Open shows its hand-off. The newest stands on top, three show at most, and each goes after a
+ * while. They are the tools' own, so they write no CSS into the page.
  */
 
-const ID = "blueline";
+/** How long a message shows. */
+const SHOWN_MS = 4000;
+/** How many messages show at once. */
+const SHOWN = 3;
+
+interface Toast {
+  readonly id: number;
+  readonly text: string;
+  readonly open: (() => void) | undefined;
+}
 /** The preview's keys are told once: after that the reviewer knows them. */
 const PREVIEW_TOLD = `${STORED}:preview-told`;
 
 export function Toasts() {
   const { actor } = useTools();
+  const [toasts, setToasts] = useState<readonly Toast[]>([]);
   useEffect(() => {
-    const show = (text: string, open?: () => void) =>
-      toast(text, {
-        toasterId: ID,
-        ...(open === undefined ? {} : { action: { label: "Open", onClick: open } }),
-      });
+    let next = 0;
+    const timers = new Set<number>();
+    const show = (text: string, open?: () => void) => {
+      const id = (next += 1);
+      setToasts((all) => [{ id, text, open }, ...all].slice(0, SHOWN));
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        setToasts((all) => all.filter((t) => t.id !== id));
+      }, SHOWN_MS);
+      timers.add(timer);
+    };
     const subs = [
       actor.on("replied", (e) => {
         // A hand-off that shows has its answer in view already.
@@ -68,27 +84,37 @@ export function Toasts() {
     ];
     return () => {
       for (const s of subs) s.unsubscribe();
+      for (const t of timers) window.clearTimeout(t);
     };
   }, [actor]);
+  const gone = (id: number) => setToasts((all) => all.filter((t) => t.id !== id));
   return (
-    <div {...UI}>
-      <Toaster
-        id={ID}
-        position="top-center"
-        duration={4000}
-        visibleToasts={3}
-        toastOptions={{
-          unstyled: true,
-          classNames: {
-            toast:
-              "flex w-full items-center gap-3 rounded-dt-control bg-dt-panel px-3 py-2 text-[13px] text-dt-text shadow-dt-float",
-            title: "line-clamp-2",
-            content: "min-w-0 flex-1",
-            actionButton:
-              "shrink-0 rounded-dt-mark px-1.5 py-0.5 text-[12px] text-dt-accent hover:bg-dt-raised",
-          },
-        }}
-      />
-    </div>
+    <ol
+      {...UI}
+      aria-live="polite"
+      className="pointer-events-none fixed top-4 left-1/2 z-[999999999] flex w-[min(356px,calc(100vw-32px))] -translate-x-1/2 flex-col gap-2"
+    >
+      {toasts.map((t) => (
+        <li
+          key={t.id}
+          role="status"
+          className="pointer-events-auto flex w-full animate-dt-arrive items-center gap-3 rounded-dt-control bg-dt-panel px-3 py-2 text-[13px] text-dt-text shadow-dt-float"
+        >
+          <span className="line-clamp-2 min-w-0 flex-1">{t.text}</span>
+          {t.open !== undefined && (
+            <button
+              type="button"
+              className="shrink-0 rounded-dt-mark px-1.5 py-0.5 text-[12px] text-dt-accent hover:bg-dt-raised"
+              onClick={() => {
+                gone(t.id);
+                t.open?.();
+              }}
+            >
+              Open
+            </button>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }
