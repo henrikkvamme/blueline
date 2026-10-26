@@ -1,4 +1,16 @@
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageSquare } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  MessageSquare,
+  MessageSquarePlus,
+  MessageSquareShare,
+  Trash2,
+  Undo2,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -9,18 +21,23 @@ import {
 } from "react";
 import { cx } from "../ui/cx";
 import { lineShift, liftRoom } from "../ui/geometry";
+import { Menu, type MenuEntry } from "../ui/menu";
+import { menuTakes } from "../ui/menu-keys";
 import { swipeOf, swipeStarts, type Point } from "../ui/swipe";
+import { liftActionLabel, liftActions, type LiftAction } from "./lift-actions";
 
 /*
  * The lift: v takes the reviewed part off the page onto a stage, with the page dimmed
  * behind it. The part's variants stand in a row, and h and l slide through them; its states
  * stand in a column, and j and k slide through them. The row and the column cross at the
  * part, so a move from one to the other leaves the part where it is; the one not in use
- * stays faint. Enter puts the one shown on the page, and Escape, v or Space puts the part back as
- * it was; either way the part goes down to where the page now shows it. Settling the step
- * keeps the variant the page shows.
+ * stays faint. Enter puts the one shown on the page, and Escape, v or Space closes the lift
+ * and keeps the page as it was; either way the part goes down to where the page now shows
+ * it. Settling the step keeps the variant the page shows.
  * d deletes a variant the reviewer does not want, once they confirm it, and u or Cmd+Z
  * brings it back.
+ * The bar under the stage keeps it calm: the part's name, the variant and the state, Use and
+ * Close; Delete, Note, Next note, Undo and Zoom wait in its ⋯ menu. Each keeps its key.
  * On a phone, a swipe across the stage goes over the variants, and a swipe up or down over
  * the states; the bar's buttons do what each key does.
  *
@@ -188,14 +205,14 @@ export function Lift({
     );
   });
 
-  // The part goes down to its place on the page: as chosen, or, put back, as it was. The
+  // The part goes down to its place on the page: as chosen, or, closed, as it was. The
   // page shows it first, under the stage, so the part lands where that option stands, which
   // differs when the option differs in size.
   const [down, setDown] = useState<At>();
   const finish = (chosen: At | undefined) => {
     if (leaving) return;
     setLeaving(true);
-    // Put back, the stage first shows the part as the page has it, at once, then lowers it.
+    // Closed, the stage first shows the part as the page has it, at once, then lowers it.
     if (chosen === undefined) setAt(start);
     onPut(chosen ?? start);
     setDown(chosen ?? start);
@@ -243,7 +260,6 @@ export function Lift({
   const ask = () => {
     if (variants.length > 1) setAsking(at.variant);
   };
-  const hasNotes = noted.some((label) => variants.includes(label));
   // The next variant with a note, after this one, round to the first.
   const nextNote = () => {
     const after = variants.map((_, i) => (index + 1 + i) % variants.length);
@@ -254,6 +270,51 @@ export function Lift({
     setZooming(true);
     setZoomed((z) => !z);
   };
+
+  // The bar's ⋯ menu. While it is open, its keys go to it, and a press on the dim only
+  // closes it.
+  const menuOpen = useRef(false);
+  const menuAtDown = useRef(false);
+  useEffect(() => {
+    const down = () => {
+      menuAtDown.current = menuOpen.current;
+    };
+    window.addEventListener("pointerdown", down, true);
+    return () => window.removeEventListener("pointerdown", down, true);
+  }, []);
+  const run: Record<LiftAction, () => void> = {
+    delete: ask,
+    note: () => onNote?.(at),
+    "next-note": nextNote,
+    undo: onUndo,
+    zoom,
+  };
+  const icons: Record<LiftAction, ReactNode> = {
+    delete: <Trash2 className="size-4" aria-hidden />,
+    note: <MessageSquarePlus className="size-4" aria-hidden />,
+    "next-note": <MessageSquareShare className="size-4" aria-hidden />,
+    undo: <Undo2 className="size-4" aria-hidden />,
+    zoom: zoomed ? (
+      <ZoomOut className="size-4" aria-hidden />
+    ) : (
+      <ZoomIn className="size-4" aria-hidden />
+    ),
+  };
+  const entries: readonly MenuEntry[] = liftActions({
+    variants,
+    noted,
+    notes: onNote !== undefined,
+  }).map((action) => ({
+    id: action,
+    label: liftActionLabel(action, zoomed),
+    icon: icons[action],
+    run: run[action],
+  }));
+  // The widest words each value of the bar can show, so the bar keeps its width as they
+  // change. A delete leaves the variants' first labels, so they still count.
+  const [firstVariants] = useState(variants);
+  const labels = [...new Set([...firstVariants, ...variants])];
+  const most = Math.max(firstVariants.length, variants.length);
 
   // A swipe on the stage: across for the variants, up or down for the states.
   const touch = useRef<Point>(undefined);
@@ -286,6 +347,14 @@ export function Lift({
       const t = e.target;
       if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)))
         return;
+      // The open menu takes its own keys, and Escape closes it, not the lift; the lift's
+      // other keys wait until it is closed.
+      if (menuOpen.current) {
+        if (menuTakes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (e.metaKey || e.ctrlKey) {
         // Cmd+Z and Ctrl+Z take back a delete, as u does.
         if (e.key !== "z" || e.altKey || e.shiftKey) return;
@@ -439,7 +508,7 @@ export function Lift({
           leaving && "opacity-0",
         )}
         onClick={() => {
-          if (asking === undefined) finish(undefined);
+          if (asking === undefined && !menuAtDown.current) finish(undefined);
         }}
         {...swipe}
       />
@@ -482,41 +551,62 @@ export function Lift({
         </div>
         <div
           className={cx(
-            "pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel px-2 py-1.5 text-[12px] whitespace-nowrap text-dt-muted shadow-dt-float duration-200 fade-in slide-in-from-bottom-2",
-            "max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+8px)] max-sm:translate-x-0 max-sm:flex-wrap max-sm:justify-center max-sm:rounded-dt-panel max-sm:text-[14px]",
-            leaving && "opacity-0",
+            "pointer-events-auto absolute bottom-6 left-1/2 z-20 flex w-max -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel p-1.5 text-[12px] whitespace-nowrap text-dt-muted shadow-dt-float transition-[opacity,translate] duration-200 fade-in slide-in-from-bottom-2 motion-reduce:transition-none",
+            "max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+8px)] max-sm:w-auto max-sm:translate-x-0 max-sm:flex-wrap max-sm:rounded-dt-panel max-sm:p-1 max-sm:text-[14px]",
+            leaving && "translate-y-2 opacity-0",
           )}
         >
-          <span className="px-2 font-medium text-dt-text first-letter:uppercase max-sm:w-full max-sm:truncate max-sm:py-1 max-sm:text-center">
+          <span className="max-w-48 truncate px-2 font-medium text-dt-text first-letter:uppercase max-sm:max-w-none max-sm:min-w-0 max-sm:flex-1">
             {title}
           </span>
-          <Way
-            on={row}
-            name="Variant"
-            value={at.variant}
-            place={`${String(index + 1)} of ${String(variants.length)}`}
-            across
-            onMove={(by) => move("variant", by)}
-          />
-          {states.length > 1 && (
+          <span className="flex items-center gap-1 max-sm:order-1 max-sm:w-full">
             <Way
-              on={!row}
-              name="State"
-              value={states[at.state]}
-              place={`${String(at.state + 1)} of ${String(states.length)}`}
-              across={false}
-              onMove={(by) => move("state", by)}
+              on={row}
+              name="Variant"
+              value={at.variant}
+              values={labels}
+              at={index}
+              of={variants.length}
+              most={most}
+              across
+              onMove={(by) => move("variant", by)}
             />
-          )}
-          {variants.length > 1 && <Act onClick={ask}>Delete</Act>}
-          {onNote !== undefined && <Act onClick={() => onNote(at)}>Note</Act>}
-          {hasNotes && <Act onClick={nextNote}>Next note</Act>}
-          <Act onClick={onUndo}>Undo</Act>
-          <Act onClick={zoom} on={zoomed}>
-            {zoomed ? "True size" : "Zoom"}
-          </Act>
-          <Act onClick={() => finish(at)}>Use</Act>
-          <Act onClick={() => finish(undefined)}>Put back</Act>
+            {states.length > 1 && (
+              <Way
+                on={!row}
+                name="State"
+                value={states[at.state] ?? ""}
+                values={states}
+                at={at.state}
+                of={states.length}
+                most={states.length}
+                across={false}
+                onMove={(by) => move("state", by)}
+              />
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => finish(at)}
+            className="h-7 shrink-0 rounded-full bg-dt-accent px-3 font-medium text-white hover:bg-dt-accent/85 max-sm:h-11 max-sm:px-4"
+          >
+            Use
+          </button>
+          <button
+            type="button"
+            onClick={() => finish(undefined)}
+            className="h-7 shrink-0 rounded-full px-2.5 hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:px-3"
+          >
+            Close
+          </button>
+          <Menu
+            entries={entries}
+            side="above"
+            className="grid size-7 shrink-0 place-items-center rounded-full text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:size-11"
+            onOpenChange={(open) => {
+              menuOpen.current = open;
+            }}
+          />
         </div>
         {note !== undefined && note !== null && (
           <div className="pointer-events-auto absolute bottom-20 left-1/2 z-30 -translate-x-1/2 max-sm:top-[calc(env(safe-area-inset-top)+8px)] max-sm:bottom-auto">
@@ -575,19 +665,54 @@ function Confirm({
   );
 }
 
-/** One way the stage runs, in the bar: what is shown, with a step back and forward. */
+/** Words that keep the width of the widest of `texts`, so nothing beside them moves when
+ * they change; too wide, they end in an ellipsis. */
+function Widest({
+  shown,
+  texts,
+  className,
+  title,
+}: {
+  readonly shown: string;
+  readonly texts: readonly string[];
+  readonly className?: string;
+  /** The whole words, for when they end in an ellipsis. */
+  readonly title?: string;
+}) {
+  return (
+    <span className={cx("grid min-w-0", className)} title={title}>
+      {texts.map((text) => (
+        <span key={text} aria-hidden className="invisible col-start-1 row-start-1 truncate">
+          {text}
+        </span>
+      ))}
+      <span className="col-start-1 row-start-1 truncate">{shown}</span>
+    </span>
+  );
+}
+
+/** One way the stage runs, in the bar: what is shown and where it stands, with a step back
+ * and forward. On a phone each step is half the way, for a finger, and the name goes. */
 function Way({
   on,
   name,
   value,
-  place,
+  values,
+  at,
+  of,
+  most,
   across,
   onMove,
 }: {
   readonly on: boolean;
   readonly name: string;
-  readonly value: string | undefined;
-  readonly place: string;
+  readonly value: string;
+  /** Every value it can show. */
+  readonly values: readonly string[];
+  readonly at: number;
+  readonly of: number;
+  /** The most values it had in this lift. */
+  readonly most: number;
   /** Whether the way runs across, as the variants, or up and down, as the states. */
   readonly across: boolean;
   readonly onMove: (by: 1 | -1) => void;
@@ -595,12 +720,13 @@ function Way({
   const Back = across ? ChevronLeft : ChevronUp;
   const Forward = across ? ChevronRight : ChevronDown;
   const step =
-    "grid size-5 shrink-0 place-items-center rounded-full hover:bg-white/10 max-sm:size-11";
+    "z-10 grid size-5 shrink-0 place-items-center rounded-full hover:bg-white/10 max-sm:absolute max-sm:inset-y-0 max-sm:size-auto max-sm:w-1/2 max-sm:hover:bg-transparent max-sm:active:bg-white/10";
   const lower = name.toLowerCase();
   return (
     <span
       className={cx(
-        "flex items-center gap-1.5 rounded-full px-1 py-0.5 max-sm:min-w-0",
+        "relative flex h-7 items-center gap-1.5 rounded-full px-1",
+        "max-sm:h-11 max-sm:min-w-0 max-sm:flex-1 max-sm:basis-0 max-sm:justify-center max-sm:px-8",
         on ? "bg-white/10 text-dt-text" : "text-dt-muted",
       )}
     >
@@ -608,42 +734,25 @@ function Way({
         type="button"
         aria-label={`Previous ${lower}`}
         onClick={() => onMove(-1)}
-        className={step}
+        className={cx(step, "max-sm:left-0 max-sm:justify-items-start max-sm:pl-2.5")}
       >
         <Back className="size-3.5" />
       </button>
-      <span className="text-dt-faint">{name}</span>
-      <span className="max-sm:truncate">{value}</span>
-      <span className="text-dt-faint tabular-nums">{place}</span>
-      <button type="button" aria-label={`Next ${lower}`} onClick={() => onMove(1)} className={step}>
+      <span className="text-dt-faint max-sm:hidden">{name}</span>
+      <Widest shown={value} texts={values} title={value} className="max-w-44" />
+      <Widest
+        shown={`${String(at + 1)} of ${String(of)}`}
+        texts={[`${String(most)} of ${String(most)}`]}
+        className="shrink-0 justify-items-end text-dt-faint tabular-nums"
+      />
+      <button
+        type="button"
+        aria-label={`Next ${lower}`}
+        onClick={() => onMove(1)}
+        className={cx(step, "max-sm:right-0 max-sm:justify-items-end max-sm:pr-2.5")}
+      >
         <Forward className="size-3.5" />
       </button>
     </span>
-  );
-}
-
-/** One thing the reviewer can do in the lift, in its bar. */
-function Act({
-  onClick,
-  on,
-  children,
-}: {
-  readonly onClick: () => void;
-  /** Whether it is on, as the zoom. */
-  readonly on?: boolean;
-  readonly children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={cx(
-        "rounded-full px-2 py-0.5 hover:bg-dt-raised hover:text-dt-text max-sm:min-h-11 max-sm:px-3",
-        on === true && "text-dt-text",
-      )}
-    >
-      {children}
-    </button>
   );
 }

@@ -263,8 +263,19 @@ export const SuggestionView = variants<SuggestionProps>(
 
 On the step, `v` or Space lifts the part: variants in a row, states in a column. `h` and
 `l`, or ← and →, go through the variants, and `j` and `k`, or ↓ and ↑, through the states.
-`v`, Space or Escape puts the part back. `Enter` puts the variant shown on the page, `d` deletes one, `u` undoes, `i` writes a note on the variant
-shown, and `R` goes to the next variant with a note. Settling the step with `y` keeps the
+`Enter` puts the variant shown on the page, and `v`, Space or Escape closes the lift and
+keeps the page as it was. `d` deletes a variant, `u` undoes, `z` zooms, `i` writes a note on
+the variant shown, and `R` goes to the next variant with a note.
+
+The lift's bar under the part gives the part's name, the variant and the state, **Use**,
+**Close** and **More** (⋯). Use is blue: it is the one main action. Close does what Escape
+does. More holds Delete, Note, Next note, Undo and Zoom; Next note shows only when a variant
+has a note. Delete asks first. The variant and the state keep their width, so the bar does
+not move while you go through them. On a phone the bar has two lines: the name, Use, Close
+and More, then the variant and the state. There, a tap on the left half of the variant or
+the state goes back, and a tap on the right half goes on.
+
+Settling the step with `y` keeps the
 variant the page shows, sends the step's notes not sent yet, and goes on to the next open
 step, also from the tree or the Settle button; `y` on a settled step opens it again and
 keeps none. The last open step settled asks you to finish the review, as "Settle" says. The

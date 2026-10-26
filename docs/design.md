@@ -196,6 +196,13 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 - **The bar is the folded panel.** When the panel is hidden, the bar shows the step's
   number and title, the step before and after, and Settle. The bar and the panel never
   show at once.
+- **The lift's bar is calm.** It holds the part's name, the variant and the state, **Use**
+  and **Close**, and a ⋯ menu. Use is the one primary button, in blue, and puts the variant
+  shown on the page. Close, as Esc, closes the lift and keeps the page as it was. The ⋯ menu
+  is the panel's menu, and holds Delete, Note, Next note, Undo and Zoom; each keeps its key.
+  The variant and the state keep the width of their widest value, and the count has tabular
+  digits, so the bar keeps its width while they change. On a phone the bar has two lines,
+  with 44 px targets.
 - **A pin's note card stays beside its pin** while the reviewer writes. A sent note joins
   the chat in the panel.
 - **Three layers, each hidden on its own.** The page is at the bottom, the light is over
@@ -233,7 +240,7 @@ The variants stand in a list down the panel.
 | `H`, `L`, Shift+←, Shift+→        | the open step before, after: settled steps are skipped    |
 | `g g`, `G`                        | the first, the last open step                             |
 | `y`, Enter                        | settle the step and go on to the next open step           |
-| `v`, Space                        | lift the part; again, put it back                         |
+| `v`, Space                        | lift the part; again, close the lift                      |
 | `i`                               | write a message                                           |
 | `m`, then a click                 | pin a note on the element clicked; Esc stops              |
 | `u`, Ctrl+Z, Cmd+Z                | undo                                                      |
@@ -251,7 +258,7 @@ The variants stand in a list down the panel.
 - `p` acts at once as it goes down. When it comes up after 200 ms or more, it acts again, so
   a hold only peeks.
 - The lift keeps its own keys: across through the variants with `h`, `l`, ← and →, and down
-  through the states with `j`, `k`, ↓ and ↑. `v`, Space and Esc put the part back. The tree
+  through the states with `j`, `k`, ↓ and ↑. `v`, Space and Esc close the lift. The tree
   keeps its own keys too: `j` and `k` select a row, `l` and `h` open and close it, and
   Ctrl+J and Ctrl+K select the open steps. In the tree, the arrows scroll.
 

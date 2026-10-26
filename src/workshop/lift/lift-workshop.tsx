@@ -153,7 +153,7 @@ export function LiftWorkshop() {
             <Key>v</Key> lifts the reviewed part. <Key>h</Key> <Key>l</Key> move through its
             variants, in a row, and <Key>j</Key> <Key>k</Key> through its states, in a column.{" "}
             <Key>z</Key> zooms in, <Key>d</Key> deletes a variant and <Key>u</Key> brings it back.{" "}
-            <Key>Enter</Key> uses what is shown, <Key>Esc</Key> puts the part back.
+            <Key>Enter</Key> uses what is shown, <Key>Esc</Key> closes the lift.
           </p>
         </div>
         <Group title="The reviewed part" hint="Tab, or a click on the page">
