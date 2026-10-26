@@ -1,13 +1,15 @@
 /*
- * A settle shows that it took, then the walk goes on: the light turns green and a check
- * draws in its corner, and only then does the session hear of it. While that motion plays,
- * and until the next step shows with its light in place, another settle does nothing. So a
- * held or quick y never settles a step that the reviewer has not seen. Plain data, no DOM,
- * so the rule is tested alone.
+ * A settle goes on at once: the session settles the step, and the panel shows the next step.
+ * The light glides from the old part to the new one, while the old part shows a green outline
+ * and a check (Light's `left`). Until the next step shows with its light in place, another
+ * settle does nothing, so a burst of y never settles a step that the reviewer has not seen;
+ * a held key's repeats do nothing either (keymap.ts). Plain data, no DOM, so the rule is
+ * tested alone.
  */
 
-/** How long the motion plays before the walk goes on, in ms. */
-export const SETTLE_MS = 400;
+/** How long the green outline and the check play on the part the settle left, in ms, as
+ * `dt-left` in styles.css; the light glides to the next part in the same time. */
+export const SETTLE_MS = 250;
 
 /** How long a light that the walk took back to a step shows its old look, in ms, before it
  * turns: undo runs the settle's motion backwards. */
@@ -19,11 +21,10 @@ export const TURN_WAIT = 3000;
 /** Where the settle is. */
 export type Settling =
   | { readonly kind: "still" }
-  /** The motion plays on the step: its light turns green, and its check draws. */
-  | { readonly kind: "playing"; readonly step: string }
-  /** The settle went to the session from the step shown, as `from` names it; the walk goes
-   * on to a step that does not show yet. */
-  | { readonly kind: "going"; readonly from: string };
+  /** The session settled a step and went on from the step shown, as `from` names it, to a
+   * step whose light is not in place yet. `step` is the step settled when it is the one
+   * shown, so its part shows the settle; the tree can settle another. */
+  | { readonly kind: "going"; readonly from: string; readonly step: string | undefined };
 
 const STILL: Settling = { kind: "still" };
 
@@ -37,11 +38,12 @@ export interface Turn {
 export interface SettleGate {
   readonly current: () => Settling;
   readonly subscribe: (listener: () => void) => () => void;
-  /** Starts a settle's motion on the step. False while another settle plays, or while its
-   * next step does not show yet: then this settle does nothing. */
-  readonly begin: (step: string) => boolean;
-  /** The settle went to the session from the step that shows, named by `from`. */
-  readonly sent: (from: string) => void;
+  /** Whether a settle may start: not while the step the last one went on to does not show
+   * yet. */
+  readonly free: () => boolean;
+  /** The session settled a step and went on from the step shown, named by `from`; `step`
+   * when the step settled is the one shown. */
+  readonly sent: (from: string, step: string | undefined) => void;
   /** A step shows, with its light in place: a settle can start again. */
   readonly shown: (key: string) => void;
   /** The walk stopped or stayed where it was: a settle can start at once. */
@@ -70,12 +72,8 @@ export function settleGate(): SettleGate {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
-    begin: (step) => {
-      if (state.kind !== "still") return false;
-      set({ kind: "playing", step });
-      return true;
-    },
-    sent: (from) => set({ kind: "going", from }),
+    free: () => state.kind === "still",
+    sent: (from, step) => set({ kind: "going", from, step }),
     shown: (key) => {
       if (state.kind === "going" && state.from !== key) set(STILL);
     },

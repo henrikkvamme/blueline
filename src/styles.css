@@ -22,6 +22,8 @@
   --animate-dt-pulse: dt-pulse 520ms ease-out;
   --animate-dt-arrive: dt-arrive 220ms ease-out;
   --animate-dt-fade: dt-fade 150ms ease-out;
+  --animate-dt-left: dt-left 250ms ease-out both;
+  --animate-dt-draw: dt-draw 140ms ease-out both;
   --shadow-dt-float: 0 18px 48px -12px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
@@ -62,6 +64,28 @@
   from {
     opacity: 0;
     translate: 0 -4px;
+  }
+}
+
+/* The green outline and the check on the part a settle left: they stand, then fade, as the
+   light glides on to the next part. */
+@keyframes dt-left {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The check draws in, from its start to its end. */
+@keyframes dt-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
   }
 }
 

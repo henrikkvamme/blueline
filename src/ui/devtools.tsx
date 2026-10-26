@@ -50,7 +50,7 @@ import {
 import { Panel } from "./panel";
 import { foldTree, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
-import { release, settleGate, SETTLE_MS, TURN_MS, TURN_WAIT } from "./settle";
+import { release, settleGate, TURN_MS, TURN_WAIT } from "./settle";
 import { holdToggle } from "../keys/hold";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
@@ -80,8 +80,7 @@ export interface DevToolsProps<C> {
   readonly children?: React.ReactNode;
 }
 
-/** Where the settle is: while its motion plays, and until the next step shows, another
- * settle does nothing. */
+/** Where the settle is: until the step it went on to shows, another settle does nothing. */
 const settling = settleGate();
 
 /** On a phone, puts the lit part above the sheet or the bar, once, so the settle shows. */
@@ -367,39 +366,31 @@ export function DevTools<C>({
       const shown = parts.current().shown[part.name] ?? parts.shown(part.name);
       return { keep: { part: part.name, variant: variantOf(part.labels, shown, verdicts) } };
     };
-    /** Settles the step at `at`, or opens it again. A settle shows that it took first: the
-     * light turns green and its check draws, and then the walk goes on. While that plays, and
-     * until the next step shows, another settle does nothing (settle.ts). A step the tree
-     * selected is named when the page shows another. */
+    /** Settles the step at `at`, or opens it again. The walk goes on at once, and the light
+     * shows the settle on the part it leaves (Light's `left`). Until the next step shows,
+     * another settle does nothing (settle.ts). A step the tree selected is named when the
+     * page shows another. */
     const settle = (at: number) => {
       const s = actor.getSnapshot();
+      const was = s.context;
       const step = journeyIn(s, info)?.steps[at];
       if (step === undefined) return;
-      const send = (keep: ReturnType<typeof settleOf>) =>
-        actor.send({
-          type: "settle",
-          ...(at === actor.getSnapshot().context.at ? {} : { step: at }),
-          ...keep,
-          at: now(),
-        });
-      // Opening a settled step again goes at once; its light turns back where it is.
-      if (s.context.feedback[step.id]?.settled === true) return send(settleOf(at));
-      if (!settling.begin(step.id)) return;
-      // The variant the reviewer saw as they settled.
-      const keep = settleOf(at);
-      const go = () => {
-        const was = actor.getSnapshot().context;
-        if (!was.active) return settling.reset();
-        send(keep);
-        const then = actor.getSnapshot().context;
-        // The walk stayed, or ended: nothing is left to wait for.
-        if (!then.active || (then.at === was.at && then.run === was.run)) settling.reset();
-        else settling.sent(`${String(was.run)}-${String(was.at)}`);
-      };
-      const lit = document.querySelector("[data-dt-light]");
-      if (at !== s.context.at || lit === null) return go();
-      keepLit(step.target?.[0]);
-      window.setTimeout(go, SETTLE_MS);
+      const here = at === was.at;
+      const again = was.feedback[step.id]?.settled === true;
+      if (!again && !settling.free()) return;
+      // The variant the reviewer sees as they settle.
+      actor.send({ type: "settle", ...(here ? {} : { step: at }), ...settleOf(at), at: now() });
+      // Opening a settled step again stays on it; its light turns back where it is.
+      if (again) return;
+      const then = actor.getSnapshot().context;
+      // The walk stayed, as on the last settle, or ended: nothing is left to wait for. The
+      // light turns green where it stands, so on a phone the part goes above the sheet.
+      if (!then.active || (then.at === was.at && then.run === was.run)) {
+        settling.reset();
+        if (then.active && here) keepLit(step.target?.[0]);
+        return;
+      }
+      settling.sent(`${String(was.run)}-${String(was.at)}`, here ? step.id : undefined);
     };
     const noteOpen = () => actor.getSnapshot().context.opened !== undefined;
     const act = (action: Action) => {
@@ -837,7 +828,7 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
   const view = useSession((s) => viewOf(s, adapter), sameView);
   const opened = useSession((s) => s.context.opened);
   const preview = useSession((s) => s.context.preview);
-  const { step, at } = useStep();
+  const { journey, step, at } = useStep();
   // The notes are the step's, or the page's off a step or with its chat.
   const noteStep = useNoteStep();
   const pins = usePins(noteStep);
@@ -884,9 +875,8 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
       pin: { what: describe(element), selector },
     });
   };
-  // A settled step's light is green with its check, and so is one whose settle plays. A
-  // light that undo or redo took back shows its old look until it stands on the part, and
-  // then turns.
+  // A settled step's light is green with its check. A light that undo or redo took back
+  // shows its old look until it stands on the part, and then turns.
   const key = `${String(run)}-${String(at)}`;
   const settledHere = useSession(
     (s) => step !== undefined && s.context.feedback[step.id]?.settled === true,
@@ -895,10 +885,14 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
   const turning = useSyncExternalStore(settling.subscribe, settling.turning);
   const stepId = step?.id;
   const turns = turning !== undefined && turning.step === stepId;
-  const look =
-    turning !== undefined && turns
-      ? turning.settled
-      : settledHere || (motion.kind === "playing" && motion.step === stepId);
+  const look = turning !== undefined && turns ? turning.settled : settledHere;
+  // The step a settle went on from, whose part shows the settle as the light leaves it.
+  const settledFrom =
+    motion.kind === "going" ? journey?.steps.find((s) => s.id === motion.step) : undefined;
+  const left =
+    motion.kind === "going" && settledFrom !== undefined
+      ? { at: motion.from, target: settledFrom.target ?? [] }
+      : undefined;
   // The step whose light stands on its part now.
   const standing = useRef("");
   const placed = (on: string) => {
@@ -929,6 +923,7 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
           settled={look}
           place={place}
           turning={turns}
+          left={left}
           onPlaced={placed}
         />
       )}

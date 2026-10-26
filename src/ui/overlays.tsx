@@ -10,6 +10,7 @@ import { isKept, type Note } from "../notes/note";
 import type { DevShift } from "../types";
 import { cx } from "./cx";
 import { useSession } from "./session";
+import { SETTLE_MS } from "./settle";
 import { isPhone } from "./touch";
 import {
   BAR,
@@ -225,8 +226,9 @@ export function Flash({
   );
 }
 
-/** How long the light glides from one part to the next, in ms. */
-export const GLIDE_MS = 300;
+/** How long the light glides from one part to the next, in ms: as long as a settle's green
+ * outline plays on the part it left. */
+export const GLIDE_MS = SETTLE_MS;
 
 /** How long the light waits for the page to stop scrolling to its next part, in ms, before it
  * glides there all the same. */
@@ -299,6 +301,7 @@ export function Light({
   settled,
   place,
   turning = false,
+  left,
   onPlaced,
 }: {
   readonly box: Box | undefined;
@@ -311,20 +314,24 @@ export function Light({
   /** Whether undo or redo took the walk to the step: its light arrives in its old look, with
    * no motion, and turns once it stands on the part. */
   readonly turning?: boolean;
+  /** The step a settle went on from, as `at` names it, and its part's selectors: its part
+   * shows the settle as the light leaves it. */
+  readonly left?: { readonly at: string; readonly target: readonly string[] } | undefined;
   readonly onPlaced: (at: string) => void;
 }) {
   const [motion, setMotion] = useState<Motion>({ kind: "fading", at: "" });
+  const [settles, setSettles] = useState<readonly Settled[]>([]);
   const [pulse, setPulse] = useState(0);
   // Each fade in draws a new light, so it does not turn from the last step's look.
   const [fades, setFades] = useState(0);
   const [, redraw] = useState(0);
-  const latest = useRef({ box, at, ready, motion, onPlaced });
-  latest.current = { box, at, ready, motion, onPlaced };
+  const latest = useRef({ box, at, ready, motion, left, onPlaced });
+  latest.current = { box, at, ready, motion, left, onPlaced };
   // The box the light last drew round a part that showed, and on which page.
   const drawn = useRef<{ readonly box: Box; readonly page: string } | undefined>(undefined);
   const missing = useRef<number | undefined>(undefined);
   useFrames(true, () => {
-    const { box, at, ready, motion: m, onPlaced } = latest.current;
+    const { box, at, ready, motion: m, left, onPlaced } = latest.current;
     const now = performance.now();
     const go = (next: Motion) => {
       latest.current = { ...latest.current, motion: next };
@@ -339,7 +346,10 @@ export function Light({
         setFades((n) => n + 1);
         go({ kind: "fading", at });
         onPlaced(at);
-      } else go({ kind: "waiting", at, from: from.box, since: now, last: box, still: 0 });
+      }
+      // After a settle the light goes at once, on to the part as it scrolls there.
+      else if (left?.at === m.at) go({ kind: "gliding", at, from: from.box, start: now });
+      else go({ kind: "waiting", at, from: from.box, since: now, last: box, still: 0 });
       return;
     }
     if (m.kind === "waiting" && box !== undefined) {
@@ -385,6 +395,17 @@ export function Light({
     if (box !== undefined && rect !== undefined && motion.at === at)
       drawn.current = { box: rect, page: pageNow() };
   });
+  // A settle went on from the step the light stands on: its part shows the settle, where the
+  // light last stood, as the light leaves.
+  const leftAt = left?.at;
+  const leftTarget = left?.target.join("|") ?? "";
+  useLayoutEffect(() => {
+    const from = drawn.current;
+    if (leftAt === undefined || from === undefined) return;
+    const id = `${leftAt}-${String(performance.now())}`;
+    const target = leftTarget === "" ? [] : leftTarget.split("|");
+    setSettles((all) => [...all, { id, box: from.box, target }]);
+  }, [leftAt, leftTarget]);
   // Until the light leaves for the next part, it keeps the look of the step it stands on: a
   // settled one stays green as the walk goes on.
   const held = useRef(settled);
@@ -392,56 +413,127 @@ export function Light({
   if (here) held.current = settled;
   const look = here ? settled : held.current;
   const instant = turning && (!here || motion.kind === "gliding") ? "transition-none" : undefined;
-  if (rect === undefined) return null;
+  return (
+    <>
+      {settles.map((s) => (
+        <SettledPart
+          key={s.id}
+          box={s.box}
+          target={s.target}
+          onDone={() => setSettles((all) => all.filter((o) => o.id !== s.id))}
+        />
+      ))}
+      {rect !== undefined && (
+        <div
+          key={fades}
+          {...UI}
+          aria-hidden
+          data-dt-motion={motion.kind}
+          className={cx(
+            "pointer-events-none fixed inset-0 z-[2147483000] transition-opacity duration-150",
+            motion.kind === "gone" ? "opacity-0" : "opacity-100 starting:opacity-0",
+          )}
+        >
+          <svg className="absolute inset-0 size-full">
+            <defs>
+              <mask id="blueline-light">
+                <rect width="100%" height="100%" fill="white" />
+                <rect
+                  style={{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
+                  rx="12"
+                  fill="black"
+                />
+              </mask>
+            </defs>
+            <rect width="100%" height="100%" fill="rgb(0 0 0 / 0.18)" mask="url(#blueline-light)" />
+          </svg>
+          <div
+            data-dt-light={look ? "settled" : "open"}
+            className={cx(
+              "absolute rounded-[12px] ring-2 transition-shadow duration-200",
+              look ? "ring-dt-good" : "ring-dt-accent delay-150",
+              instant,
+            )}
+            style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
+          >
+            {pulse > 0 && (
+              <span
+                key={pulse}
+                className={cx(
+                  "absolute inset-0 animate-dt-pulse rounded-[12px] motion-reduce:hidden",
+                  look ? "text-dt-good" : "text-dt-accent",
+                )}
+              />
+            )}
+            <SettleCheck
+              settled={look}
+              instant={instant}
+              // On the corner, but never past the screen's edge, as a phone's part stands near it.
+              at={{ x: Math.max(0, CHECK_EDGE - rect.x), y: Math.max(0, CHECK_EDGE - rect.y) }}
+            />
+            {place !== undefined && <VariantTab place={place} settled={look} instant={instant} />}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** A part that a settle left: where the light stood, and its selectors, to follow it. */
+interface Settled {
+  readonly id: string;
+  readonly box: Box;
+  readonly target: readonly string[];
+}
+
+/** The settle on the part it left: a green outline and a check that draws in, which stand
+ * and then fade as the light glides on. It follows the part as the page scrolls, and stays
+ * where the light stood when the part has gone, as to another page. With reduced motion the
+ * check does not draw: the outline and the check only fade. */
+function SettledPart({
+  box,
+  target,
+  onDone,
+}: {
+  readonly box: Box;
+  readonly target: readonly string[];
+  /** Its motion has ended: it leaves. */
+  readonly onDone: () => void;
+}) {
+  const [, redraw] = useState(0);
+  useFrames(true, () => redraw((n) => (n + 1) % 1024));
+  const rect = boxOf(target) ?? box;
   return (
     <div
-      key={fades}
       {...UI}
       aria-hidden
-      data-dt-motion={motion.kind}
-      className={cx(
-        "pointer-events-none fixed inset-0 z-[2147483000] transition-opacity duration-150",
-        motion.kind === "gone" ? "opacity-0" : "opacity-100 starting:opacity-0",
-      )}
+      data-dt-settled-part=""
+      onAnimationEnd={(e) => {
+        if (e.animationName === "dt-left") onDone();
+      }}
+      className="pointer-events-none fixed inset-0 z-[2147483000] animate-dt-left"
     >
-      <svg className="absolute inset-0 size-full">
-        <defs>
-          <mask id="blueline-light">
-            <rect width="100%" height="100%" fill="white" />
-            <rect
-              style={{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }}
-              rx="12"
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect width="100%" height="100%" fill="rgb(0 0 0 / 0.18)" mask="url(#blueline-light)" />
-      </svg>
       <div
-        data-dt-light={look ? "settled" : "open"}
-        className={cx(
-          "absolute rounded-[12px] ring-2 transition-shadow duration-200",
-          look ? "ring-dt-good" : "ring-dt-accent delay-150",
-          instant,
-        )}
+        className="absolute rounded-[12px] ring-2 ring-dt-good"
         style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
       >
-        {pulse > 0 && (
-          <span
-            key={pulse}
-            className={cx(
-              "absolute inset-0 animate-dt-pulse rounded-[12px] motion-reduce:hidden",
-              look ? "text-dt-good" : "text-dt-accent",
-            )}
-          />
-        )}
-        <SettleCheck
-          settled={look}
-          instant={instant}
-          // On the corner, but never past the screen's edge, as a phone's part stands near it.
-          at={{ x: Math.max(0, CHECK_EDGE - rect.x), y: Math.max(0, CHECK_EDGE - rect.y) }}
-        />
-        {place !== undefined && <VariantTab place={place} settled={look} instant={instant} />}
+        <span
+          style={{ left: Math.max(0, CHECK_EDGE - rect.x), top: Math.max(0, CHECK_EDGE - rect.y) }}
+          className="absolute grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-dt-good"
+        >
+          <svg viewBox="0 0 20 20" className="size-5" fill="none">
+            <path
+              d="M6 10.5 8.6 13 14 7.5"
+              pathLength={1}
+              stroke="white"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={1}
+              className="animate-dt-draw motion-reduce:animate-none"
+            />
+          </svg>
+        </span>
       </div>
     </div>
   );

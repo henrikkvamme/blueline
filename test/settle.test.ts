@@ -2,34 +2,34 @@ import { describe, expect, it } from "vitest";
 import { release, settleGate } from "../src/ui/settle";
 
 describe("a settle", () => {
-  it("does nothing while another settle's motion plays", () => {
+  it("goes on at once, and does nothing more until the next step shows with its light in place", () => {
     const gate = settleGate();
-    expect(gate.begin("status")).toBe(true);
-    expect(gate.current()).toEqual({ kind: "playing", step: "status" });
-    // A second y, Enter or check during the motion, on the same step or another.
-    expect(gate.begin("status")).toBe(false);
-    expect(gate.begin("amount")).toBe(false);
-  });
-
-  it("does nothing until the next step shows, with its light in place", () => {
-    const gate = settleGate();
-    gate.begin("status");
-    gate.sent("1-2");
-    expect(gate.begin("amount")).toBe(false);
-    // The step settled still shows: the walk has not gone on yet.
+    expect(gate.free()).toBe(true);
+    // The session settled the step shown, 1-2, and the walk went on.
+    gate.sent("1-2", "status");
+    expect(gate.current()).toEqual({ kind: "going", from: "1-2", step: "status" });
+    // A second y, Enter or check in the burst does nothing.
+    expect(gate.free()).toBe(false);
+    // The step settled still shows: the light has not left it yet.
     gate.shown("1-2");
-    expect(gate.begin("amount")).toBe(false);
+    expect(gate.free()).toBe(false);
     gate.shown("1-3");
     expect(gate.current()).toEqual({ kind: "still" });
-    expect(gate.begin("amount")).toBe(true);
+    expect(gate.free()).toBe(true);
+  });
+
+  it("names no part to show the settle when the tree settled another step", () => {
+    const gate = settleGate();
+    gate.sent("1-2", undefined);
+    expect(gate.current()).toEqual({ kind: "going", from: "1-2", step: undefined });
+    expect(gate.free()).toBe(false);
   });
 
   it("starts again at once when the walk stops or stays", () => {
     const gate = settleGate();
-    gate.begin("status");
-    gate.sent("1-2");
+    gate.sent("1-2", "status");
     gate.reset();
-    expect(gate.begin("status")).toBe(true);
+    expect(gate.free()).toBe(true);
   });
 
   it("tells the light the old look of a step that undo took back, until it turns", () => {
@@ -54,7 +54,7 @@ describe("a settle", () => {
     expect(enter.free()).toBe(false);
     enter.up();
     expect(enter.free()).toBe(true);
-    // A quick press is up before the motion ends and the finish shows.
+    // A quick press is up before the finish shows.
     const quick = release();
     quick.down();
     quick.up();
