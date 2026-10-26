@@ -98,10 +98,12 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
   // starts: the kept review's step would open its own page first, and the link would go with
   // the address it had. While a link to a journey the app has waits, the kept review opens no
   // step; the page's own journey waits for its parts.
-  let linked = linkedReview(location.href);
-  const waits =
-    linked !== undefined &&
-    (linked.journey === PAGE_JOURNEY || adapter.journeys.some((j) => j.id === linked?.journey));
+  const known = (journey: string) =>
+    journey === PAGE_JOURNEY || adapter.journeys.some((j) => j.id === journey);
+  const first = linkedReview(location.href);
+  // A link to a journey the app does not have is not kept, so a later link still counts.
+  let linked = first !== undefined && known(first.journey) ? first : undefined;
+  const waits = linked !== undefined;
   const stored = loadKept(storageKey);
   const actor = createActor(liveMachine({ adapter, shift, path }), {
     input: {
@@ -124,9 +126,11 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
   };
 
   // The link's journey may be the page's own, whose parts come after the session starts. Once
-  // it starts, the address is clean. The app can also go to a page with a link.
+  // it starts, the address is clean. The app can also go to a page with a link, which then
+  // counts before the one kept from the start.
   const followLink = () => {
-    const link = linked ?? linkedReview(location.href);
+    const there = linkedReview(location.href);
+    const link = there !== undefined && known(there.journey) ? there : linked;
     if (link === undefined || !info.journeys.some((j) => j.id === link.journey)) return;
     linked = undefined;
     history.replaceState(history.state, "", link.rest);
@@ -155,7 +159,8 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
   /** The page's path or parts changed: the session gets the journeys and the place again. */
   const moved = () => {
     const next = pageOf();
-    if (next === page) return;
+    // The same page may have a link in its query now.
+    if (next === page) return followLink();
     const place = next.split("\n")[0];
     const wasPlace = page.split("\n")[0];
     page = next;

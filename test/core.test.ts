@@ -121,6 +121,31 @@ describe("a session", () => {
     expect(address).toBe("http://localhost/other");
   });
 
+  it("follows a link the app puts in the query of the same page", () => {
+    address = "http://localhost/";
+    session = startSession({
+      adapter,
+      storageKey: "test",
+      path: () => new URL(address).pathname,
+    });
+    address = "http://localhost/?review=prep&step=c";
+    session.moved();
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 2 });
+    expect(address).toBe("http://localhost/");
+  });
+
+  it("follows a later link after a first link to a journey the app does not have", () => {
+    address = "http://localhost/?review=missing";
+    session = startSession({
+      adapter,
+      storageKey: "test",
+      path: () => new URL(address).pathname,
+    });
+    address = "http://localhost/other?review=prep&step=b";
+    session.moved();
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 1 });
+  });
+
   it("starts idle with no link, and keeps the review in the browser's storage", () => {
     address = "http://localhost/";
     session = start();
