@@ -1,9 +1,46 @@
+import path from "node:path";
 import { recommended } from "@effect/tsgo/oxlint-presets";
+import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vite-plus";
 
 /** What the overlay's own bundle holds: React, Effect, XState, lucide and what they need. */
 const PRIVATE =
   /^(react|react-dom|scheduler|use-sync-external-store|use-isomorphic-layout-effect|effect|xstate|@xstate\/react|lucide-react)(\/|$)/u;
+
+/** Where the browser tests take the package from: its source, or the built `dist`. */
+const ENTRIES = {
+  source: { main: "src/index.ts", variants: "src/part/variants.tsx" },
+  packed: { main: "dist/index.js", variants: "dist/variants.js" },
+};
+
+/*
+ * The demo app's tests in Chromium, with Blueline from its source or from the built package:
+ * the overlay in its shadow roots, the keys and the lift as a reviewer uses them. The page
+ * has no Tailwind, so nothing of the tools' look comes from the page.
+ */
+function browser(from: keyof typeof ENTRIES) {
+  const at = (file: string) => path.join(import.meta.dirname, file);
+  return {
+    extends: true,
+    resolve: {
+      alias: [
+        { find: /^@henrikkvamme\/blueline$/u, replacement: at(ENTRIES[from].main) },
+        { find: /^@henrikkvamme\/blueline\/variants$/u, replacement: at(ENTRIES[from].variants) },
+      ],
+    },
+    test: {
+      name: `browser-${from}`,
+      include: ["examples/review-demo/test/**/*.test.tsx"],
+      browser: {
+        enabled: true,
+        provider: playwright(),
+        headless: true,
+        instances: [{ browser: "chromium" as const }],
+        screenshotFailures: false,
+      },
+    },
+  };
+}
 
 /*
  * One config for the package's tools. `vp check` formats, lints and type checks; `vp test`
@@ -27,7 +64,11 @@ export default defineConfig({
     ignorePatterns: ["dist/**", "pnpm-lock.yaml", "src/**/*.gen.ts"],
   },
   test: {
-    include: ["test/**/*.test.ts"],
+    projects: [
+      { extends: true, test: { name: "node", include: ["test/**/*.test.ts"] } },
+      browser("source"),
+      browser("packed"),
+    ],
   },
   /*
    * The browser parts and the dev server's plugin with their types, and the agent's

@@ -10,10 +10,12 @@ repository where Blueline started. It builds, checks and tests here on Effect 4.
 
 With Node 24 and pnpm, from the repository root:
 
-- `pnpm install` installs the locked dependencies.
+- `pnpm install` installs the locked dependencies, and `pnpm exec playwright install
+  chromium` the browser for the browser tests.
 - `pnpm run check` formats, lints and type checks.
-- `pnpm test` runs the tests.
+- `pnpm test` runs the tests: in Node, and the demo in Chromium with Blueline from its source.
 - `pnpm run pack` builds the published files in `dist`.
+- `pnpm run test:packed` runs the demo's tests in Chromium on the built `dist`.
 - `pnpm run verify` runs all of them.
 - `pnpm run demo` starts the review demo (`examples/review-demo`) at `http://localhost:4310`.
 
