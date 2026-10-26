@@ -516,7 +516,7 @@ export function Lift({
                 a field, does not touch its edge; the part keeps its size and place. */}
             <div
               aria-hidden
-              className="absolute -inset-3 rounded-[14px] bg-white shadow-[0_24px_60px_-18px_rgb(0_0_0/0.6)]"
+              className="blueline absolute -inset-3 rounded-[14px] bg-white shadow-[0_24px_60px_-18px_rgb(0_0_0/0.6)]"
             />
             <div className="relative">
               <slot name={slotOf(way, i, variants)} />
@@ -546,7 +546,7 @@ export function Lift({
           aria-label={middle ? `Use ${name ?? ""}` : `Show ${name ?? ""}`}
           tabIndex={opacity === 0 ? -1 : undefined}
           onClick={() => (middle ? finish(o) : pick(way, i))}
-          className="absolute -inset-3 rounded-[14px] outline-none"
+          className="blueline absolute -inset-3 rounded-[14px] outline-none"
         />
       </div>
     );
@@ -554,7 +554,9 @@ export function Lift({
 
   if (host === undefined) return null;
   // The stage and its bar in the lift's shadow root; each option's copy of the part on the
-  // page, as a light child of the host that the option's slot shows (variants.tsx).
+  // page, as a light child of the host that the option's slot shows (variants.tsx). A copy
+  // inherits from its slot's ancestors, so they set no theme: only the elements that hold no
+  // slot, as the dim, the cards, the click targets and the bar, take `.blueline` and its theme.
   return createPortal(
     <div
       className={cx("fixed inset-0 z-[2147483005]", leaving && "pointer-events-none")}
@@ -563,7 +565,7 @@ export function Lift({
     >
       <div
         className={cx(
-          "absolute inset-0 animate-in touch-none transition-opacity duration-200 fade-in",
+          "blueline absolute inset-0 animate-in touch-none transition-opacity duration-200 fade-in",
           "bg-black/55",
           leaving && "opacity-0",
         )}
