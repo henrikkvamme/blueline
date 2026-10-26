@@ -866,6 +866,54 @@ must do:
   open websockets, and stop on a signal and on a failed start. Test that the dev server and
   both ports are gone afterwards.
 
+### D1 in steps
+
+D1 lets an app give its journeys as data, in `blueline.config.ts` in its root, with no adapter
+code. The config becomes an adapter on the page, so the walk stays as it is.
+
+1. **The config.** `@henrikkvamme/blueline/config` gives `defineConfig` and its types, with
+   no code to run beyond it. A journey has an `id`, a `title` and its steps. A step has what
+   a `DevStep` has, with `group` as one string, and these, each a list of actions or an
+   async function that gets an `AbortSignal`:
+   - `enter`: opens the step's world, as a path to open and a click;
+   - `setup`: opens the part, again before each variant;
+   - `reset`: takes a variant's state off; it runs to its end;
+   - `exit`: runs when the walk leaves the step, after `reset`;
+   - `ready`: the selectors that show the step is ready, or a function;
+   - `timeout`: how long to wait, 5 seconds by default.
+
+   A variant has a `label`, a `choice` or `show`, actions or a function.
+
+2. **Actions.** `{ open: path }` goes to the path with a new page load, unless the page is
+   on it; the walk takes the step up again on the new page, where `open` finds it there.
+   `{ click: selector }`, `{ type: text, into: selector }`, which sets the value as a person
+   types it, so a framework's input handler runs, and `{ press: key, on?: selector }` wait
+   for their element first. `{ wait: selector }` waits for it, and `{ emit: name, detail }`
+   sends a window `CustomEvent`. Each wait ends at the step's `timeout` with a reason, such
+   as "No .ov-dock after 5 s".
+3. **The walk.** `DevStep` gets `ready` and `exit`, for an adapter in code too. Before each
+   variant the walk runs the step's `reset`, then `setup`, then the variant, then waits for
+   `ready`. When it leaves the step, it runs `reset`, then `exit`. A step whose code fails or
+   is not ready in time keeps the reason: its row in the tree and its card show it, in the
+   panel's error colour, until the step opens again. The console still has the cause.
+4. **The page gets the config.** The config module is an adapter for `mountPage`
+   (`configAdapter`), with the page's routes.
+   - **Vite plugin.** When the root has `blueline.config.ts` (or `.js`), the plugin's tag
+     imports it through Vite, so it may import the app's code. A change to it reloads the
+     page, as Vite does for a module with no hot update; the review keeps its place.
+   - **A tag by hand.** The server serves `/blueline/<app>/config.js` from the app's root:
+     the TypeScript's types stripped by Node, and its one import, of
+     `@henrikkvamme/blueline/config`, taken out. A config with another import gets 500 and a
+     reason that names the Vite plugin. The tag sends the page an event when the file
+     changes (`/blueline/<app>/events`, server-sent), and the page loads again.
+5. **Tests.**
+   - Node: the config's types; the server's `config.js` with types stripped, its import
+     taken out, 500 for another import, and the event when the file changes.
+   - Browser, on a page with no React: each action, with a wait that ends in time and says
+     why; `open` on a new page load; the order reset, setup, show, ready for each variant,
+     and reset, exit on leaving; a step that is not ready shows its reason on its row and
+     its card, and loses it when it opens again; a config from the Vite plugin's tag.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.
