@@ -659,6 +659,8 @@ export function Pins({
             type="button"
             key={pin.id}
             aria-label={`Note ${i + 1}: ${pin.thread.at(-1)?.text ?? (pin.draft || pin.pin?.what)}`}
+            // A note with words on its pin waits for the next message.
+            title={isKept(pin) && open !== pin.id ? "Waits for the next message" : undefined}
             onClick={() => onOpen(pin.id)}
             className={cx(
               "pointer-events-auto absolute grid size-5 -translate-y-1/2 place-items-center rounded-full text-[10px] leading-none font-semibold tabular-nums shadow-dt-float transition-transform hover:scale-110 max-sm:before:absolute max-sm:before:-inset-3 max-sm:before:content-['']",

@@ -328,7 +328,8 @@ const imagesIn = (files: FileList | null | undefined) =>
 /**
  * The composer, as in a chat app: one box with the field and its buttons. The + button and a
  * paste or a drop add screenshots. In the step's composer Enter sends now, with the step's
- * pointed notes; in a pointed note Enter adds it. Either way the focus goes back to the page.
+ * pointed notes; in a pointed note Enter sends it at once, and Cmd+Enter, or Ctrl+Enter off a
+ * Mac, keeps it on its pin for the next message. Either way the focus goes back to the page.
  * Shift+Enter starts a new line.
  */
 export function Composer({
@@ -358,8 +359,9 @@ export function Composer({
   /** How many pointed notes go with the step's note. */
   readonly pointed?: number;
   readonly fieldRef?: React.RefObject<HTMLTextAreaElement | null>;
-  /** Enter or Escape: the reviewer is done writing here. */
-  readonly onDone: (how: "enter" | "escape") => void;
+  /** Enter, Cmd+Enter or Escape: the reviewer is done writing here. Cmd+Enter in a pointed
+   * note, or its Later button, says `later`: the note waits for the next message. */
+  readonly onDone: (how: "enter" | "later" | "escape") => void;
   /** Tab, with no command to complete: the panel writes to the other chat, in the same mode. */
   readonly onTab?: ((insert: boolean) => void) | undefined;
   /** Where Escape in normal mode puts the keys: the panel's tree, which unfolds, so the
@@ -371,7 +373,7 @@ export function Composer({
   const picker = useRef<HTMLInputElement>(null);
   const field = fieldRef ?? own;
   const [uploading, setUploading] = useState(0);
-  const leave = (how: "enter" | "escape") => {
+  const leave = (how: "enter" | "later" | "escape") => {
     // The tree keeps the field, so i comes back to it.
     if (how === "escape" && escapeTo === "panel") perform({ kind: "focus", to: "panel" });
     else field.current?.blur();
@@ -481,9 +483,9 @@ export function Composer({
       }}
       className="relative flex flex-col gap-1.5 rounded-dt-panel border border-dt-line bg-dt-ground p-1.5 focus-within:border-dt-accent/70"
     >
-      {/* On the border, so the field keeps its width when the mode shows; left of the send
-          button, which it would cover. */}
-      <span className="pointer-events-none absolute -top-2 right-11 rounded-full bg-dt-panel empty:hidden">
+      {/* On the border, so the field keeps its width when the mode shows; at the left, over
+          no button and no words. */}
+      <span className="pointer-events-none absolute -top-2 left-9 rounded-full bg-dt-panel empty:hidden">
         <VimMode mode={mode} />
       </span>
       <Images images={images} uploading={uploading} onRemove={removeImage} />
@@ -621,6 +623,11 @@ export function Composer({
               }
               if (e.key !== "Enter" || e.shiftKey) return;
               e.preventDefault();
+              // A pointed note kept for the next message: it waits on its pin.
+              if (!sends && (e.metaKey || e.ctrlKey)) {
+                leave("later");
+                return;
+              }
               // Enter acts and gives the keys back to the page, as vim's command line does, so
               // y settles next with no Escape.
               if (command !== undefined) run(command);
@@ -637,6 +644,18 @@ export function Composer({
             )}
           />
         </div>
+        {!sends && sendsNote && (
+          // Keeps the note on its pin, to go with the next message, as Cmd+Enter does.
+          <button
+            type="button"
+            title="Send with the next message"
+            disabled={draft.trim() === "" && images.length === 0}
+            onClick={() => leave("later")}
+            className="h-7 shrink-0 rounded-dt-control px-2 text-[12px] text-dt-muted hover:bg-dt-raised hover:text-dt-text disabled:opacity-40 disabled:hover:bg-transparent max-sm:h-11 max-sm:px-3 max-sm:text-[14px]"
+          >
+            Later
+          </button>
+        )}
         {!sends && (
           // Sends the note, or keeps it for the message in the chat's field, as Enter does.
           <button

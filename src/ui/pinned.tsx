@@ -15,9 +15,10 @@ import { focusToWrite } from "../vim";
 /*
  * A note on an element the reviewer pointed at, in a card beside the element. Enter sends it
  * at once, as a message with its pin, in the chat of its step or page, where the agent answers
- * it; the focus goes back to the page. While the chat's message field holds words, the note
- * joins them instead: Enter keeps it, its chip stands over the field, and it goes with that
- * message. The card's button shows which: send, or a check.
+ * it; the focus goes back to the page. Later, or Cmd+Enter, keeps it on its pin: it waits, its
+ * chip stands over the message field, and it goes with the next message. While the chat's
+ * message field holds words, the note joins them instead: Enter keeps it too. The card's
+ * button shows which: send, or a check.
  */
 
 const WIDTH = 320;
@@ -107,6 +108,7 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
           placeholder="What should change here?"
           onDone={(how) => {
             actor.send({ type: "close" });
+            // Later, or Cmd+Enter, keeps it on its pin: it goes with the next message.
             if (how === "enter" && !joins && isKept(note)) sendPins(actor, note.step);
           }}
         />

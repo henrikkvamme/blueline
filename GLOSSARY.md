@@ -65,7 +65,8 @@ _Avoid_: Decision, choice
 
 **Note**:
 Words that the reviewer writes on a pin. Enter sends it at once, as a message with its pin.
-While the chat's message field holds words, the note joins them and goes with that message.
+Cmd+Enter, or Later, keeps it on its pin for the next message. While the chat's message
+field holds words, the note joins them and goes with that message.
 _Avoid_: Comment, annotation
 
 **Pin**:

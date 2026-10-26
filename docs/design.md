@@ -207,7 +207,9 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   with 44 px targets.
 - **A pin's note card stays beside its pin** while the reviewer writes. Enter in the card
   sends the note at once, as a message with its pin, and the sent note joins the chat in the
-  panel. While the chat's message field holds words, the note joins them instead: Enter keeps
+  panel. Cmd+Enter, or Ctrl+Enter off a Mac, and a quiet **Later** beside the send arrow keep
+  the note on its pin: it waits, its chip stands over the message field, and it goes with the
+  next message. The `?` menu lists both keys. While the chat's message field holds words, the note joins them instead: Enter keeps
   it, its chip stands over the field, and it goes with that message. The card's button shows
   which, with no words: a blue send arrow, or a grey check.
 - **Three layers, each hidden on its own.** The page is at the bottom, the light is over

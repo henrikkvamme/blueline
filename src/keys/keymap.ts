@@ -663,6 +663,13 @@ const written = (key: string): string => {
   return `${mod}+${shifted ? "Shift+" : ""}${k.toUpperCase()}`;
 };
 
+/** The keys of a pin's note card, which its field takes (ui/composer.tsx); the `?` menu
+ * lists them. */
+export const CARD_KEYS = [
+  { id: "send", label: "In a pin's note: send it now", key: "↵" },
+  { id: "later", label: "In a pin's note: keep it for the next message", key: "Cmd+↵ Ctrl+↵" },
+] as const;
+
 /** How the `?` menu names a binding's keys, as `h ←`, `Ctrl+R` or `g g`. */
 export const keyName = (b: Binding) =>
   b.shows ?? b.keys.map((k) => (b.zone === "go" ? `g ${written(k)}` : written(k))).join(" ");

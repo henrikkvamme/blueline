@@ -30,7 +30,35 @@ const enter = (s: Snapshot): Snapshot =>
         { type: "send", id: stepNoteId(place), step: place, at: 2, text: "" },
       );
 
+/** Cmd+Enter in the note card, or Later: the note waits on its pin, and nothing goes. */
+const later = (s: Snapshot): Snapshot => after(s, { type: "close" });
+
 describe("a pointed note", () => {
+  it("waits on its pin with Later, and goes with the next message", () => {
+    const kept = later(
+      after(
+        page(),
+        { type: "point", id: "p1", pin },
+        { type: "write", id: "p1", step: place, pin, draft: "Bad" },
+      ),
+    );
+    expect(kept.context.notes.find((n) => n.id === "p1")?.draft).toBe("Bad");
+    expect(kept.context.notes.find((n) => n.id === stepNoteId(place))).toBeUndefined();
+    expect(kept.context.posts).toBe(0);
+    const sent = after(
+      kept,
+      { type: "write", id: stepNoteId(place), step: place, draft: "And this" },
+      { type: "send", id: stepNoteId(place), step: place, at: 3 },
+    );
+    expect(sent.context.notes.find((n) => n.id === stepNoteId(place))?.thread).toEqual([
+      expect.objectContaining({
+        text: "And this",
+        pins: [expect.objectContaining({ text: "Bad" })],
+      }),
+    ]);
+    expect(sent.context.notes.some((n) => n.id === "p1")).toBe(false);
+  });
+
   it("goes to the agent at once, as a message with its pin, when the chat's field is empty", () => {
     const s = enter(
       after(

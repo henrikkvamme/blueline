@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRegistry } from "../choices";
 import {
   BINDINGS,
+  CARD_KEYS,
   bindingsFor,
   commandBindings,
   goBindings,
@@ -129,6 +130,8 @@ function Help({ view }: { readonly view: View }) {
       key: "Alt+click",
       group: "Notes",
     },
+    // A pin's note card takes these keys in its field.
+    ...CARD_KEYS.map((k) => ({ id: `card-${k.id}`, label: k.label, key: k.key, group: "Notes" })),
     ...commands
       .filter((c) => c.key === undefined)
       .map((c) => ({ id: `command-${c.id}`, label: c.title, group: c.group ?? "Commands" })),
@@ -155,6 +158,8 @@ function Help({ view }: { readonly view: View }) {
         if (item.id.startsWith("choice-"))
           return choices.find((c) => c.name === item.group)?.choose(item.label);
         if (item.id === "point") return perform({ kind: "aim", on: true });
+        // The card's keys work only in its field.
+        if (item.id.startsWith("card-")) return;
         const row = rows[Number(item.id.slice(4))];
         if (row !== undefined) perform(rowAction(row));
       }}

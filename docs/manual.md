@@ -310,10 +310,12 @@ next reply, or goes through the notes on the page when no reply is new.
 
 Off a step, the panel is a chat with the agent on the page. `i` goes to its message field,
 and `m`, then a click, or Alt+click writes a note on an element. Enter in the note's card
-sends it at once, as a message with its pin; Shift+Enter starts a new line. While the
-message field holds words, the note joins them: Enter keeps it, its chip stands over the
-field, and the message takes it when it sends. The card's button shows which: a blue arrow
-sends, and a grey check keeps. Enter in an empty message field sends the notes that joined
+sends it at once, as a message with its pin; Shift+Enter starts a new line. To send it
+later, press Cmd+Enter, or Ctrl+Enter off a Mac, or click **Later** beside the arrow. The
+note then waits on its pin, its chip stands over the message field, and it goes with the
+next message. While the message field holds words, the note joins them: Enter keeps it, its
+chip stands over the field, and the message takes it when it sends. The card's button shows
+which: a blue arrow sends, and a grey check keeps. Enter in an empty message field sends the notes that joined
 alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
 answers in the panel's chat. `blueline review` listens to it. On a page with no journey and
 no part with variants, the empty chat says "Alt+click anything to leave a note." until it has
