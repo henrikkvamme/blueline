@@ -24,11 +24,15 @@ import {
 import { newHandoff } from "../notes/handoff";
 import { dropped, keptOn } from "../part/store";
 import {
+  keepsAnother,
+  keepsSame,
+  keptParts,
   openedAgain,
   openPlace,
   stepBy,
   type Entered,
   type Feedback,
+  type Keep,
   type Kept,
   type PartVerdicts,
   type Shape,
@@ -174,16 +178,20 @@ export type Event =
   | { readonly type: "posted"; readonly child: string }
   | { readonly type: "replies"; readonly replies: Readonly<Record<string, Reply>> }
   | { readonly type: "listening"; readonly listened: readonly (string | null)[] | undefined }
-  /** Settles the step and goes on to the next open one, or opens a settled step again. A
-   * settle keeps the variant the step's part shows, as the one the agent keeps in the code. */
+  /** Says the step is right as it shows, and goes on to the next open one. A settle keeps
+   * the variant the step's part shows, as the one the agent keeps in the code. On a settled
+   * step that shows another variant than the one kept, it keeps the one shown; on one that
+   * shows the kept variant, it only goes on. */
   | {
       readonly type: "settle";
       /** The step to settle, as one selected in the tree; the review's step when none. */
       readonly step?: number | undefined;
-      readonly keep?: { readonly part: string; readonly variant: string } | undefined;
+      readonly keep?: Keep | undefined;
       /** When, in ms: the step's notes not sent yet go with the settle, as a message. */
       readonly at?: number | undefined;
     }
+  /** Opens a settled step again: it keeps no variant, and the agent works on it again. */
+  | { readonly type: "reopen"; readonly step?: number | undefined }
   /** Deletes a variant of a part on the step. */
   | { readonly type: "drop"; readonly part: string; readonly variant: string }
   | { readonly type: "design"; readonly design: string }
@@ -259,6 +267,9 @@ export interface EnterInput {
   readonly variant: number;
   readonly fresh: boolean;
   readonly leaving: Entered | undefined;
+  /** The variants the step's settle kept on its parts, by the part's name: the page shows
+   * them, so a settled step opens as it was settled. None for an open step. */
+  readonly kept: Readonly<Record<string, string>>;
 }
 
 /** The step whose part the walk keeps open while it is ready. */
@@ -328,6 +339,25 @@ const readsReplies = (c: Context) => c.active || c.notes.some(isWithAgent);
 const variantLabel = (c: Context, step: string) => {
   const shape = shapeOf(c)?.steps.find((s) => s.id === step);
   return shape?.variants[c.variants[step] ?? 0];
+};
+
+/** The step's own variant that a settle keeps: the one shown, on a step with variants. */
+const ownOf = (c: Context, step: Shape["steps"][number]) =>
+  step.variants.length > 1 ? variantLabel(c, step.id) : undefined;
+
+/** Whether a settle on a settled step keeps another variant than the one kept: else it only
+ * goes on. */
+const changesKept = (c: Context, step: Shape["steps"][number], keep: Keep | undefined): boolean =>
+  keepsAnother(c.feedback[step.id] ?? {}, keep, ownOf(c, step));
+
+/** The step's variants as its settle kept them: a settled step shows its kept own variant
+ * each time the walk comes to it. */
+const keptVariants = (c: Context) => {
+  const step = stepOf(c);
+  const kept = step === undefined ? undefined : c.feedback[step.id];
+  if (step === undefined || kept?.settled !== true || kept.variant === undefined) return c.variants;
+  const index = step.variants.indexOf(kept.variant);
+  return index < 0 ? c.variants : { ...c.variants, [step.id]: index };
 };
 
 const NO_VERDICTS: PartVerdicts = { kept: [], dropped: [] };
@@ -404,11 +434,17 @@ const turnedBy = (c: Context, change: Change) => {
   return step === undefined ? undefined : { step, settled: c.feedback[step]?.settled === true };
 };
 
+/** Whether the step's settle reads otherwise to the agent: it turned settled or open, or it
+ * stays settled with another variant kept. */
+const turns = (a: Feedback | undefined, b: Feedback | undefined) =>
+  (a?.settled === true) !== (b?.settled === true) || (a?.settled === true && !keepsSame(a, b));
+
 /**
- * The settle lines for the steps whose settled state the change to `next` turns, in their
- * order, as one chain of posts. Each line carries the feedback as it stands once its own step
- * turned, so its `left` counts the steps open then. The last settle, which waits for Finish,
- * has no line: the agent never heard of it, so it has nothing to take back.
+ * The settle lines for the steps whose settle the change to `next` turns, in their order, as
+ * one chain of posts: a step settled or opened, or one that keeps another variant. Each line
+ * carries the feedback as it stands once its own step turned, so its `left` counts the steps
+ * open then. The last settle, which waits for Finish, has no line: the agent never heard of
+ * it, so it has nothing to take back.
  */
 function turnedLines(
   c: Context,
@@ -417,9 +453,7 @@ function turnedLines(
 ): Post | undefined {
   const turned = steps.filter(
     (id) =>
-      (c.feedback[id]?.settled === true) !== (next.feedback[id]?.settled === true) &&
-      id !== c.finish?.step &&
-      id !== next.finish?.step,
+      turns(c.feedback[id], next.feedback[id]) && id !== c.finish?.step && id !== next.finish?.step,
   );
   let feedback = c.feedback;
   const posts = turned.map((id): Post => {
@@ -459,11 +493,23 @@ function changeOf(c: Context, event: Event): Change | undefined {
         : event.event.type === "reopen"
           ? note(event.id, "Reopened a note")
           : undefined;
-    case "settle": {
+    case "settle":
+    case "reopen": {
       const step = stepOf(c, event.step ?? c.at);
       if (step === undefined) return undefined;
+      const settled = c.feedback[step.id]?.settled === true;
+      const keep = event.type === "settle" ? event.keep : undefined;
+      // A settle on a settled step that keeps the same variant changes nothing.
+      if (event.type === "reopen" ? !settled : settled && !changesKept(c, step, keep))
+        return undefined;
+      const kept = keep?.variant ?? ownOf(c, step);
       return {
-        label: c.feedback[step.id]?.settled === true ? "Opened the step again" : "Settled the step",
+        label:
+          event.type === "reopen"
+            ? "Opened the step again"
+            : settled
+              ? `Kept ${kept ?? "another variant"}`
+              : "Settled the step",
         notes: c.notes.filter((n) => n.step === step.id).map((n) => [n.id, n] as const),
         feedback: [[step.id, c.feedback[step.id]]],
         at: c.at,
@@ -608,9 +654,12 @@ export const sessionMachine = setup({
         context.finish !== null && restored.feedback[context.finish.step]?.settled !== true
           ? null
           : context.finish;
+      // A settle done again on the last open step waits for Finish. A step that stays
+      // settled, and keeps another variant, does not: its line goes.
       const finish =
         kept === null &&
         step !== undefined &&
+        context.feedback[step]?.settled !== true &&
         restored.feedback[step]?.settled === true &&
         openPlace(ids, restored.feedback, 0).open === 0
           ? { step, ids: [] }
@@ -637,9 +686,16 @@ export const sessionMachine = setup({
       }
       // A settle taken back goes back to its step: also from the page, where the review's
       // last settle ended the walk.
+      // A step that keeps another variant again opens again too, so the page shows it.
+      const shows =
+        step !== undefined &&
+        change.at !== undefined &&
+        stepOf(context, change.at)?.id === step &&
+        restored.feedback[step]?.settled === true &&
+        !keepsSame(context.feedback[step], restored.feedback[step]);
       if (!redo && change.at !== undefined && !context.active)
         enqueue.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
-      else if (change.at !== undefined && change.at !== context.at)
+      else if (change.at !== undefined && (change.at !== context.at || shows))
         enqueue.raise({ type: "jump", at: change.at });
       enqueue.emit({
         type: "undone",
@@ -836,20 +892,19 @@ export const sessionMachine = setup({
           const step = stepOf(context, at);
           if (step === undefined) return;
           const was: Feedback = context.feedback[step.id] ?? {};
-          // Opening the step again keeps no variant and opens the notes the reviewer
-          // settled, as the reviewer may settle on another.
-          if (was.settled === true) {
-            const { notes, feedback } = reopened(context, [step.id]);
-            enqueue.assign({ notes, feedback, posts: context.posts + 1, finish: null });
-            enqueue.spawnChild("post", {
-              id: `post-${context.posts}`,
-              input: {
-                kind: "settle",
-                ids: [],
-                step: step.id,
-                session: { ...context, notes, feedback },
-              },
-            });
+          const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
+          /** The walk goes on to the next open step, or back to one before when none is
+           * after, from the page and from the tree alike: the walk and the selection go there. */
+          const goOn = (feedback: Readonly<Record<string, Feedback>>) => {
+            const after = stepBy(ids, feedback, at, 1);
+            const next = after !== at ? after : stepBy(ids, feedback, at, -1);
+            enqueue.assign({ cursor: next, row: undefined });
+            if (next !== context.at) enqueue.raise({ type: "go", by: next - context.at });
+          };
+          // A settled step that shows the variant it kept is right as it is: the walk goes on.
+          const again = was.settled === true;
+          if (again && !changesKept(context, step, event.keep)) {
+            goOn(context.feedback);
             return;
           }
           // The notes not sent yet go with the settle, so none is lost: the agent works on
@@ -865,7 +920,8 @@ export const sessionMachine = setup({
               ? n
               : noteAfter(n, { type: "settle" }),
           );
-          // The settle keeps the variant shown: of the step's part, and of the step's own.
+          // The settle keeps the variant shown: of the step's part, and of the step's own. On
+          // a settled step, the variant kept before is kept no more, as if it never was.
           const parts =
             event.keep !== undefined
               ? {
@@ -876,7 +932,7 @@ export const sessionMachine = setup({
                   ),
                 }
               : was.parts;
-          const own = step.variants.length > 1 ? variantLabel(context, step.id) : undefined;
+          const own = ownOf(context, step);
           const feedback = {
             ...context.feedback,
             [step.id]: {
@@ -889,15 +945,22 @@ export const sessionMachine = setup({
           enqueue.assign({ notes, feedback });
           if (context.opened !== undefined && !notes.some((n) => n.id === context.opened))
             enqueue.raise({ type: "close" });
+          const held = context.finish;
+          const sent = message?.ids ?? [];
+          // The step whose settle waits for Finish keeps the new variant: Finish sends it.
+          if (held !== null && held.step === step.id) {
+            enqueue.assign({ finish: { step: held.step, ids: [...held.ids, ...sent] } });
+            return;
+          }
           // The last open step settled: the panel asks the reviewer to finish, and the settle
           // waits for that, so the agent wakes once, at the end. The walk stays on its step.
-          const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
-          if (openPlace(ids, feedback, context.at).open === 0) {
-            enqueue.assign({ finish: { step: step.id, ids: message?.ids ?? [] } });
+          if (!again && openPlace(ids, feedback, context.at).open === 0) {
+            enqueue.assign({ finish: { step: step.id, ids: sent } });
             if (context.preview) enqueue.raise({ type: "preview" });
             enqueue.raise({ type: "panel", shown: true });
             return;
           }
+          // A line goes at once: while a finish waits, its step counts as open in it.
           const session = { ...context, notes, feedback };
           enqueue.assign({ posts: context.posts + 1 });
           // The notes go after the settle, so the listener reads them with it.
@@ -911,12 +974,52 @@ export const sessionMachine = setup({
               next: message === undefined ? undefined : { kind: "note", ids: message.ids, session },
             },
           });
-          // A settle goes on to the next open step, or back to one before when none is after,
-          // from the page and from the tree alike: the walk and the selection go there.
-          const after = stepBy(ids, feedback, at, 1);
-          const next = after !== at ? after : stepBy(ids, feedback, at, -1);
-          enqueue.assign({ cursor: next, row: undefined });
-          if (next !== context.at) enqueue.raise({ type: "go", by: next - context.at });
+          goOn(feedback);
+        }),
+      ],
+    },
+    // Opening the step again keeps no variant and opens the notes the reviewer settled, as
+    // the reviewer may settle on another. The settle that waits for Finish never went: opening
+    // its step takes it back with no line, as Back does. Opening another step while it waits
+    // sends it, as that step is the last open one no more.
+    reopen: {
+      actions: [
+        "remember",
+        enqueueActions(({ context, event, enqueue }) => {
+          const step = stepOf(context, event.step ?? context.at);
+          if (step === undefined || context.feedback[step.id]?.settled !== true) return;
+          const { notes, feedback } = reopened(context, [step.id]);
+          const held = context.finish;
+          enqueue.assign({ notes, feedback, finish: null, posts: context.posts + 1 });
+          const session = { ...context, notes, feedback, finish: null };
+          const heldNotes = (ids: readonly string[]): Post | undefined =>
+            ids.length === 0 ? undefined : { kind: "note", ids, session };
+          if (held?.step === step.id) {
+            const notesHeld = heldNotes(held.ids);
+            if (notesHeld !== undefined)
+              enqueue.spawnChild("post", { id: `post-${context.posts}`, input: notesHeld });
+            return;
+          }
+          enqueue.spawnChild("post", {
+            id: `post-${context.posts}`,
+            input: {
+              kind: "settle",
+              ids: [],
+              step: step.id,
+              // The held settle has not gone yet, as this line goes.
+              session: { ...session, finish: held },
+              next:
+                held === null
+                  ? undefined
+                  : {
+                      kind: "settle",
+                      ids: [],
+                      step: held.step,
+                      session,
+                      next: heldNotes(held.ids),
+                    },
+            },
+          });
         }),
       ],
     },
@@ -972,7 +1075,12 @@ export const sessionMachine = setup({
         const held = context.finish;
         if (held === null) return;
         const last = context.past.at(-1);
-        if (last?.at !== undefined && last.feedback[0]?.[0] === held.step) {
+        // The settle that settled it, not a change of the variant it kept.
+        if (
+          last?.at !== undefined &&
+          last.feedback[0]?.[0] === held.step &&
+          last.feedback[0][1]?.settled !== true
+        ) {
           enqueue.raise({ type: "undo" });
           return;
         }
@@ -1121,17 +1229,22 @@ export const sessionMachine = setup({
           },
           states: {
             // A step opens with the tree folded, so the panel shows the step.
+            // A settled step opens with the variants its settle kept.
             entering: {
-              entry: assign(({ context }) => ({
-                tree: false,
-                leaving: context.opening,
-                opening: {
-                  journey: context.journey,
-                  at: context.at,
-                  variant: variantOf(context),
-                  run: context.run,
-                },
-              })),
+              entry: assign(({ context }) => {
+                const variants = keptVariants(context);
+                return {
+                  tree: false,
+                  variants,
+                  leaving: context.opening,
+                  opening: {
+                    journey: context.journey,
+                    at: context.at,
+                    variant: variantOf({ ...context, variants }),
+                    run: context.run,
+                  },
+                };
+              }),
               invoke: {
                 src: "enterStep",
                 input: ({ context }) => ({
@@ -1140,6 +1253,7 @@ export const sessionMachine = setup({
                   variant: variantOf(context),
                   fresh: context.fresh,
                   leaving: context.leaving,
+                  kept: keptParts(context.feedback[stepOf(context)?.id ?? ""]),
                 }),
               },
               on: {

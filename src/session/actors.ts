@@ -111,6 +111,11 @@ export function liveMachine<C>(live: Live<C>) {
     Effect.gen(function* () {
       const step = stepAt(input.journey, input.at);
       if (step === undefined) return;
+      // A settled step shows the variants its settle kept, as the page draws it.
+      yield* Effect.sync(() => {
+        for (const [part, variant] of Object.entries(input.kept))
+          parts.show(part, { variant, state: parts.shown(part).state });
+      });
       yield* leave(input.leaving);
       const started = yield* Clock.currentTimeMillis;
       let shown = false;

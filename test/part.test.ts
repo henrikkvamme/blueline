@@ -83,6 +83,7 @@ describe("the variant rows in the panel", () => {
     expect(variantRows(part, shown, NO_VERDICTS, none)).toEqual({
       labels: ["Title first", "Status first", "Compact row"],
       at: 1,
+      from: "part",
     });
   });
 
@@ -92,6 +93,7 @@ describe("the variant rows in the panel", () => {
     expect(variantRows(part, shown, verdicts, none)).toEqual({
       labels: ["Status first", "Compact row"],
       at: 0,
+      from: "part",
     });
   });
 
@@ -99,8 +101,8 @@ describe("the variant rows in the panel", () => {
     const one = { variant: undefined, state: undefined };
     const left = dropped(dropped(NO_VERDICTS, "Title first"), "Status first");
     const own = { labels: ["Empty", "Full"], at: 1 };
-    expect(variantRows(part, one, left, own)).toEqual(own);
-    expect(variantRows(undefined, one, NO_VERDICTS, own)).toEqual(own);
+    expect(variantRows(part, one, left, own)).toEqual({ ...own, from: "own" });
+    expect(variantRows(undefined, one, NO_VERDICTS, own)).toEqual({ ...own, from: "own" });
     expect(variantRows(undefined, one, NO_VERDICTS, { labels: ["Only"], at: 0 })).toBeUndefined();
     expect(variantRows(part, one, left, none)).toBeUndefined();
   });

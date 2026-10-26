@@ -2,7 +2,7 @@ import type { Note } from "../notes/note";
 import { PAGE_JOURNEY, placePath } from "../part/page";
 import type { DevJourney } from "../types";
 import type { Context, Post } from "./machine";
-import { openPlace } from "./state";
+import { heardFeedback, openPlace } from "./state";
 
 /*
  * What the agent reads in the feedback file, as it happens: a chat's message with the step
@@ -92,8 +92,13 @@ export function postedLine<C>(journeys: readonly DevJourney<C>[], post: Post, se
     sentAt,
     step: { number: index + 1, id, group: step?.group.title, title: step?.title },
     settled: f?.settled === true,
-    // The steps still open: none means the reviewer is through the journey.
-    left: openPlace(journey?.steps.map((s) => s.id) ?? [], session.feedback, index).open,
+    // The steps still open: none means the reviewer is through the journey. A settle that
+    // waits for Finish has not gone, so its step counts as open until then.
+    left: openPlace(
+      journey?.steps.map((s) => s.id) ?? [],
+      heardFeedback(session.feedback, session.finish),
+      index,
+    ).open,
     ...partsOf(session, id),
     ...keptVariantOf(session, id),
     ...handoffOf(post),

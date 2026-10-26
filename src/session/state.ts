@@ -40,8 +40,62 @@ export function openedAgain(f: Feedback): Feedback {
   };
 }
 
+/** A variant of a part that a settle keeps, by the part's name and the variant's label. */
+export interface Keep {
+  readonly part: string;
+  readonly variant: string;
+}
+
 /**
- * The step H and L go to: `by` steps on, passing over the settled ones, as the review is
+ * Whether a settle on a step that is settled keeps another variant than the one kept: of
+ * the step's part, `keep`, or of the step's own, `own`. Then the settle changes the verdict;
+ * else it only goes on, as the step is right as it shows.
+ */
+export function keepsAnother(f: Feedback, keep: Keep | undefined, own: string | undefined) {
+  const kept = keep === undefined ? undefined : (f.parts?.[keep.part]?.kept ?? []);
+  const part = keep !== undefined && (kept?.length !== 1 || kept[0] !== keep.variant);
+  return part || (own !== undefined && own !== f.variant);
+}
+
+/** Whether two feedbacks keep the same variants: of each part, and of the step's own. */
+export function keepsSame(a: Feedback | undefined, b: Feedback | undefined) {
+  const keptOf = (f: Feedback | undefined) =>
+    JSON.stringify([
+      Object.entries(f?.parts ?? {})
+        .filter(([, v]) => v.kept.length > 0)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([part, v]) => [part, v.kept]),
+      f?.variant,
+    ]);
+  return keptOf(a) === keptOf(b);
+}
+
+/** The variants that the settle of a step kept on its parts, by the part's name: a step that
+ * opens shows them. None for a step that is open. */
+export function keptParts(f: Feedback | undefined): Readonly<Record<string, string>> {
+  if (f?.settled !== true) return {};
+  return Object.fromEntries(
+    Object.entries(f.parts ?? {}).flatMap(([part, v]) => {
+      const variant = v.kept.at(-1);
+      return variant === undefined ? [] : [[part, variant] as const];
+    }),
+  );
+}
+
+/**
+ * The feedback as the agent knows it: the settle that waits for Finish never went, so its
+ * step is open to the agent until then.
+ */
+export function heardFeedback(
+  feedback: Readonly<Record<string, Feedback>>,
+  finish: { readonly step: string } | null,
+): Readonly<Record<string, Feedback>> {
+  if (finish === null) return feedback;
+  return { ...feedback, [finish.step]: { ...feedback[finish.step], settled: false } };
+}
+
+/**
+ * The step H and L go to:`by` steps on, passing over the settled ones, as the review is
  * done with them; the panel's tree still opens them. With no open step that way, it stays.
  */
 export function stepBy(

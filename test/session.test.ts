@@ -11,12 +11,15 @@ import {
   sessionMachine,
   stepNoteId,
   treeShown,
+  type EnterInput,
   type Event,
   type Post,
 } from "../src/session/machine";
 import { keptOf } from "../src/io/storage";
 import { handoffId, handoffStep } from "../src/notes/handoff";
-import { START, type Shape } from "../src/session/state";
+import { postedLine } from "../src/session/lines";
+import { START, type Feedback, type Shape } from "../src/session/state";
+import type { DevJourney } from "../src/types";
 
 const JOURNEYS: readonly Shape[] = [
   {
@@ -66,6 +69,7 @@ const ALPHABET: readonly Event[] = [
   { type: "send", id: stepNoteId("b"), step: "b", at: 1 },
   { type: "settle" },
   { type: "settle", step: 2 },
+  { type: "reopen" },
   { type: "finish" },
   { type: "back" },
   {
@@ -473,8 +477,8 @@ describe("a settle from the tree", () => {
     expect(s.context.feedback["a"]?.settled).toBeUndefined();
     expect(s.context.at).toBe(2);
     expect(s.context.cursor).toBe(2);
-    // Again on the settled step, it opens it again, and the walk and the selection stay.
-    s = after(s, { type: "entered" }, { type: "cursor", by: -1 }, { type: "settle", step: 1 });
+    // y again on the settled step opens it again, and the walk and the selection stay.
+    s = after(s, { type: "entered" }, { type: "cursor", by: -1 }, { type: "reopen", step: 1 });
     expect(s.context.feedback["b"]?.settled).toBe(false);
     expect(s.context.cursor).toBe(1);
     expect(s.context.at).toBe(2);
@@ -845,9 +849,9 @@ describe("settling a step", () => {
     expect(s.matches({ agent: "polling" })).toBe(s.context.active);
   });
 
-  it("opens the step again with y, or with a new message", () => {
+  it("opens the step again from the menu, or with a new message", () => {
     const settled = after(asked(), { type: "settle" });
-    const again = after(settled, { type: "jump", at: 0 }, { type: "entered" }, { type: "settle" });
+    const again = after(settled, { type: "jump", at: 0 }, { type: "entered" }, { type: "reopen" });
     expect(again.context.at).toBe(0);
     expect(again.context.feedback["a"]?.settled).toBe(false);
     expect(again.context.notes.find((n) => n.id === note)?.state).not.toBe("settled");
@@ -858,6 +862,16 @@ describe("settling a step", () => {
     );
     expect(written.context.feedback["a"]?.settled).toBe(false);
     expect(written.context.notes.find((n) => n.id === note)?.state).toBe("waiting");
+  });
+
+  it("goes on from a settled step with y, and changes nothing", () => {
+    const settled = after(ready(), { type: "settle" }, { type: "entered" });
+    const back = after(settled, { type: "go", by: -1 }, { type: "entered" });
+    const on = after(back, { type: "settle" });
+    expect(on.context.at).toBe(1);
+    expect(on.context.feedback).toEqual(back.context.feedback);
+    expect(on.context.posts).toBe(back.context.posts);
+    expect(on.context.past).toEqual(back.context.past);
   });
 
   it("goes on to the next open step, or back to one before when none is after", () => {
@@ -969,7 +983,7 @@ describe("the verdicts on a part's variants", () => {
     expect(s.context.feedback["a"]?.settled).toBe(true);
     expect(on(s)).toEqual({ kept: ["Card"], dropped: ["Marked"] });
     // The settle went on: the reviewer comes back to the step to open it again.
-    const opened = after(s, { type: "jump", at: 0 }, { type: "entered" }, { type: "settle" });
+    const opened = after(s, { type: "jump", at: 0 }, { type: "entered" }, { type: "reopen" });
     expect(on(opened)).toEqual({ kept: [], dropped: ["Marked"] });
     expect(on(after(opened, settle("Tracked")))).toEqual({
       kept: ["Tracked"],
@@ -981,9 +995,72 @@ describe("the verdicts on a part's variants", () => {
     const onB = after(start(true), { type: "entered" }, { type: "go", by: 1 }, { type: "entered" });
     const s = after(onB, { type: "variant", by: 1 }, { type: "switched" }, { type: "settle" });
     expect(s.context.feedback["b"]).toMatchObject({ settled: true, variant: "Two" });
-    const opened = after(s, { type: "jump", at: 1 }, { type: "entered" }, { type: "settle" });
+    const opened = after(s, { type: "jump", at: 1 }, { type: "entered" }, { type: "reopen" });
     expect(opened.context.feedback["b"]?.settled).toBe(false);
     expect(opened.context.feedback["b"]?.variant).toBeUndefined();
+  });
+
+  it("keeps another variant on a settled step: the old one is kept no more", () => {
+    const s = after(start(true), { type: "entered" }, drop("Marked"), settle("Card"));
+    const back = after(s, { type: "jump", at: 0 }, { type: "entered" });
+    const changed = after(back, settle("Tracked"));
+    expect(changed.context.feedback["a"]?.settled).toBe(true);
+    expect(on(changed)).toEqual({ kept: ["Tracked"], dropped: ["Marked"] });
+    expect(changed.context.posts).toBe(back.context.posts + 1);
+    // It goes on, as a settle does, and u takes it back to the old one.
+    expect(changed.context.at).toBe(1);
+    expect(changed.context.past.at(-1)?.label).toBe("Kept Tracked");
+    const undone = after(changed, { type: "undo" });
+    expect(on(undone)).toEqual({ kept: ["Card"], dropped: ["Marked"] });
+    expect(undone.context.feedback["a"]?.settled).toBe(true);
+    expect(undone.context.at).toBe(0);
+  });
+
+  it("keeps another own variant on a settled step", () => {
+    const onB = after(start(true), { type: "entered" }, { type: "go", by: 1 }, { type: "entered" });
+    const s = after(onB, { type: "variant", by: 1 }, { type: "switched" }, { type: "settle" });
+    const back = after(s, { type: "entered" }, { type: "go", by: -1 }, { type: "entered" });
+    const changed = after(
+      back,
+      { type: "variant", by: 1 },
+      { type: "switched" },
+      { type: "settle" },
+    );
+    expect(changed.context.feedback["b"]).toMatchObject({ settled: true, variant: "Three" });
+    expect(changed.context.posts).toBe(back.context.posts + 1);
+  });
+
+  it("shows the kept variant on a settled step it arrives at", () => {
+    const onB = after(start(true), { type: "entered" }, { type: "go", by: 1 }, { type: "entered" });
+    const s = after(onB, { type: "variant", by: 1 }, { type: "switched" }, { type: "settle" });
+    // Back on b, the reviewer shows Three, then leaves and comes back: Two shows again.
+    const back = after(s, { type: "entered" }, { type: "go", by: -1 }, { type: "entered" });
+    const three = after(back, { type: "variant", by: 1 }, { type: "switched" });
+    expect(three.context.variants["b"]).toBe(2);
+    const again = after(three, { type: "go", by: 1 }, { type: "entered" }, { type: "go", by: -1 });
+    expect(again.context.variants["b"]).toBe(1);
+    expect(again.context.opening).toMatchObject({ at: 1, variant: 1 });
+  });
+
+  it("tells the step it opens which part variants its settle kept, so the page shows them", () => {
+    const inputs: EnterInput[] = [];
+    const machine = sessionMachine.provide({
+      actors: {
+        enterStep: fromCallback<Event, EnterInput>(({ input }) => {
+          inputs.push(input);
+        }),
+      },
+    });
+    const actor = createActor(machine, {
+      input: { kept: { ...START, journey: "prep", active: true }, journeys: JOURNEYS, now: 0 },
+    }).start();
+    actor.send({ type: "entered" });
+    actor.send(settle("Card"));
+    actor.send({ type: "entered" });
+    actor.send({ type: "go", by: -1 });
+    expect(inputs.at(-1)).toMatchObject({ at: 0, kept: { Suggestion: "Card" } });
+    expect(inputs.at(-2)).toMatchObject({ at: 1, kept: {} });
+    actor.stop();
   });
 
   it("keeps no own variant for a step with none", () => {
@@ -1212,22 +1289,55 @@ describe("what the agent hears of the settles", () => {
    * says whether its step is settled now, and how many steps are left open. After every event,
    * that view must match the session, but for the last settle, which waits for Finish.
    */
-  const heard = (kept: Partial<typeof START>, events: readonly Event[]) => {
-    const view: Record<string, boolean> = {};
+  /** The journeys as the lines name them. */
+  const DEV: readonly DevJourney<unknown>[] = JOURNEYS.map((j) => ({
+    id: j.id,
+    title: j.id,
+    steps: j.steps.map((st) => ({
+      id: st.id,
+      title: st.id,
+      look: "",
+      group: { id: st.group, title: st.group },
+      variants: st.variants.map((label) => ({ label })),
+    })),
+  }));
+  /** What a settle keeps, to compare: the variants of each part, and the step's own. */
+  const keptKey = (settled: boolean, parts: unknown, variant: unknown) =>
+    settled ? JSON.stringify([parts ?? {}, variant ?? null]) : "open";
+  const keptNow = (f: Feedback | undefined) =>
+    keptKey(
+      f?.settled === true,
+      Object.fromEntries(Object.entries(f?.parts ?? {}).map(([p, v]) => [p, v.kept])),
+      f?.variant,
+    );
+  /**
+   * Runs the events on a live session and keeps the agent's view: each settle line it reads
+   * says whether its step is settled now, what it keeps, and how many steps are left open.
+   * After every event, that view must match the session, but for the last settle, which
+   * waits for Finish. Each line's `left` must match the steps open in the agent's view.
+   */
+  const heard = (kept: Partial<typeof START>, events: readonly Event[], lines: unknown[] = []) => {
+    const view: Record<string, string> = {};
     const wrong: string[] = [];
+    const ids = JOURNEYS[0]?.steps.map((st) => st.id) ?? [];
     const machine = sessionMachine.provide({
       actors: {
         post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
           for (let post: Post | undefined = input; post !== undefined; post = post.next) {
             if (post.kind !== "settle" || post.step === undefined) continue;
-            const { feedback } = post.session;
-            view[post.step] = feedback[post.step]?.settled === true;
-            const ids = JOURNEYS[0]?.steps.map((s) => s.id) ?? [];
-            const left = ids.filter((id) => feedback[id]?.settled !== true).length;
-            const open = ids.filter((id) => view[id] !== true).length;
-            if (left !== open)
+            const line = postedLine(DEV, post, "now");
+            lines.push(line);
+            if (!("left" in line)) continue;
+            const parts = "parts" in line ? line.parts : undefined;
+            view[post.step] = keptKey(
+              line.settled,
+              Object.fromEntries(Object.entries(parts ?? {}).map(([p, v]) => [p, v.kept])),
+              "variant" in line ? line.variant : undefined,
+            );
+            const open = ids.filter((id) => view[id] === "open").length;
+            if (line.left !== open)
               wrong.push(
-                `${post.step}: the line says ${String(left)} left, the agent knows ${String(open)}`,
+                `${post.step}: the line says ${String(line.left)} left, the agent knows ${String(open)}`,
               );
           }
           sendBack({ type: "posted", child: self.id });
@@ -1237,19 +1347,18 @@ describe("what the agent hears of the settles", () => {
     const actor = createActor(machine, {
       input: { kept: { ...START, journey: "prep", ...kept }, journeys: JOURNEYS, now: 0 },
     }).start();
-    for (const id of ["a", "b", "c"])
-      view[id] = actor.getSnapshot().context.feedback[id]?.settled === true;
+    for (const id of ids) view[id] = keptNow(actor.getSnapshot().context.feedback[id]);
     events.forEach((event, i) => {
       actor.send(event);
       const { feedback, finish } = actor.getSnapshot().context;
-      for (const id of ["a", "b", "c"]) {
-        const settled = feedback[id]?.settled === true;
-        if (id !== finish?.step && view[id] !== settled)
+      for (const id of ids) {
+        const now = keptNow(feedback[id]);
+        if (id !== finish?.step && view[id] !== now)
           wrong.push(
             `after ${events
               .slice(0, i + 1)
               .map((e) => e.type)
-              .join(" > ")}: ${id} is ${settled ? "settled" : "open"}, the agent heard otherwise`,
+              .join(" > ")}: ${id} is ${now}, the agent heard ${view[id] ?? "nothing"}`,
           );
       }
     });
@@ -1335,6 +1444,126 @@ describe("what the agent hears of the settles", () => {
     expect(actor.getSnapshot().context.journey).toBe("page");
     actor.send({ type: "start", journey: "prep", at: 0, fresh: false, again: true });
     expect(journeys).toEqual(["prep", "prep", "prep"]);
+  });
+
+  const keep = (variant: string, step?: number): Event => ({
+    type: "settle",
+    keep: { part: "Requests", variant },
+    ...(step === undefined ? {} : { step }),
+  });
+
+  it("hears a settled step keep another variant, and the undo and redo of it", () => {
+    const lines: unknown[] = [];
+    expect(
+      heard(
+        { active: true },
+        [
+          entered,
+          keep("Dense list"),
+          entered,
+          { type: "go", by: -1 },
+          entered,
+          keep("Cards"),
+          entered,
+          undo,
+          entered,
+          redo,
+        ],
+        lines,
+      ),
+    ).toEqual([]);
+    // The settle, the change, its undo and its redo: one line each.
+    expect(lines).toHaveLength(4);
+    expect(lines[1]).toMatchObject({
+      step: { id: "a" },
+      settled: true,
+      left: 2,
+      parts: { Requests: { kept: ["Cards"], dropped: [] } },
+    });
+    expect(lines[2]).toMatchObject({ parts: { Requests: { kept: ["Dense list"] } } });
+  });
+
+  it("hears nothing when a settled step that shows its kept variant goes on", () => {
+    const lines: unknown[] = [];
+    expect(
+      heard(
+        { active: true },
+        [entered, keep("Dense list"), entered, { type: "go", by: -1 }, entered, keep("Dense list")],
+        lines,
+      ),
+    ).toEqual([]);
+    expect(lines).toHaveLength(1);
+  });
+
+  it("hears a step opened again from the menu, and the undo of it", () => {
+    expect(
+      heard({ active: true }, [
+        entered,
+        keep("Dense list"),
+        entered,
+        { type: "reopen", step: 0 },
+        undo,
+        redo,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("holds the finish through a change to another settled step: its line counts the last open", () => {
+    const two = {
+      a: { settled: true, parts: { Requests: { kept: ["Dense list"], dropped: [] } } },
+      b: { settled: true },
+    };
+    const lines: unknown[] = [];
+    expect(
+      heard(
+        { active: true, at: 2, feedback: two },
+        [entered, settle, keep("Cards", 0), undo, redo, { type: "finish" }],
+        lines,
+      ),
+    ).toEqual([]);
+    // The change and its undo and redo say one step is left, the held one; only Finish says
+    // none.
+    expect(lines.map((l) => (l as { left: number }).left)).toEqual([1, 1, 1, 0]);
+  });
+
+  it("holds the finish when the held step keeps another variant, and Finish sends that one", () => {
+    const two = { a: { settled: true }, b: { settled: true } };
+    const lines: unknown[] = [];
+    expect(
+      heard(
+        { active: true, at: 2, feedback: two },
+        [entered, keep("Dense list"), keep("Cards"), { type: "finish" }],
+        lines,
+      ),
+    ).toEqual([]);
+    expect(lines).toEqual([
+      expect.objectContaining({ left: 0, parts: { Requests: { kept: ["Cards"], dropped: [] } } }),
+    ]);
+  });
+
+  it("goes back from the finish after the held step kept another variant", () => {
+    const two = { a: { settled: true }, b: { settled: true } };
+    expect(
+      heard({ active: true, at: 2, feedback: two }, [
+        entered,
+        keep("Dense list"),
+        keep("Cards"),
+        { type: "back" },
+        entered,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("hears a step opened again while the finish waits, with the held settle", () => {
+    const two = { a: { settled: true }, b: { settled: true } };
+    expect(
+      heard({ active: true, at: 2, feedback: two }, [
+        entered,
+        settle,
+        { type: "reopen", step: 0 },
+        undo,
+      ]),
+    ).toEqual([]);
   });
 
   it("hears nothing of the last settle until Finish, through undo, redo and Back", () => {
