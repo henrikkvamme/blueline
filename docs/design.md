@@ -203,8 +203,11 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   The variant and the state keep the width of their widest value, and the count has tabular
   digits, so the bar keeps its width while they change. On a phone the bar has two lines,
   with 44 px targets.
-- **A pin's note card stays beside its pin** while the reviewer writes. A sent note joins
-  the chat in the panel.
+- **A pin's note card stays beside its pin** while the reviewer writes. Enter in the card
+  sends the note at once, as a message with its pin, and the sent note joins the chat in the
+  panel. While the chat's message field holds words, the note joins them instead: Enter keeps
+  it, its chip stands over the field, and it goes with that message. The card's button shows
+  which, with no words: a blue send arrow, or a grey check.
 - **Three layers, each hidden on its own.** The page is at the bottom, the light is over
   it, and the panel is over the light.
 

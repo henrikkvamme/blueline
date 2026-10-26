@@ -1,26 +1,30 @@
 import { Trash2 } from "lucide-react";
 import { zoneOf } from "../keys/keymap";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Note } from "../notes/note";
+import { isKept, type Note } from "../notes/note";
+import { joinsDraft } from "../notes/pins";
 import { SHEET } from "./panel";
 import { Composer } from "./composer";
 import { cx } from "./cx";
 import { DOCK, FOCUSED, UI } from "./geometry";
 import { DragHandle, useCard, useElementBox } from "./overlays";
-import { useTools } from "./session";
+import { sendPins, useSession, useTools } from "./session";
 import { usePhone } from "./touch";
 import { focusToWrite } from "../vim";
 
 /*
- * A note on an element the reviewer pointed at, in a card beside the element. Enter keeps it,
- * and the focus goes back to the page: the next message or settle sends it, in the chat of
- * its step or page, where the agent answers it.
+ * A note on an element the reviewer pointed at, in a card beside the element. Enter sends it
+ * at once, as a message with its pin, in the chat of its step or page, where the agent answers
+ * it; the focus goes back to the page. While the chat's message field holds words, the note
+ * joins them instead: Enter keeps it, its chip stands over the field, and it goes with that
+ * message. The card's button shows which: send, or a check.
  */
 
 const WIDTH = 320;
 
 export function NoteCard({ note, number }: { readonly note: Note; readonly number: number }) {
   const { actor } = useTools();
+  const joins = useSession((s) => joinsDraft(s.context.notes, note.step));
   const box = useElementBox(note.pin?.selector);
   const card = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -98,9 +102,13 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
           pin={note.pin}
           note={note}
           sends={false}
+          sendsNote={!joins}
           fieldRef={field}
           placeholder="What should change here?"
-          onDone={() => actor.send({ type: "close" })}
+          onDone={(how) => {
+            actor.send({ type: "close" });
+            if (how === "enter" && !joins && isKept(note)) sendPins(actor, note.step);
+          }}
         />
       </div>
     </>

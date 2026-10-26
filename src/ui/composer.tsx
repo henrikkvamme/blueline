@@ -338,6 +338,7 @@ export function Composer({
   note,
   placeholder,
   sends,
+  sendsNote = false,
   pointed = 0,
   fieldRef,
   onDone,
@@ -351,6 +352,9 @@ export function Composer({
   readonly placeholder: string;
   /** Whether it sends: the step's composer does, a pointed note goes with it. */
   readonly sends: boolean;
+  /** For a pointed note: whether Enter sends it at once, or keeps it to go with the words in
+   * the chat's field. Its button shows which. */
+  readonly sendsNote?: boolean;
   /** How many pointed notes go with the step's note. */
   readonly pointed?: number;
   readonly fieldRef?: React.RefObject<HTMLTextAreaElement | null>;
@@ -634,14 +638,24 @@ export function Composer({
           />
         </div>
         {!sends && (
-          // Keeps the note, as Enter does.
+          // Sends the note, or keeps it for the message in the chat's field, as Enter does.
           <button
             type="button"
-            aria-label="Keep the note"
+            aria-label={sendsNote ? "Send the note now" : "Keep the note for the message"}
+            disabled={sendsNote && draft.trim() === "" && images.length === 0}
             onClick={() => leave("enter")}
-            className="grid size-7 shrink-0 place-items-center rounded-dt-control bg-dt-raised text-dt-text hover:bg-dt-line max-sm:size-11"
+            className={cx(
+              "grid size-7 shrink-0 place-items-center rounded-dt-control max-sm:size-11",
+              sendsNote
+                ? "bg-dt-accent text-white hover:bg-dt-accent/85 disabled:bg-dt-raised disabled:text-dt-faint"
+                : "bg-dt-raised text-dt-text hover:bg-dt-line",
+            )}
           >
-            <Check className="size-4" aria-hidden />
+            {sendsNote ? (
+              <ArrowUp className="size-4" aria-hidden />
+            ) : (
+              <Check className="size-4" aria-hidden />
+            )}
           </button>
         )}
         {sends && (

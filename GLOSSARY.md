@@ -63,7 +63,8 @@ _Avoid_: Decision, choice
 ## Notes and chat
 
 **Note**:
-Words that the reviewer writes on a pin. A note waits until a message sends it.
+Words that the reviewer writes on a pin. Enter sends it at once, as a message with its pin.
+While the chat's message field holds words, the note joins them and goes with that message.
 _Avoid_: Comment, annotation
 
 **Pin**:
@@ -71,7 +72,7 @@ A numbered mark on an element of the page, which a note is about.
 _Avoid_: Marker, anchor
 
 **Message**:
-Words that the reviewer sends to the agent, with the notes that wait.
+Words or notes that the reviewer sends to the agent in a chat. A message sends at once.
 _Avoid_: Post
 
 **Chat**:

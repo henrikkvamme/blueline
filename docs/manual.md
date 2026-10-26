@@ -36,8 +36,8 @@ tab shows each part on a map of the screen.
 - Words: a **review** walks a **journey** of **steps** in **groups**; an **open step** is
   not settled yet, and **settle** (`y` or Enter) says a step is right as it shows; **finish** ends the review once every step is settled. A **part** has
   **variants**. Each step and each page has one **chat** with the agent. A **note** is
-  written on a pin and waits; a **message** is written in a message field and sends, with
-  the notes in it. A sent note leaves the page; its message shows it with its number. The
+  written on a pin and sends with Enter; a **message** is written in a message field and
+  sends, with the notes that joined it. A sent note leaves the page; its message shows it with its number. The
   agent's answer is a **reply**, in the chat. `?` lists the **keys**.
 
 ## Where you are
@@ -159,7 +159,7 @@ Alt+click does. A tap in a field starts to write.
 
 ## Moving between the page, a field and the tree
 
-Enter in a message field sends, and in a note keeps the note; then the keys are the page's,
+Enter in a message field sends, and in a note sends the note; then the keys are the page's,
 so `y` or `i` comes next. Escape in a field goes to vim's normal mode, and a second Escape
 goes to the tree and unfolds it, so you see where you are; in the lift's note it leaves the
 field. While the tree shows, it has the keys when no field has them. On a step it folds, and
@@ -296,9 +296,12 @@ next reply, or goes through the notes on the page when no reply is new.
 ## Notes on a page
 
 Off a step, the panel is a chat with the agent on the page. `i` goes to its message field,
-and `m`, then a click, or Alt+click writes a note on an element. A note waits: the bar counts the ones not sent,
-and the next message takes them all, in it. Enter in an empty message field sends the
-notes alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
+and `m`, then a click, or Alt+click writes a note on an element. Enter in the note's card
+sends it at once, as a message with its pin; Shift+Enter starts a new line. While the
+message field holds words, the note joins them: Enter keeps it, its chip stands over the
+field, and the message takes it when it sends. The card's button shows which: a blue arrow
+sends, and a grey check keeps. Enter in an empty message field sends the notes that joined
+alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
 answers in the panel's chat. `blueline review` listens to it. On a page with no journey and
 no part with variants, the empty chat says "Alt+click anything to leave a note." until it has
 a message or a note.

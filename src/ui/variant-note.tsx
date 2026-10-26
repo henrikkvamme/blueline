@@ -56,6 +56,7 @@ function Opened() {
         pin={note.pin}
         note={note}
         sends={false}
+        sendsNote
         fieldRef={field}
         placeholder="What do you think of this variant?"
         escapeTo="page"

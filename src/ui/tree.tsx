@@ -249,7 +249,7 @@ function NoteCount({ notes }: { readonly notes: readonly Note[] }) {
  */
 function Pages({ heading }: { readonly heading: boolean }) {
   const { actor, navigate } = useTools();
-  const { place, at, feedback, chat, pins, parts, here, drafts, openChat, openPin, openPart } =
+  const { place, at, feedback, chat, pins, parts, here, openChat, openPin, openPart } =
     useThisPage();
   const notes = useNotes();
   const folds = useSession((s) => s.context.folds);
@@ -340,11 +340,6 @@ function Pages({ heading }: { readonly heading: boolean }) {
                   <VariantCount count={variantsOn(step, undefined)} />
                 </TreeRow>
               ))}
-            {open === true && isHere && drafts > 0 && (
-              <span className={cx(DEPTH[1], "pt-1 text-[12px] text-dt-faint")}>
-                {drafts === 1 ? "1 note goes" : `${String(drafts)} notes go`} with the next message
-              </span>
-            )}
           </div>
         );
       })}
@@ -563,7 +558,6 @@ export function useThisPage() {
     pins,
     parts,
     here,
-    drafts: notes.filter(isKept).length,
     openChat: () => {
       leave();
       actor.send({ type: "panel", shown: true });
