@@ -768,6 +768,73 @@ the script tag in front of it.
    - A second `serve`: it finds the first, refuses another protocol, and fails in time on
      a listener that is not Blueline or does not answer.
 
+### B2 in steps
+
+B2 lets a page reach `blueline serve`: the Vite plugin, a script tag by hand, and
+`blueline dev -- <cmd>`. The plugin and the tag land first, in one merge; `blueline dev` is
+the second merge of the slice, as it adds a proxy of its own.
+
+1. **The server serves the overlay.** `GET /blueline/overlay.js` is the built main entry,
+   one file with its own React. It has an `ETag` of its content and `Cache-Control:
+   no-cache`, so a page asks again each time and the server answers 304 while the build is
+   the same. It is code with no data, so any origin may load it (`Access-Control-Allow-Origin:
+   *`; a module script loads in CORS mode). With no build, the answer is 503 and names
+   `pnpm run pack`. `GET /blueline/<app>/tag.js` is a short module: it imports the overlay
+   from the server and mounts it with the page's own review only, on the app's channel at
+   the server's address, with `blueline.<app>` as its storage key. It does nothing when the
+   page already has Blueline (`window.blueline`).
+2. **Kept origins, for a tag by hand.** A page whose server Blueline does not know, such as
+   Next.js, has no dev server to register it. `blueline add <origin>`, in the app's root,
+   registers the origin as kept: it stays until `blueline remove <origin>`, across restarts
+   of the dev server and of `serve`. The registration says `keep: true`, gets its answer and
+   ends; the app keeps its kept origins in `apps.json`. As for any registration, a page
+   cannot add one. `blueline add` prints the tag to put in the page:
+   `<script type="module" src="http://127.0.0.1:4399/blueline/<app>/tag.js"></script>`.
+3. **Starting the server.** The plugin, `blueline add` and `blueline dev` ask for the
+   server's health first. When nothing answers, they start `blueline serve` as a detached
+   process, with its output in `serve.log` in the state folder, and wait at most five
+   seconds for its health. Two that start it at once start one: the second finds the first
+   (B1). The server runs until `blueline serve stop`, which asks it to end
+   (`POST /blueline/stop`, from a tool only).
+4. **The Vite plugin.** `devtoolsChannel()` keeps the page's routes, `/__devtools/*` or
+   the app's own, and its options; `feedback` and `status` become optional, from the root.
+   When the dev server listens, the plugin starts the server, registers the root with the
+   dev server's local origin and its files, and keeps the registration open. When the
+   registration ends while the dev server runs, it registers again after one second, then
+   after twice as long each time, at most 30 seconds. It ends the registration when the dev
+   server closes.
+   - **The proxy.** Each page route goes to `/blueline/<app>/<route>` on the server, with
+     the rest of its path. The plugin keeps its own check, `fromPage`, and forwards the
+     request as a tool's, with no `Origin`, so a page of any host the dev server serves
+     works. Before the registration answers, a page request gets 503.
+   - **The tag.** The plugin adds a module to each HTML page that mounts the overlay from
+     `/__devtools/overlay.js`, which it forwards to the server, on the page's routes.
+     `overlay: false` leaves it out, for an app that mounts its own tools. An app that
+     mounts its own later wins anyway: the newest overlay owns the page (A3).
+5. **`blueline dev -- <cmd>`**, the second merge (ADR 0004). It runs the app's command and
+   puts a proxy where the page goes: everything passes through, websockets too, and each
+   HTML page gets the tag, as the plugin adds it. It asks for HTML without compression, so
+   it can add the tag. It knows two dev servers by the command or the `package.json` script
+   it runs: Vite, which gets `--port <hidden> --strictPort`, and Next.js, which gets
+   `PORT=<hidden>`. The proxy takes the port the app would have had: the one in the
+   command, or the server's default. For another command, `--port <n>` says where the app
+   listens; the proxy takes a new port and says what can break: sign-in redirects built
+   from the origin, a backend's CORS list and service workers. It registers the root and the
+   proxy's origin, stops the command when it stops, and exits with the command's code.
+6. **Tests.**
+   - The server, in Node: the overlay with its `ETag`, a 304, and 503 with no build; the
+     tag of a known app and 404 for another; a kept origin that a page may use after a
+     restart of `serve`, and not after `remove`; a page cannot add one; `stop`.
+   - Starting: the server starts when none runs, two at once make one, and a running one is
+     used.
+   - The plugin, on a Vite dev server: it registers, a note through the page's route lands
+     in the root's `.blueline/`, the HTML has the tag and none with `overlay: false`, and it
+     registers again after `serve` restarts.
+   - In the browser: a page on its own origin loads the tag from the server, as a page with
+     a tag by hand, and a note it sends lands in the app's file.
+   - `blueline dev`, with a small HTTP server as the app: the page has the tag, a websocket
+     passes, the app's port is the page's, and the exit code is the command's.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.
