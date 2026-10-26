@@ -598,8 +598,9 @@ dashboard. Browser checks start with step 2.
      needs it; `react`, `react-dom` and `tailwindcss` are optional peers. Only the workshop,
      which draws in the app's own CSS, needs `tailwindcss`, for `./styles.css`. An adapter may still return an Effect of the
      same effect version; any other version gives a Promise. The dashboard moves in the same
-     step: it imports `DevTools` from `/react`, its Vite alias covers `/react`, and its key
-     guard (`entry.ts`) knows `[data-blueline-host]`. Step 4 is done when the dashboard works
+     step. It is not a React app, so it calls `mount` from the main entry: its island needs
+     no React root and no CSS for Blueline. Its key guard (`entry.ts`) knows
+     `[data-blueline-host]`. Step 4 is done when the dashboard works
      on it.
 5. **Browser tests.** Vitest browser mode with Playwright's Chromium runs the demo's
    adapter in a real shadow root, both from source and from the packed package. The tests
