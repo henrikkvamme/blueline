@@ -56,7 +56,7 @@ export default defineConfig({
       clean: false,
     },
     {
-      entry: { "bin/channel": "bin/channel.ts" },
+      entry: { "bin/blueline": "bin/blueline.ts" },
       platform: "node",
       // The platform layer goes in the command: its own dependencies on npm resolve to a
       // release that does not fit the pinned effect.

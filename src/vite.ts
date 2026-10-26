@@ -5,7 +5,8 @@ import type { Plugin } from "vite";
 
 /*
  * The channel between the dev tools and the coding agent, through the dev server. A note
- * the reviewer sends is one JSON line in `feedback`, which the agent watches. The agent
+ * the reviewer sends is one JSON line in `feedback`, which the agent watches; the server
+ * adds the line's format version and its ID (`stamped`). The agent
  * answers in `status`, a JSON object by note ID, which the page reads while a note waits.
  * A screenshot the reviewer pastes goes to `images` first; the note then names its file.
  * Each agent's listener says it is there in `listening`, so the page knows a note is read.
@@ -20,7 +21,7 @@ export interface ChannelOptions {
   /** The folder pasted screenshots go to: by default `images` beside `feedback`. */
   readonly images?: string;
   /** The JSON file each agent's listener says it is there in: by default beside `feedback`,
-   * as bin/channel.ts writes it. */
+   * as `blueline listen` writes it (bin/listen.ts). */
   readonly listening?: string;
   /** Where the page posts and reads; the defaults match the dev tools'. */
   readonly routes?: Routes;
@@ -63,6 +64,24 @@ export function fromPage(headers: {
   }
 }
 
+/** The version of the feedback file's lines. A reader takes a line with no `v` as version 1. */
+export const LINE_FORMAT = 1;
+
+/**
+ * A line as the feedback file keeps it: the page's JSON object with the format version and
+ * the line's own ID, which readers claim it by (bin/wire.ts). The server sets both, so a page
+ * cannot give two lines one ID. Undefined when the body is not a JSON object.
+ */
+export function stamped(body: string, line: string): string | undefined {
+  try {
+    const value: unknown = JSON.parse(body);
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+    return JSON.stringify({ ...value, v: LINE_FORMAT, line });
+  } catch {
+    return undefined;
+  }
+}
+
 /** Whether a body is JSON by its type: a plain text body needs no CORS check first. */
 export const isJson = (type: string | undefined): boolean =>
   type?.split(";")[0]?.trim().toLowerCase() === "application/json";
@@ -90,13 +109,7 @@ export function devtoolsChannel(options: ChannelOptions): Plugin {
         const chunks: Buffer[] = [];
         request.on("data", (chunk: Buffer) => chunks.push(chunk));
         request.on("end", () => {
-          const line = (() => {
-            try {
-              return JSON.stringify(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-            } catch {
-              return undefined;
-            }
-          })();
+          const line = stamped(Buffer.concat(chunks).toString("utf8"), randomUUID());
           if (line === undefined) {
             response.statusCode = 400;
             response.end();

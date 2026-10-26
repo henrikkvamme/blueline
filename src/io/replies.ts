@@ -4,7 +4,7 @@ import { BlockSchema } from "../notes/blocks.ts";
 
 /*
  * The agent's answers, by note ID, as the status file has them: the page reads them
- * (channel.ts), and the agent's side writes them (bin/channel.ts).
+ * (channel.ts), and the agent's side writes them (bin/reply.ts).
  */
 
 export const ReplySchema = Schema.Struct({

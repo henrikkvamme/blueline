@@ -8,7 +8,13 @@ describe("the agent's side of the channel", () => {
     const one = '{"journey":"preparation","sentAt":"2026-10-20T19:13:10.380Z","id":"a"}\n';
     const { lines, used } = takeLines(bytes(`${one}not json\n{"journey":"pre`));
     expect(lines).toEqual([
-      { raw: one.trim(), start: 0, journey: "preparation", sentAt: "2026-10-20T19:13:10.380Z" },
+      {
+        raw: one.trim(),
+        id: "@0",
+        start: 0,
+        journey: "preparation",
+        sentAt: "2026-10-20T19:13:10.380Z",
+      },
     ]);
     expect(used).toBe(bytes(`${one}not json\n`).length);
   });

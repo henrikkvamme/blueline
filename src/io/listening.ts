@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 /*
- * Who listens to the reviewer's notes: each agent's listener (bin/channel.ts) says it is
+ * Who listens to the reviewer's notes: each agent's listener (bin/listen.ts) says it is
  * there every few seconds, by its name, with the journey it listens to. The page reads it
  * while a note waits, so a note no agent will read says so at once.
  */

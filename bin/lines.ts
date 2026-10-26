@@ -3,7 +3,8 @@ import type { Reply } from "../src/io/replies.ts";
 import type { Block } from "../src/notes/blocks.ts";
 
 /*
- * The plain parts of channel.ts, without files or a clock, so a test can run them.
+ * The plain parts of the `blueline` command (bin/blueline.ts), without files or a clock, so a
+ * test can run them.
  */
 
 export const USAGE = `Usage:
@@ -94,7 +95,10 @@ export function commandOf(args: readonly string[]): Command | undefined {
 /** A note line from the feedback file, with the fields the listener reads. */
 export interface Line {
   readonly raw: string;
-  /** Where the line starts, in bytes from the start of the read. */
+  /** The line's ID, which the server gives it (src/vite.ts `stamped`); a line from before
+   * that has its place in bytes, as `@120`, which stays as the file only grows. */
+  readonly id: string;
+  /** Where the line starts, in bytes from the start of the file, or of the read. */
   readonly start: number;
   readonly kind?: string | undefined;
   readonly journey?: string | undefined;
@@ -109,6 +113,7 @@ const NEWLINE = 10;
 /** The fields of a note line the listener reads; the line has more. */
 const LineSchema = Schema.fromJsonString(
   Schema.Struct({
+    line: Schema.optional(Schema.String),
     kind: Schema.optional(Schema.String),
     journey: Schema.optional(Schema.String),
     sentAt: Schema.optional(Schema.String),
@@ -119,15 +124,19 @@ const LineSchema = Schema.fromJsonString(
 const decodeLine = Schema.decodeUnknownOption(LineSchema);
 
 /** The whole lines in `bytes`, and how many bytes they use: a line the server is still
- *  writing stays for the next read. A line that is not JSON is skipped. */
-export function takeLines(bytes: Uint8Array): { lines: Line[]; used: number } {
+ *  writing stays for the next read. A line that is not JSON is skipped. `base` is where the
+ *  bytes start in the file. */
+export function takeLines(bytes: Uint8Array, base = 0): { lines: Line[]; used: number } {
   const used = bytes.lastIndexOf(NEWLINE) + 1;
   const lines: Line[] = [];
   const encoder = new TextEncoder();
   let start = 0;
   for (const raw of new TextDecoder().decode(bytes.subarray(0, used)).split("\n")) {
-    const line = decodeLine(raw);
-    if (Option.isSome(line)) lines.push({ raw, start, ...line.value });
+    const decoded = decodeLine(raw);
+    if (Option.isSome(decoded)) {
+      const { line, ...fields } = decoded.value;
+      lines.push({ raw, id: line ?? `@${String(base + start)}`, start: base + start, ...fields });
+    }
     start += encoder.encode(raw).length + 1;
   }
   return { lines, used };

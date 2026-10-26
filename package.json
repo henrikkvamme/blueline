@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "bin": {
-    "blueline": "./bin/channel.ts"
+    "blueline": "./bin/blueline.ts"
   },
   "files": [
     "dist"
@@ -22,7 +22,7 @@
   },
   "publishConfig": {
     "bin": {
-      "blueline": "./dist/bin/channel.js"
+      "blueline": "./dist/bin/blueline.js"
     },
     "exports": {
       ".": {

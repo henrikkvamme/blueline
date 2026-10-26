@@ -29,7 +29,7 @@ export type { Patch } from "./merge";
  * on its step: the variants stand in a row and the states in a column, each drawn with the
  * part's own props and context, a state as a patch over the props. The reviewer keeps
  * variants with * and deletes them with d; the agent applies that to this call with
- * `blueline apply` (bin/channel.ts).
+ * `blueline apply` (bin/blueline.ts).
  */
 
 const Lift = lazy(() => import("./lift").then((m) => ({ default: m.Lift })));

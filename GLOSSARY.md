@@ -68,7 +68,7 @@ _Avoid_: Decision, choice
 Words that the reviewer writes on a pin. Enter sends it at once, as a message with its pin.
 Cmd+Enter, or Later, keeps it on its pin for the next message. While the chat's message
 field holds words, the annotation joins them and goes with that message. **Annotate**, the
-pin beside send, starts one. The wire format still says note: a line's `kind: "note"`, its
+pin beside send, starts one. The wire format says note, and keeps it: a line's `kind: "note"`, its
 `pins`, and the chat IDs `note-<step>`.
 _Avoid_: Note, comment
 
