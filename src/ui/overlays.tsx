@@ -10,7 +10,7 @@ import { isKept, type Note } from "../notes/note";
 import type { DevShift } from "../types";
 import { cx } from "./cx";
 import { useSession } from "./session";
-import { SETTLE_MS } from "./settle";
+import { GLIDE_MS, lightFrame, type Motion } from "./light";
 import { isPhone } from "./touch";
 import {
   BAR,
@@ -226,25 +226,8 @@ export function Flash({
   );
 }
 
-/** How long the light glides from one part to the next, in ms: as long as a settle's green
- * outline plays on the part it left. */
-export const GLIDE_MS = SETTLE_MS;
-
-/** How long the light waits for the page to stop scrolling to its next part, in ms, before it
- * glides there all the same. */
-const SCROLL_WAIT = 900;
-
 /** How near the screen's edge the check's middle may come, in px: it shows whole. */
 const CHECK_EDGE = 12;
-
-/** How long the light fades out or in, in ms. */
-const FADE_MS = 150;
-
-/** For how many frames the next part stands still before the scroll counts as done. */
-const STILL_FRAMES = 4;
-
-/** How long a step's part may take to show, in ms, before the light leaves. */
-const PART_WAIT = 600;
 
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -259,28 +242,6 @@ const between = (from: Box, to: Box, t: number): Box => ({
   width: from.width + (to.width - from.width) * t,
   height: from.height + (to.height - from.height) * t,
 });
-
-/** How the light shows the part of the step `at` names, as it goes from one step to the
- * next. */
-type Motion =
-  /** It stands on the part, as the part moves. */
-  | { readonly kind: "on"; readonly at: string }
-  /** The page scrolls to the next part: the light waits where it was. */
-  | {
-      readonly kind: "waiting";
-      readonly at: string;
-      readonly from: Box;
-      readonly since: number;
-      readonly last: Box;
-      /** For how many frames the part has stood still. */
-      readonly still: number;
-    }
-  /** It glides from where it was to the part. */
-  | { readonly kind: "gliding"; readonly at: string; readonly from: Box; readonly start: number }
-  /** It fades in on the part: the first light, one on another page, or reduced motion. */
-  | { readonly kind: "fading"; readonly at: string }
-  /** The step shows no part, or the walk left the page: the light fades out. */
-  | { readonly kind: "gone"; readonly at: string; readonly since: number };
 
 /**
  * The light around the step's part: the page dims a little around it. With more than one
@@ -332,51 +293,25 @@ export function Light({
   const missing = useRef<number | undefined>(undefined);
   useFrames(true, () => {
     const { box, at, ready, motion: m, left, onPlaced } = latest.current;
-    const now = performance.now();
-    const go = (next: Motion) => {
-      latest.current = { ...latest.current, motion: next };
-      setMotion(next);
-    };
-    missing.current = ready && box === undefined ? (missing.current ?? now) : undefined;
-    if (box !== undefined && (m.at !== at || m.kind === "gone")) {
-      const from = drawn.current;
-      // A light that fades out ends its fade first, so it fades in as a new one.
-      if (m.kind === "gone" && now - m.since < FADE_MS) return;
-      if (from === undefined || m.kind === "gone" || from.page !== pageNow() || reducedMotion()) {
-        setFades((n) => n + 1);
-        go({ kind: "fading", at });
-        onPlaced(at);
-      }
-      // After a settle the light goes at once, on to the part as it scrolls there.
-      else if (left?.at === m.at) go({ kind: "gliding", at, from: from.box, start: now });
-      else go({ kind: "waiting", at, from: from.box, since: now, last: box, still: 0 });
-      return;
+    const next = lightFrame(m, missing.current, {
+      box,
+      at,
+      ready,
+      left: left?.at,
+      now: performance.now(),
+      page: pageNow(),
+      reduced: reducedMotion,
+      drawn: drawn.current,
+    });
+    missing.current = next.missing;
+    if (next.motion !== m) {
+      latest.current = { ...latest.current, motion: next.motion };
+      setMotion(next.motion);
     }
-    if (m.kind === "waiting" && box !== undefined) {
-      // The page has stopped scrolling once the part stands still for a few frames.
-      const still = sameBox(m.last, box) ? m.still + 1 : 0;
-      if (still < STILL_FRAMES && now - m.since < SCROLL_WAIT) go({ ...m, last: box, still });
-      else go({ kind: "gliding", at: m.at, from: m.from, start: now });
-      return;
-    }
-    if (m.kind === "gliding") {
-      if (now - m.start < GLIDE_MS) return redraw((n) => (n + 1) % 1024);
-      go({ kind: "on", at: m.at });
-      setPulse((n) => n + 1);
-      onPlaced(m.at);
-      return;
-    }
-    if (m.kind === "gone" || box !== undefined) return;
-    // The walk went to another page, or reduced motion is on: the light fades out, and in on
-    // the next part.
-    const from = drawn.current;
-    if (from !== undefined && (from.page !== pageNow() || reducedMotion()))
-      return go({ kind: "gone", at: m.at, since: now });
-    // The step's world is open, and its part does not show.
-    if (missing.current !== undefined && now - missing.current > PART_WAIT) {
-      go({ kind: "gone", at, since: now });
-      onPlaced(at);
-    }
+    if (next.fade === true) setFades((n) => n + 1);
+    if (next.pulse === true) setPulse((n) => n + 1);
+    if (next.redraw === true) redraw((n) => (n + 1) % 1024);
+    if (next.placed !== undefined) onPlaced(next.placed);
   });
   const rect =
     motion.kind === "waiting"
