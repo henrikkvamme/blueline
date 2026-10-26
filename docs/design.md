@@ -690,6 +690,45 @@ a host the app gives; that waits until an app needs it (To verify).
    The demo's React tests also check the copies' content after moves on both lines.
    `blueline apply` for a part outside `variants()` stays open (To verify).
 
+### B1 in steps
+
+`blueline serve` keeps every repository's channel on the machine. B1 builds the server and
+its rules; the page still talks to its dev server until B2 puts the Vite plugin's proxy and
+the script tag in front of it.
+
+1. **The channel as one handler.** The four routes the Vite plugin serves now, `feedback`,
+   `images`, `status` and `listening`, move into one Node request handler for one app's
+   files, with the same rules: a note is JSON from the page or from a tool, gets its ID
+   and version (`stamped`), and is appended; an image is at most 20 MB of a known type. The
+   plugin uses the handler until B2. It stays plain Node, with `.ts` imports, as Node loads
+   the plugin's source directly.
+2. **One server for each machine.** `blueline serve` listens on `127.0.0.1` on one known
+   port, 4399, or `BLUELINE_PORT`. `GET /blueline/health` says it is Blueline, with its
+   version and process ID. A second `serve` that finds the port taken asks it: if Blueline
+   answers, it says so and exits 0; anything else is an error that names the port. Node's
+   `http` serves; Effect runs the command and closes the server on a signal.
+3. **Registration.** A dev server sends `POST /blueline/register` with its root, its
+   origin, its process ID and, if it has them, its files. A request from a browser, one
+   with an `Origin`, cannot register. The server finds the repository: the real path of
+   `git rev-parse --show-toplevel` from the root, so a worktree is its own repository. An
+   app is one root: the same root again is the same app, with one more origin, as two dev
+   servers for one repository; another root in the same repository is another app. The
+   app's name is the repository's folder name, then the root's path inside it, in
+   lowercase with hyphens, and a number when another repository took it. The answer gives
+   the app's name, its base `/blueline/<app>/` and its files, by default in
+   `<root>/.blueline/`. The server keeps the apps in memory. A dev server's registration
+   ends when its process no longer runs, checked on each request; no timer ends it.
+4. **Routes and origins.** `/blueline/<app>/<route>` runs the channel handler on the app's
+   files. A request with an `Origin` must come from one of the app's registered origins:
+   then the answer allows that origin (CORS, `Vary: Origin`), and an `OPTIONS` preflight
+   for a JSON or image `POST` is answered. Any other origin gets 403, and an unknown app 404. A request with no `Origin`, from the agent's tools, is served as now.
+5. **Tests.** In Node, on a server started in the test on a free port: two repositories
+   get two apps with their own files; two dev servers for one root are one app with two
+   origins, and a third origin gets 403; a root inside a repository gets the name with its
+   path; a preflight and a `POST` from a registered origin get the CORS headers; a browser
+   cannot register; a registration ends once its process is gone; a second `serve` finds
+   the first. The plugin's channel tests still pass on the handler.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.
