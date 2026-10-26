@@ -280,7 +280,9 @@ Off a step, the panel is a chat with the agent on the page. `i` goes to its mess
 and `m`, then a click, or Alt+click writes a note on an element. A note waits: the bar counts the ones not sent,
 and the next message takes them all, in it. Enter in an empty message field sends the
 notes alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
-answers in the panel's chat. `blueline review` listens to it.
+answers in the panel's chat. `blueline review` listens to it. On a page with no journey and
+no part with variants, the empty chat says "Alt+click anything to leave a note." until it has
+a message or a note.
 
 A note line has the chat's `id`, and `pins`: each note in the message, with what it points
 at and its words. A pointed note has no ID of its own, so the agent answers the message and

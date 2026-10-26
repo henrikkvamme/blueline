@@ -186,7 +186,10 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   was, so Enter still settles.
 - **Off a step**, the panel shows the tree and the page's chat, with the same top line, type
   sizes, row height and radius. One quiet line parts the tree from the chat. The message
-  field's words name the chat, as "A message on this page".
+  field's words name the chat, as "A message on this page". The panel has one hint, and only
+  where the design cannot teach: on a page with no journey and no part with variants, the
+  empty chat says "Alt+click anything to leave a note." It goes with the first message or
+  note. A phone does not show it, as its message field's pin does the job.
 - **The panel pushes the page aside.** The page narrows by the panel's width, so the
   panel covers nothing. One visible button on the panel and Ctrl+B hide it and show it
   again. An element that the app pins to the right edge can still sit under the panel.

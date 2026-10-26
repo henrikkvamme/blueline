@@ -6,6 +6,7 @@ import { focusToWrite } from "../vim";
 import { Chips, Composer, NoteState, Thread } from "./composer";
 import { cx } from "./cx";
 import { FinishView } from "./finish";
+import { EMPTY_HINT, hintShows } from "./hint";
 import { progressOf } from "./progress";
 import { DOCK, FOCUSED, PANEL } from "./geometry";
 import { MoreMenu } from "./more";
@@ -13,7 +14,7 @@ import { hasNews } from "../session/replies";
 import { usePins, useSession, useStep, useStepNote, useTools } from "./session";
 import { Foot, ICON, SettleButton, StepArrow, StepVariants } from "./step-controls";
 import { usePhone } from "./touch";
-import { TreeZone } from "./tree";
+import { TreeZone, useJourneys, useThisPage } from "./tree";
 
 /*
  * The panel at the right: where the reviewer is, what to look at and try, and the chat with
@@ -351,6 +352,12 @@ function ChatSwitch({ onPage }: { readonly onPage: boolean }) {
  * A note pointed at an element goes with the next message. */
 function PageView({ ruled }: { readonly ruled: boolean }) {
   const place = useSession((s) => s.context.place);
+  // With no journey to walk and no part to review, one quiet line teaches Alt+click (hint.ts).
+  const { journeys } = useJourneys();
+  const { parts } = useThisPage();
+  const messages = useStepNote(place)?.thread.length ?? 0;
+  const notes = usePins(place).length;
+  const hint = hintShows({ journeys: journeys.length, parts: parts.length, messages, notes });
   return (
     <section
       aria-label="This page"
@@ -359,7 +366,13 @@ function PageView({ ruled }: { readonly ruled: boolean }) {
         ruled && "border-t border-dt-line",
       )}
     >
-      <StepChat key={place} step={place} placeholder="A message on this page" fill={false} />
+      <StepChat
+        key={place}
+        step={place}
+        placeholder="A message on this page"
+        fill={false}
+        hint={hint ? EMPTY_HINT : undefined}
+      />
     </section>
   );
 }
@@ -377,6 +390,7 @@ export function StepChat({
   fill = true,
   head,
   chatHead,
+  hint,
 }: {
   readonly step: string;
   readonly placeholder?: string;
@@ -384,6 +398,8 @@ export function StepChat({
   readonly fill?: boolean;
   readonly head?: ReactNode;
   readonly chatHead?: ReactNode;
+  /** One quiet line in the empty chat, as how to start. */
+  readonly hint?: string | undefined;
 }) {
   const note = useStepNote(step);
   const pins = usePins(step);
@@ -403,6 +419,10 @@ export function StepChat({
           )}
         >
           {chatHead}
+          {hint !== undefined && (
+            // A phone has no Alt: its message field's pin points at an element.
+            <p className="text-[13px] text-dt-faint max-sm:hidden">{hint}</p>
+          )}
           <Thread note={note} className="min-h-0 max-sm:max-h-[35dvh]" />
         </div>
       </div>
