@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { startSession } from "./core/session";
 import type { DevAdapter } from "./types";
 import { Running } from "./ui/devtools";
+import { openHost } from "./ui/host";
 
 /*
  * The dev tools without a React app: `mount` puts them on the page and gives a handle, which
@@ -53,10 +54,8 @@ export function mount<C>({
 }: MountOptions<C>): Blueline {
   window.blueline?.dispose();
   const session = startSession({ adapter, storageKey, path });
-  const host = document.createElement("div");
-  host.dataset.bluelineHost = "";
-  document.body.append(host);
-  const root = createRoot(host);
+  const host = openHost();
+  const root = createRoot(host.container);
   root.render(<Running session={session} anchors={anchors} goTo={{ current: navigate }} />);
 
   const moved = () => session.moved();
@@ -76,7 +75,7 @@ export function mount<C>({
       for (const move of MOVES) window.removeEventListener(move, moved);
       navigation?.removeEventListener("navigatesuccess", moved);
       root.unmount();
-      host.remove();
+      host.dispose();
       session.dispose();
       if (window.blueline === handle) delete window.blueline;
     },

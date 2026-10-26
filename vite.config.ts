@@ -9,18 +9,18 @@ export default defineConfig({
   lint: {
     extends: [recommended],
     options: { typeAware: true, typeCheck: true, denyWarnings: true },
-    ignorePatterns: ["dist/**"],
+    ignorePatterns: ["dist/**", "src/**/*.gen.ts"],
     overrides: [
       {
-        // Tool configuration, and the dev server's plugin, run before the application
-        // runtime exists.
-        files: ["*.config.ts", "src/vite.ts"],
+        // Tool configuration, the dev server's plugin and the build's scripts run before the
+        // application runtime exists.
+        files: ["*.config.ts", "src/vite.ts", "scripts/*.ts"],
         rules: { "effecttsgo/process-env": "off", "effecttsgo/node-builtin-import": "off" },
       },
     ],
   },
   fmt: {
-    ignorePatterns: ["dist/**", "pnpm-lock.yaml"],
+    ignorePatterns: ["dist/**", "pnpm-lock.yaml", "src/**/*.gen.ts"],
   },
   test: {
     include: ["test/**/*.test.ts"],

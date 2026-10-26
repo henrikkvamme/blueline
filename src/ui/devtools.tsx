@@ -40,6 +40,7 @@ import { foldTree, openHandoffNews, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
 import { release, settleGate, TURN_MS, TURN_WAIT } from "./settle";
 import { holdToggle } from "../keys/hold";
+import { openHost, type Host } from "./host";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
@@ -199,6 +200,16 @@ export function DevTools<C>({
   // The session runs outside React (core/session.ts): it starts with the tools, and stops
   // when they go or the adapter changes.
   const [session, setSession] = useState<Session>();
+  // The tools stand in a shadow root of their own (host.ts); the app's dev parts stay here.
+  const [host, setHost] = useState<Host>();
+  useLayoutEffect(() => {
+    const opened = openHost();
+    setHost(opened);
+    return () => {
+      setHost(undefined);
+      opened.dispose();
+    };
+  }, []);
   useEffect(() => {
     const started = startSession({
       adapter,
@@ -214,9 +225,9 @@ export function DevTools<C>({
   // The app went to another page, or names it another way.
   useEffect(() => session?.moved());
   // The app's dev parts may use the tools (useReviewControl), so they wait for the session.
-  if (session === undefined) return null;
+  if (session === undefined || host === undefined) return null;
   return (
-    <Running session={session} anchors={anchors} goTo={goTo}>
+    <Running session={session} anchors={anchors} goTo={goTo} into={host.container}>
       {children}
     </Running>
   );
@@ -227,11 +238,14 @@ export function Running({
   session,
   anchors,
   goTo,
+  into,
   children,
 }: {
   readonly session: Session;
   readonly anchors: readonly string[];
   readonly goTo: { readonly current: ((path: string) => void) | undefined };
+  /** Where the tools render, when not where `Running` stands: the app's dev parts stay. */
+  readonly into?: Element | undefined;
   readonly children?: React.ReactNode;
 }) {
   const { actor } = session;
@@ -524,15 +538,18 @@ export function Running({
   useLayoutEffect(() => {
     root.current?.style.setProperty("--dt-floor", `${String(floor)}px`);
   }, [floor]);
+  const own = (
+    <div ref={root} className="blueline">
+      <Keys />
+      <WalkSignal />
+      <TreeFocus />
+      <Review shift={shift} />
+      <Toasts />
+    </div>
+  );
   return (
     <ToolsContext.Provider value={tools}>
-      <div ref={root} className="blueline">
-        <Keys />
-        <WalkSignal />
-        <TreeFocus />
-        <Review shift={shift} />
-        <Toasts />
-      </div>
+      {into === undefined ? own : createPortal(own, into)}
       {children}
       {room > 0 && createPortal(<div aria-hidden style={{ height: room }} />, document.body)}
     </ToolsContext.Provider>

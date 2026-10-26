@@ -1,0 +1,6 @@
+/*
+ * The tools' CSS in their shadow root: Tailwind's theme, base and the utilities the tools use,
+ * with their own look (styles.css). scripts/overlay-css.ts compiles it.
+ */
+@import "tailwindcss" source(none);
+@import "./styles.css";

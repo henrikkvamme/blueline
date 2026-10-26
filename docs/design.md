@@ -585,7 +585,8 @@ dashboard. Browser checks start with step 2.
      adapter may still return an Effect of the same effect version; any other version gives
      a Promise. A test checks that the packed `/react` and the main entry share one store
      and one registry. The dashboard moves in the same step: it imports `DevTools` from
-     `/react`, and its Vite alias covers `/react`. Step 4 is done when the dashboard works on
+     `/react`, its Vite alias covers `/react`, and its key guard (`entry.ts`) knows
+     `[data-blueline-host]`. Step 4 is done when the dashboard works on
      it.
 5. **Browser tests.** Vitest browser mode with Playwright's Chromium runs the demo's
    adapter in a real shadow root, both from source and from the packed package. The tests

@@ -185,6 +185,12 @@ importers:
       '@effect/tsgo':
         specifier: 0.56.1
         version: 0.56.1
+      '@tailwindcss/node':
+        specifier: 4.3.3
+        version: 4.3.3
+      '@tailwindcss/oxide':
+        specifier: 4.3.3
+        version: 4.3.3
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2

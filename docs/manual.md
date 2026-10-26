@@ -37,6 +37,10 @@ app's, but Ctrl+B on a step, and so are Enter, Space and the arrows on the app's
 key that Blueline does not bind always goes to the app. [The keys of a walk](#the-keys-of-a-walk)
 gives the whole rule.
 
+Blueline's tools stand in a shadow root on a `<blueline-tools data-blueline-host>` element. A
+key or click in the tools reaches the app's own listeners with that element as its target, so
+an app that ignores Blueline's events checks `target.closest("[data-blueline-host]")`.
+
 An app that wants to know what the walk does reads `data-blueline` on
 `document.documentElement`. It is the one supported way to know. Do not read Blueline's
 saved review in `localStorage`: its format can change.

@@ -50,7 +50,8 @@
   },
   "scripts": {
     "prepare": "effect-tsgo patch --typescript-package @typescript/native --oxlint",
-    "check": "vp check && pnpm run typecheck",
+    "check": "vp check && pnpm run typecheck && node scripts/overlay-css.ts --check",
+    "css": "node scripts/overlay-css.ts",
     "typecheck": "node node_modules/@typescript/native/bin/tsc -p tsconfig.app.json && node node_modules/@typescript/native/bin/tsc -p tsconfig.node.json && node node_modules/@typescript/native/bin/tsc -p examples/review-demo",
     "test": "vp test run",
     "pack": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && vp pack",
@@ -66,6 +67,8 @@
   "devDependencies": {
     "@effect/platform-node": "4.0.6",
     "@effect/tsgo": "0.56.1",
+    "@tailwindcss/node": "4.3.3",
+    "@tailwindcss/oxide": "4.3.3",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

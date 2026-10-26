@@ -3,6 +3,7 @@
  * they need nothing of the app's theme. An app imports this file after Tailwind.
  */
 @source "./";
+@source not "./ui/overlay-css.gen.ts";
 
 @theme inline {
   --color-dt-ground: var(--dt-ground);
