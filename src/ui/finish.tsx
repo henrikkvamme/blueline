@@ -1,12 +1,14 @@
-import { CircleCheck } from "lucide-react";
+import { ChevronUp, Send } from "lucide-react";
 import type { Note } from "../notes/note";
 import { useNotes, useSession, useStep, useTools } from "./session";
+import { Foot, KEEP_FOCUS } from "./step-controls";
 
 /*
  * The finish, in the panel in place of the step, once every step of the journey is settled:
  * how many steps, the variant kept of each part, and how many notes went to the agent. The
  * review ends only when the reviewer finishes it; the last settle waits until then, so the
- * agent wakes once. Back opens the last step again, as Escape and u do.
+ * agent wakes once. The foot holds Back, which opens the last step again as Escape and u do,
+ * in the place of the step before, and Finish review in the place of Settle.
  */
 
 /** The notes the reviewer sent on these steps: each pointed note, and each message with
@@ -32,45 +34,58 @@ export function FinishView() {
       if (variant !== undefined) kept.set(part, variant);
     }
   const sent = sentOn(notes, new Set(steps.map((s) => s.id)));
+  const row =
+    "flex items-baseline justify-between gap-3 border-t border-dt-line py-2.5 first:border-t-0";
   return (
     <section
       aria-label="Finish the review"
-      className="flex shrink-0 flex-col gap-3 px-4 pt-3.5 pb-4 max-sm:gap-4"
+      className="flex min-h-0 flex-1 flex-col max-sm:flex-initial"
     >
-      <h2 className="flex items-center gap-2 text-[14px] leading-5 font-semibold max-sm:text-[16px]">
-        <CircleCheck className="size-4 shrink-0 text-dt-good" aria-hidden />
-        All {steps.length} steps settled
-      </h2>
-      {kept.size > 0 && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px] leading-5 max-sm:text-[15px] max-sm:leading-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pt-6 pb-4 max-sm:pt-2 max-sm:flex-initial">
+        <span className="self-start rounded-full bg-dt-good/15 px-2 py-0.5 text-[12px] text-dt-good">
+          Settled
+        </span>
+        <h2 className="mt-2.5 text-[21px] leading-7 font-semibold tracking-[-0.01em] text-dt-text tabular-nums">
+          All {steps.length} steps settled
+        </h2>
+        <p className="mt-2 text-[14px] leading-[1.55] text-dt-muted">
+          Finish to send the review to the agent.
+        </p>
+        <dl className="mt-5 flex flex-col text-[13px] max-sm:text-[15px]">
           {[...kept].map(([part, variant]) => (
-            <div key={part} className="contents">
-              <dt className="text-dt-muted">{part}</dt>
-              <dd className="min-w-0 truncate">{variant}</dd>
+            <div key={part} className={row}>
+              <dt className="min-w-0 truncate text-dt-muted">{part}</dt>
+              <dd className="min-w-0 truncate font-medium">{variant}</dd>
             </div>
           ))}
+          <div className={row}>
+            <dt className="text-dt-muted">Notes sent</dt>
+            <dd className="font-medium tabular-nums">{sent}</dd>
+          </div>
         </dl>
-      )}
-      <p className="text-[12px] text-dt-muted tabular-nums max-sm:text-[14px]">
-        {sent === 1 ? "1 note sent" : `${String(sent)} notes sent`}
-      </p>
-      <div className="flex items-center justify-end gap-1.5">
+      </div>
+      <Foot>
         <button
           type="button"
+          {...KEEP_FOCUS}
+          aria-label="Back to the last step"
+          title="Back to the last step"
           onClick={() => perform({ kind: "event", event: { type: "back" } })}
-          className="h-8 rounded-dt-control px-3 text-[12px] text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:px-4 max-sm:text-[15px]"
+          className="grid size-10 shrink-0 place-items-center rounded-dt-control bg-dt-raised text-dt-muted hover:bg-dt-line hover:text-dt-text max-sm:size-11"
         >
-          Back
+          <ChevronUp className="size-4" aria-hidden />
         </button>
         <button
           type="button"
+          {...KEEP_FOCUS}
           data-dt-finish=""
           onClick={() => perform({ kind: "event", event: { type: "finish" } })}
-          className="h-8 rounded-dt-control bg-dt-accent px-3 text-[12px] font-medium text-white hover:bg-dt-accent/85 max-sm:h-11 max-sm:px-4 max-sm:text-[15px]"
+          className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-dt-control bg-dt-accent text-[14px] font-medium text-white hover:bg-dt-accent/85 max-sm:h-11 max-sm:text-[15px]"
         >
+          <Send className="size-4 shrink-0" aria-hidden />
           Finish review
         </button>
-      </div>
+      </Foot>
     </section>
   );
 }

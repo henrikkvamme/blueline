@@ -1,13 +1,5 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleQuestionMark,
-  EyeOff,
-  MousePointerClick,
-  PanelRightClose,
-  RotateCcw,
-} from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, PanelRightClose } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { placePath } from "../part/page";
 import { stepNoteId, treeShown } from "../session/machine";
 import { focusToWrite } from "../vim";
@@ -15,25 +7,21 @@ import { Chips, Composer, NoteState, Thread } from "./composer";
 import { cx } from "./cx";
 import { FinishView } from "./finish";
 import { DOCK, FOCUSED, PANEL } from "./geometry";
+import { MoreMenu } from "./more";
+import { hasNews } from "../session/replies";
 import { usePins, useSession, useStep, useStepNote, useTools } from "./session";
-import {
-  ICON,
-  LiftButton,
-  SettleButton,
-  StepArrow,
-  useVariantPlace,
-  useVariety,
-  VariantSwitch,
-} from "./step-controls";
+import { Foot, ICON, SettleButton, StepArrow, StepVariants } from "./step-controls";
 import { usePhone } from "./touch";
 import { TreeZone } from "./tree";
 
 /*
  * The panel at the right: where the reviewer is, what to look at and try, and the chat with
- * the agent. While a step is open, the tree of pages and journeys folds to one line at its
- * top; under it are the step's header, its words and its chat. Off a step, it shows the tree
- * and the page's chat in the same place. It docks: the page narrows by its width, so it covers
- * nothing. Hidden, the bar is its folded form. On a phone it is a sheet at the bottom.
+ * the agent. Its top line holds the journey's title, which unfolds the tree, the journey's
+ * progress as dots, More and Hide. On a step, the step fills the rest: its number and group,
+ * its title and words, its variants, and its chat, with the message field and a foot of the
+ * step arrows and Settle that stay in one place from step to step. Off a step, it shows the
+ * tree and the page's chat. It docks: the page narrows by its width, so it covers nothing.
+ * Hidden, the bar is its folded form. On a phone it is a sheet at the bottom.
  */
 
 /** How long the panel takes to slide in or out; the page narrows and widens with it. */
@@ -86,7 +74,7 @@ function useDock(on: boolean) {
 }
 
 export function Panel() {
-  const { actor, perform } = useTools();
+  const { perform } = useTools();
   const shown = useSession((s) => s.context.panel && !s.context.preview);
   const active = useSession((s) => s.context.active);
   const tree = useSession((s) => s.context.tree);
@@ -115,45 +103,16 @@ export function Panel() {
       )}
       style={phone ? undefined : { width: PANEL }}
     >
-      <div className="flex h-11 shrink-0 items-center gap-0.5 border-b border-dt-line px-1.5 max-sm:h-14">
+      <div className="flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-2 max-sm:h-14">
         {active || phone ? (
           <TreeLine unfolded={unfolded} />
         ) : (
-          <span className="min-w-0 flex-1 truncate px-2.5 text-[11px] font-medium text-dt-faint">
-            Pages
+          <span className="min-w-0 flex-1 truncate px-2 text-[13px] text-dt-muted">
+            Pages and journeys
           </span>
         )}
-        {active && (
-          <button
-            type="button"
-            aria-label="Reset the step"
-            title="Reset the step: build its page again from the start"
-            onClick={() => actor.send({ type: "reset" })}
-            // A phone keeps the room for the line: the `?` menu builds the step again too.
-            className={cx(ICON, "max-sm:hidden")}
-          >
-            <RotateCcw className="size-3.5" aria-hidden />
-          </button>
-        )}
-        <button
-          type="button"
-          aria-label="Hide the tools"
-          title="Hide the tools to see the page as a user does"
-          onClick={() => perform({ kind: "event", event: { type: "preview" } })}
-          // A phone has no room for it: the `?` menu hides the tools too.
-          className={cx(ICON, "max-sm:hidden")}
-        >
-          <EyeOff className="size-4" aria-hidden />
-        </button>
-        <button
-          type="button"
-          aria-label="Keys and commands"
-          title="Keys and commands"
-          onClick={() => perform({ kind: "event", event: { type: "open", layer: "help" } })}
-          className={ICON}
-        >
-          <CircleQuestionMark className="size-4" aria-hidden />
-        </button>
+        {active && <Progress finishing={finishing} />}
+        <MoreMenu />
         <button
           type="button"
           aria-label="Hide the panel"
@@ -197,11 +156,11 @@ export function Panel() {
   );
 }
 
-/** The tree folded to one line, at the panel's top: the journey and the group on a step. A
- * click unfolds it, and so does a key of the tree's, as j, that comes while it has the keys. */
+/** The tree folded to one line, at the panel's top: the journey's title on a step. A click
+ * unfolds it, and so does a key of the tree's, as j, that comes while it has the keys. */
 function TreeLine({ unfolded }: { readonly unfolded: boolean }) {
   const { actor } = useTools();
-  const { journey, step } = useStep();
+  const { journey } = useStep();
   const active = useSession((s) => s.context.active);
   const Icon = unfolded ? ChevronDown : ChevronRight;
   return (
@@ -211,36 +170,58 @@ function TreeLine({ unfolded }: { readonly unfolded: boolean }) {
       aria-expanded={unfolded}
       aria-label={unfolded ? "Fold the pages and journeys" : "Pages and journeys"}
       onClick={() => actor.send({ type: "tree" })}
-      className="flex h-8 min-w-0 flex-1 items-center gap-1 rounded-dt-control px-1.5 text-left text-[12px] text-dt-muted outline-none hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:text-[14px]"
+      className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-dt-control px-2 text-left text-[13px] text-dt-muted outline-none hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:text-[15px]"
     >
+      <span className="min-w-0 truncate">
+        {active && journey !== undefined ? journey.title : "Pages and journeys"}
+      </span>
       <Icon className="size-3 shrink-0 text-dt-faint" aria-hidden />
-      {active && journey !== undefined ? (
-        <>
-          <span className="min-w-0 shrink truncate text-dt-text">{journey.title}</span>
-          {step !== undefined && step.group.title !== journey.title && (
-            <>
-              <span aria-hidden className="text-dt-faint">
-                ·
-              </span>
-              <span className="min-w-0 shrink-[2] truncate">{step.group.title}</span>
-            </>
-          )}
-        </>
-      ) : (
-        <span className="truncate">Pages and journeys</span>
-      )}
     </button>
   );
 }
 
-/** The step in the panel: its header, its words, and its chat at the bottom. Its switch says
- * whose chat it is: the step's, or the page's, so the reviewer writes on the page and keeps
- * their place in the journey. */
+/** The journey's progress, a dot for each step: green once settled, grey while open, and the
+ * step shown a wider pill, blue while open. At the finish every dot is green and none is wider. */
+function Progress({ finishing }: { readonly finishing: boolean }) {
+  const { journey, at } = useStep();
+  const feedback = useSession((s) => s.context.feedback);
+  const steps = journey?.steps ?? [];
+  const settled = steps.filter((s) => feedback[s.id]?.settled === true).length;
+  if (steps.length < 2) return null;
+  return (
+    <span
+      role="img"
+      aria-label={`${String(settled)} of ${String(steps.length)} steps settled`}
+      className="flex min-w-0 shrink items-center gap-[5px] overflow-hidden px-1.5"
+    >
+      {steps.map((s, i) => {
+        const here = i === at && !finishing;
+        return (
+          <i
+            key={s.id}
+            className={cx(
+              "h-1.5 shrink-0 rounded-full transition-[width,background-color] duration-200 ease-out motion-reduce:transition-none",
+              here ? "w-4" : "w-1.5",
+              feedback[s.id]?.settled === true
+                ? "bg-dt-good"
+                : here
+                  ? "bg-dt-accent"
+                  : "bg-dt-faint/35",
+            )}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/** The step in the panel: its number and group, its title and words, its variants, and its
+ * chat; at the foot, the message field and the step arrows round Settle. The chat is the
+ * step's, or the page's, so the reviewer writes on the page and keeps their place in the
+ * journey. */
 function StepView() {
   const { actor } = useTools();
-  const { step, at } = useStep();
-  const place = useVariantPlace();
-  const variety = useVariety();
+  const { journey, step, at } = useStep();
   const onPage = useSession((s) => s.context.chat === "page");
   const pagePlace = useSession((s) => s.context.place);
   const chat = useRef<HTMLDivElement>(null);
@@ -256,87 +237,111 @@ function StepView() {
   if (step === undefined)
     return (
       <>
-        <p className="px-4 py-3 text-[13px] text-dt-muted">This page shows no part with variants</p>
-        <PageView ruled />
+        <p className="px-4 pt-6 text-[14px] text-dt-muted">This page shows no part with variants</p>
+        <PageView ruled={false} />
       </>
     );
+  const group = step.group.title !== journey?.title ? step.group.title : undefined;
   return (
-    <>
-      <section
-        aria-label={`Step ${String(at + 1)}: ${step.title}`}
-        className="flex shrink-0 flex-col gap-2.5 px-1.5 pt-2 pb-3"
-      >
-        <div className="flex items-center gap-0.5">
-          <StepArrow by={-1} />
-          <span className="w-4 shrink-0 text-right text-[12px] text-dt-faint tabular-nums">
-            {at + 1}
-          </span>
-          <span className="min-w-0 flex-1 truncate px-1.5 text-[14px] leading-5 font-semibold max-sm:text-[16px]">
-            {step.title}
-          </span>
-          <StepArrow by={1} />
-          {/* On a phone it is a check alone, so the title has room. */}
-          <span className="pl-1">
-            <SettleButton compact />
-          </span>
-        </div>
-        {(place !== undefined || variety !== undefined) && (
-          <div className="flex items-center gap-1 px-1">
-            {place !== undefined && <VariantSwitch place={place} />}
-            {variety !== undefined && <LiftButton variety={variety} className="ml-auto" />}
-          </div>
-        )}
-        <p className="px-2.5 text-[13px] leading-[1.45] text-dt-muted max-sm:text-[15px]">
-          {step.look}
-        </p>
-        {step.try !== undefined && (
-          <p className="flex items-start gap-2 px-2.5 text-[13px] leading-[1.45] text-dt-text max-sm:text-[15px]">
-            <MousePointerClick className="mt-0.5 size-3.5 shrink-0 text-dt-accent" aria-hidden />
-            {step.try}
-          </p>
-        )}
-      </section>
-      <div
-        ref={chat}
-        className="flex min-h-0 flex-1 flex-col gap-2 border-t border-dt-line px-3 pt-2.5 pb-3 max-sm:flex-initial"
-      >
-        <div className="flex h-6 shrink-0 items-center gap-1.5 text-[11px] text-dt-muted max-sm:h-11 max-sm:text-[13px]">
-          <Switch onPage={onPage} />
-          {onPage && <span className="min-w-0 truncate">{placePath(pagePlace)}</span>}
-        </div>
-        {onPage ? (
-          <StepChat
-            key={pagePlace}
-            step={pagePlace}
-            placeholder="A message on this page"
-            onTab={flip}
-            fill
-          />
-        ) : (
-          <StepChat key={step.id} step={step.id} onTab={flip} fill />
-        )}
-      </div>
-    </>
+    <div ref={chat} className="flex min-h-0 flex-1 flex-col max-sm:flex-initial">
+      <StepChat
+        key={onPage ? pagePlace : step.id}
+        step={onPage ? pagePlace : step.id}
+        placeholder={onPage ? "A message on this page" : "A message on this step"}
+        onTab={flip}
+        head={
+          <>
+            <section
+              aria-label={`Step ${String(at + 1)}: ${step.title}`}
+              className="flex shrink-0 flex-col px-4 pt-6 max-sm:pt-2"
+            >
+              <span className="text-[12px] text-dt-faint tabular-nums">
+                {at + 1}
+                {group !== undefined && ` · ${group}`}
+              </span>
+              <h2 className="mt-1 text-[21px] leading-7 font-semibold tracking-[-0.01em] text-dt-text">
+                {step.title}
+              </h2>
+              <p className="mt-2 text-[14px] leading-[1.55] text-dt-muted">{step.look}</p>
+              {step.try !== undefined && (
+                <p className="mt-2 text-[14px] leading-[1.55] text-dt-muted">{step.try}</p>
+              )}
+            </section>
+            <StepVariants />
+          </>
+        }
+        chatHead={<ChatSwitch onPage={onPage} />}
+      />
+      {/* Out of the chat's key, so the foot stays the same element from step to step. */}
+      <Foot>
+        <StepArrow by={-1} foot />
+        <SettleButton foot />
+        <StepArrow by={1} foot />
+      </Foot>
+    </div>
   );
 }
 
-/** The page in the panel, off a step: the chat with the agent on this page, at the panel's
- * foot, where a step's chat is. A note pointed at an element goes with the next message. */
+/** Which chat the panel has on a step, at the chat's top: the step's, or the page's. It shows
+ * only once the page's chat has messages, or while the panel has it; Tab in the message field
+ * and the tree reach the page's chat too. */
+function ChatSwitch({ onPage }: { readonly onPage: boolean }) {
+  const { actor } = useTools();
+  const place = useSession((s) => s.context.place);
+  const pageChat = useStepNote(place);
+  const count = pageChat?.thread.length ?? 0;
+  if (!onPage && count === 0) return null;
+  return (
+    <div className="mb-auto flex h-7 shrink-0 items-center justify-between gap-2 text-[12px] max-sm:h-11">
+      <span className="min-w-0 truncate text-dt-faint">
+        {onPage ? `This page · ${placePath(place) ?? ""}` : "This step"}
+      </span>
+      <button
+        type="button"
+        onClick={() => actor.send({ type: "chat" })}
+        className="-mr-2 flex h-7 shrink-0 items-center gap-1.5 rounded-dt-control px-2 text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:px-3 max-sm:text-[14px]"
+      >
+        {onPage ? (
+          "Back to the step"
+        ) : (
+          <>
+            The page&apos;s chat
+            {pageChat !== undefined && hasNews(pageChat) ? (
+              <span className="size-1.5 rounded-full bg-dt-accent" aria-label="New reply" />
+            ) : (
+              <span className="text-dt-faint tabular-nums">{count}</span>
+            )}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/** The page in the panel, off a step: the chat with the agent on this page, under the tree.
+ * A note pointed at an element goes with the next message. */
 function PageView({ ruled }: { readonly ruled: boolean }) {
   const place = useSession((s) => s.context.place);
   return (
     <section
       aria-label="This page"
       className={cx(
-        "flex max-h-[60%] min-h-0 shrink-0 flex-col gap-2 px-3 pt-2.5 pb-3 max-sm:max-h-none",
+        "flex max-h-[60%] min-h-0 shrink-0 flex-col max-sm:max-h-none",
         ruled && "border-t border-dt-line",
       )}
     >
-      <div className="flex h-6 shrink-0 items-center gap-1.5 text-[11px] text-dt-muted max-sm:text-[13px]">
-        <span className="text-[12px] font-medium text-dt-text max-sm:text-[14px]">This page</span>
-        <span className="min-w-0 truncate">{placePath(place)}</span>
-      </div>
-      <StepChat key={place} step={place} placeholder="A message on this page" />
+      <StepChat
+        key={place}
+        step={place}
+        placeholder="A message on this page"
+        fill={false}
+        chatHead={
+          <div className="flex h-7 shrink-0 items-center gap-1.5 text-[12px] max-sm:h-11">
+            <span className="font-medium text-dt-text max-sm:text-[14px]">This page</span>
+            <span className="min-w-0 truncate text-dt-faint">{placePath(place)}</span>
+          </div>
+        }
+      />
     </section>
   );
 }
@@ -344,18 +349,23 @@ function PageView({ ruled }: { readonly ruled: boolean }) {
 /**
  * The chat with the agent on a step or a page: the thread, where it is with the agent, the
  * pointed notes that go with the next message, and the composer. With `fill`, the thread takes
- * the room above the composer, and its newest message stands just above it.
+ * the room left under `head`, and its newest message stands just above the composer; `head`
+ * scrolls with it when the panel is short.
  */
 export function StepChat({
   step,
   placeholder = "A message on this step",
   onTab,
-  fill = false,
+  fill = true,
+  head,
+  chatHead,
 }: {
   readonly step: string;
   readonly placeholder?: string;
   readonly onTab?: ((insert: boolean) => void) | undefined;
   readonly fill?: boolean;
+  readonly head?: ReactNode;
+  readonly chatHead?: ReactNode;
 }) {
   const note = useStepNote(step);
   const pins = usePins(step);
@@ -363,55 +373,35 @@ export function StepChat({
     <>
       <div
         className={cx(
-          "flex min-h-0 flex-col justify-end",
-          fill ? "flex-1 max-sm:flex-initial" : "shrink",
+          "flex min-h-0 flex-col",
+          fill ? "flex-1 overflow-y-auto overscroll-contain max-sm:flex-initial" : "shrink",
         )}
       >
-        <Thread note={note} className="min-h-0 max-sm:max-h-[35dvh]" />
+        {head}
+        <div
+          className={cx(
+            "flex min-h-0 flex-col justify-end gap-2 px-4 pt-4 max-sm:pt-2",
+            fill ? "min-h-24 flex-1 max-sm:min-h-0 max-sm:flex-initial" : "shrink pt-2.5",
+          )}
+        >
+          {chatHead}
+          <Thread note={note} className="min-h-0 max-sm:max-h-[35dvh]" />
+        </div>
       </div>
-      <NoteState note={note} />
-      <Chips pins={pins} />
-      <Composer
-        id={stepNoteId(step)}
-        step={step}
-        note={note}
-        sends
-        pointed={pins.length}
-        placeholder={placeholder}
-        onDone={() => undefined}
-        onTab={onTab}
-      />
+      <div className="flex shrink-0 flex-col gap-2 px-3 pt-2 pb-3">
+        <NoteState note={note} />
+        <Chips pins={pins} />
+        <Composer
+          id={stepNoteId(step)}
+          step={step}
+          note={note}
+          sends
+          pointed={pins.length}
+          placeholder={placeholder}
+          onDone={() => undefined}
+          onTab={onTab}
+        />
+      </div>
     </>
-  );
-}
-
-/** Whose chat the panel has on a step: the step's or the page's. A click or Tab switches. */
-function Switch({ onPage }: { readonly onPage: boolean }) {
-  const { actor } = useTools();
-  const side = (to: "step" | "page", label: string) => {
-    const on = onPage === (to === "page");
-    return (
-      <button
-        type="button"
-        aria-pressed={on}
-        onClick={() => actor.send({ type: "chat", to })}
-        className={cx(
-          "rounded-dt-mark px-1.5 py-px max-sm:min-h-11 max-sm:px-3",
-          on ? "bg-dt-raised font-medium text-dt-text" : "text-dt-muted hover:text-dt-text",
-        )}
-      >
-        {label}
-      </button>
-    );
-  };
-  return (
-    <span
-      role="group"
-      aria-label="Write to"
-      className="flex shrink-0 gap-px rounded-dt-mark bg-dt-ground p-px"
-    >
-      {side("step", "Step")}
-      {side("page", "Page")}
-    </span>
   );
 }

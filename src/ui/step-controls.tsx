@@ -1,6 +1,6 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from "lucide-react";
-import { useSyncExternalStore } from "react";
-import { NO_VERDICTS, partOn, parts, variantOf, varietyOf } from "../part/store";
+import { Check, ChevronDown, ChevronUp, Layers } from "lucide-react";
+import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
+import { NO_VERDICTS, partOn, parts, variantRows, varietyOf } from "../part/store";
 import { cx } from "./cx";
 import { useSession, useStep, useTools, useVariant } from "./session";
 
@@ -28,39 +28,48 @@ export function useVariety():
   return own > 1 ? { count: own, kind: "states" } : undefined;
 }
 
-/** Which variant the step shows, of how many: its part's variants, else the step's own. */
+const NOTHING = { variant: undefined, state: undefined };
+
+/** The variants the step lists, and the one it shows: its part's variants not deleted, else
+ * the step's own; none with fewer than two. */
 export function useVariantPlace():
-  | { readonly at: number; readonly of: number; readonly label: string }
+  | {
+      readonly at: number;
+      readonly of: number;
+      readonly label: string;
+      readonly labels: readonly string[];
+    }
   | undefined {
   const { journey, step } = useStep();
   const now = useSyncExternalStore(parts.subscribe, parts.current);
   const own = useVariant(step);
   if (step === undefined) return undefined;
   const part = partOn(step, journey);
-  if (part !== undefined) {
-    const verdicts = now.verdicts[part.name] ?? NO_VERDICTS;
-    const left = part.labels.filter((l) => !verdicts.dropped.includes(l));
-    if (left.length > 1) {
-      const label = variantOf(
-        part.labels,
-        now.shown[part.name] ?? parts.shown(part.name),
-        verdicts,
-      );
-      return { at: left.indexOf(label), of: left.length, label };
-    }
-  }
-  return own !== undefined && own.count > 1
-    ? { at: own.index, of: own.count, label: own.label }
-    : undefined;
+  const rows = variantRows(
+    part,
+    part === undefined ? NOTHING : (now.shown[part.name] ?? parts.shown(part.name)),
+    part === undefined ? NO_VERDICTS : (now.verdicts[part.name] ?? NO_VERDICTS),
+    { labels: step.variants?.map((v) => v.label) ?? [], at: own?.index ?? 0 },
+  );
+  if (rows === undefined) return undefined;
+  return { ...rows, of: rows.labels.length, label: rows.labels[rows.at] ?? "" };
 }
+
+/** A click on a step control leaves the focus where it was, as on the page, so the walk's
+ * keys go on there: Enter settles, and h and l show the variants. Tab still reaches it. */
+export const KEEP_FOCUS = { onMouseDown: (e: MouseEvent) => e.preventDefault() };
 
 /** A square button for an icon: 44 px on a phone, for a finger. */
 export const ICON =
   "grid size-8 shrink-0 place-items-center rounded-dt-control text-dt-muted hover:bg-dt-raised hover:text-dt-text disabled:opacity-40 max-sm:size-11";
 
+/** The step arrows in the panel's foot: 40 px squares on a raised tint, beside Settle. */
+const FOOT_ARROW =
+  "grid size-10 shrink-0 place-items-center rounded-dt-control bg-dt-raised text-dt-muted hover:bg-dt-line hover:text-dt-text disabled:opacity-40 disabled:hover:bg-dt-raised max-sm:size-11";
+
 /** Goes to the step before or after, settled too, as k and j do: up and down, as the steps
- * stand in the tree, while the variants go across. */
-export function StepArrow({ by }: { readonly by: -1 | 1 }) {
+ * stand in the tree, while the variants go across. In the panel's foot it is a raised square. */
+export function StepArrow({ by, foot = false }: { readonly by: -1 | 1; readonly foot?: boolean }) {
   const { actor } = useTools();
   const { journey, at } = useStep();
   const last = Math.max((journey?.steps.length ?? 0) - 1, 0);
@@ -69,9 +78,10 @@ export function StepArrow({ by }: { readonly by: -1 | 1 }) {
   return (
     <button
       type="button"
+      {...KEEP_FOCUS}
       aria-label={by < 0 ? "Step before" : "Step after"}
       disabled={to === at}
-      className={ICON}
+      className={foot ? FOOT_ARROW : ICON}
       onClick={() => actor.send({ type: "go", by })}
     >
       <Icon className="size-4" aria-hidden />
@@ -81,8 +91,15 @@ export function StepArrow({ by }: { readonly by: -1 | 1 }) {
 
 /** Settles the step: it is right as it shows, with the variant the page shows; the walk then
  * goes on to the next open step. Pressed on a settled step, which a press opens again. Its
- * width stays the same for both words, so nothing beside it moves. */
-export function SettleButton({ compact = false }: { readonly compact?: boolean }) {
+ * width stays the same for both words, so nothing beside it moves. In the panel's foot it is
+ * the one primary action, as wide as the room between the step arrows. */
+export function SettleButton({
+  compact = false,
+  foot = false,
+}: {
+  readonly compact?: boolean;
+  readonly foot?: boolean;
+}) {
   const { perform } = useTools();
   const { step } = useStep();
   const settled = useSession(
@@ -91,19 +108,24 @@ export function SettleButton({ compact = false }: { readonly compact?: boolean }
   return (
     <button
       type="button"
+      {...KEEP_FOCUS}
+      data-dt-settle=""
       aria-pressed={settled}
       aria-label={settled ? "Settled" : "Settle"}
       title={settled ? "Open the step again" : undefined}
       onClick={() => perform({ kind: "event", event: { type: "settle" } })}
       className={cx(
-        "flex h-8 shrink-0 items-center gap-1.5 rounded-dt-control px-2.5 text-[12px] font-medium max-sm:h-11 max-sm:px-4 max-sm:text-[15px]",
+        "flex shrink-0 items-center justify-center gap-1.5 rounded-dt-control font-medium transition-colors duration-150 motion-reduce:transition-none",
+        foot
+          ? "h-10 min-w-0 flex-1 text-[14px] max-sm:h-11 max-sm:text-[15px]"
+          : "h-8 px-2.5 text-[12px] max-sm:h-11 max-sm:px-4 max-sm:text-[15px]",
         compact && "max-sm:w-11 max-sm:justify-center max-sm:px-0",
         settled
-          ? "bg-dt-good/20 text-dt-good hover:bg-dt-good/30"
+          ? "bg-dt-good/15 text-dt-good hover:bg-dt-good/25"
           : "bg-dt-accent text-white hover:bg-dt-accent/85",
       )}
     >
-      <Check className="size-3.5 shrink-0 max-sm:size-4" aria-hidden />
+      <Check className="size-4 shrink-0" aria-hidden />
       <span className={cx("grid text-left", compact && "max-sm:hidden")} aria-hidden>
         <span className={cx("col-start-1 row-start-1", settled && "invisible")}>Settle</span>
         <span className={cx("col-start-1 row-start-1", !settled && "invisible")}>Settled</span>
@@ -112,70 +134,84 @@ export function SettleButton({ compact = false }: { readonly compact?: boolean }
   );
 }
 
-/** Which variant the page shows, of how many, with the previous and the next beside it, as
- * h and l and a swipe on the part go. */
-export function VariantSwitch({
-  place,
-}: {
-  readonly place: { readonly at: number; readonly of: number; readonly label: string };
-}) {
+/**
+ * The step's variants, under its words: a quiet Lift at the right, and a row for each variant
+ * that is left, as radios. The row of the variant shown is raised. A click shows that variant
+ * on the page, as h and l do. A part with one variant and some states has no rows: its states
+ * show in the lift only.
+ */
+export function StepVariants() {
   const { perform } = useTools();
-  const arrow =
-    "grid size-6 shrink-0 place-items-center rounded-dt-control text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:size-11";
+  const place = useVariantPlace();
+  const variety = useVariety();
+  if (place === undefined && variety === undefined) return null;
   return (
-    <span
-      role="group"
-      aria-label="Variant"
-      className="flex min-w-0 items-center gap-0.5 text-[12px] text-dt-muted max-sm:text-[14px]"
+    <section
+      aria-label={place === undefined ? "States" : "Variants"}
+      className="flex shrink-0 flex-col gap-1.5 px-4 pt-5 max-sm:gap-0 max-sm:pt-2"
     >
-      <button
-        type="button"
-        aria-label="Previous variant"
-        onClick={() => perform({ kind: "variant", by: -1 })}
-        className={arrow}
-      >
-        <ChevronLeft className="size-3.5 max-sm:size-4" aria-hidden />
-      </button>
-      <span className="min-w-0 truncate rounded-dt-mark bg-dt-raised px-1.5 py-px font-medium text-dt-text">
-        {place.label}
-      </span>
-      <span className="shrink-0 px-1 whitespace-nowrap tabular-nums">
-        {place.at + 1} of {place.of}
-      </span>
-      <button
-        type="button"
-        aria-label="Next variant"
-        onClick={() => perform({ kind: "variant", by: 1 })}
-        className={arrow}
-      >
-        <ChevronRight className="size-3.5 max-sm:size-4" aria-hidden />
-      </button>
-    </span>
+      <div className="flex h-7 items-center justify-between max-sm:h-11">
+        <span className="text-[12px] text-dt-faint">
+          {place === undefined ? "States" : "Variants"}
+        </span>
+        <button
+          type="button"
+          {...KEEP_FOCUS}
+          aria-label="Lift the part"
+          title="Lift the part: its variants in a row, its states in a column"
+          onClick={() => perform({ kind: "lift" })}
+          className="-mr-2 flex h-7 items-center gap-1.5 rounded-dt-control px-2 text-[12px] text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:px-3 max-sm:text-[14px]"
+        >
+          <Layers className="size-3.5 shrink-0" aria-hidden />
+          Lift
+        </button>
+      </div>
+      {place !== undefined && (
+        <div role="radiogroup" aria-label="Variant shown" className="flex flex-col gap-1">
+          {place.labels.map((label, i) => {
+            const on = i === place.at;
+            return (
+              <button
+                key={label}
+                type="button"
+                {...KEEP_FOCUS}
+                role="radio"
+                aria-checked={on}
+                onClick={() => {
+                  if (!on) perform({ kind: "variant", by: i - place.at });
+                }}
+                className={cx(
+                  "flex h-9 items-center gap-2.5 rounded-dt-control px-2.5 text-left text-[13px] transition-colors duration-150 motion-reduce:transition-none max-sm:h-11 max-sm:text-[15px]",
+                  on
+                    ? "bg-dt-raised text-dt-text ring-1 ring-white/7 ring-inset"
+                    : "text-dt-muted hover:bg-dt-raised/60 hover:text-dt-text",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cx(
+                    "size-3.5 shrink-0 rounded-full border-[1.5px] transition-[border-color,box-shadow] duration-150 motion-reduce:transition-none",
+                    on
+                      ? "border-dt-accent shadow-[inset_0_0_0_2px_var(--dt-raised),inset_0_0_0_7px_var(--dt-accent)]"
+                      : "border-dt-faint/70",
+                  )}
+                />
+                <span className="min-w-0 truncate">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
-/** Lifts the step's part, as v does: its variants in a row and its states in a column. */
-export function LiftButton({
-  variety,
-  className,
-}: {
-  readonly variety: { readonly count: number; readonly kind: "variants" | "states" };
-  readonly className?: string;
-}) {
-  const { perform } = useTools();
-  const words = `${String(variety.count)} ${variety.kind}`;
+/** The foot of the panel on a step and at the finish: the one primary action between the
+ * quiet ones, in one place from step to step. */
+export function Foot({ children }: { readonly children: ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-label={`Lift the part: ${words}`}
-      className={cx(
-        "flex h-8 shrink-0 items-center gap-1.5 rounded-dt-control px-2 text-[12px] whitespace-nowrap text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:px-2.5 max-sm:text-[14px]",
-        className,
-      )}
-      onClick={() => perform({ kind: "lift" })}
-    >
-      <Layers className="size-4 shrink-0" aria-hidden />
-      {words}
-    </button>
+    <div className="flex shrink-0 items-center gap-1.5 border-t border-dt-line px-3 py-2.5">
+      {children}
+    </div>
   );
 }
