@@ -72,8 +72,7 @@ describe("a session", () => {
     enter: () => Effect.succeed(null),
     context: () => null,
   };
-  const start = () =>
-    startSession({ adapter, storageKey: "test", path: () => "/", shift: () => undefined });
+  const start = () => startSession({ adapter, storageKey: "test", path: () => "/" });
 
   it("starts the review a link names, on its step, and takes the link out of the address", () => {
     address = "http://localhost/?review=prep&step=b";
@@ -90,6 +89,27 @@ describe("a session", () => {
     expect(session.info().journeys.map((j) => j.id)).toEqual(["prep", "page"]);
     session.actor.send({ type: "start", journey: "prep", at: 2, fresh: false });
     expect(JSON.parse(kept.get("test") ?? "{}")).toMatchObject({ active: true, at: 2 });
+  });
+
+  it("starts a review by the journey's and the step's IDs", () => {
+    address = "http://localhost/";
+    session = start();
+    expect(session.start("gone")).toBe(false);
+    expect(session.actor.getSnapshot().context.active).toBe(false);
+    expect(session.start("prep", "c")).toBe(true);
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 2 });
+    // A step the journey does not have: its first.
+    session.start("prep", "gone");
+    expect(session.actor.getSnapshot().context.at).toBe(0);
+  });
+
+  it("starts again where it was after it is disposed", () => {
+    address = "http://localhost/";
+    session = start();
+    session.start("prep", "b");
+    session.dispose();
+    session = start();
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 1 });
   });
 
   it("stops the machine when it is disposed", () => {

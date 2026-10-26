@@ -6,12 +6,19 @@ import type { Effect } from "effect";
  * is the dev tools' own.
  */
 
+/**
+ * What an app's code for a step gives: a value, a Promise or an Effect. The code gets an
+ * AbortSignal, which aborts when the walk no longer waits for it, as when it went on to
+ * another step or the tools stopped; a result after that is dropped (core/result.ts).
+ */
+export type DevResult<A> = A | PromiseLike<A> | Effect.Effect<A>;
+
 /** One state or design of a step's part. Applying it again does no harm. */
 export interface DevVariant<C> {
   readonly label: string;
   /** A design choice to pick (choices.ts): its name and option. */
   readonly choice?: readonly [name: string, option: string];
-  readonly apply?: (context: C) => Effect.Effect<void>;
+  readonly apply?: (context: C, signal: AbortSignal) => DevResult<void>;
 }
 
 /** Who the reviewer is in a step, as the walk shows it. */
@@ -34,10 +41,11 @@ export interface DevStep<C> {
   /** Where the part is: CSS selectors, one for each element. The light covers them all. */
   readonly target?: readonly string[];
   /** Opens the part on the page, such as a panel. */
-  readonly setup?: (context: C) => Effect.Effect<void>;
+  readonly setup?: (context: C, signal: AbortSignal) => DevResult<void>;
   /** Takes every variant's state off the page. It runs before a variant applies and when
-   * the walk leaves the step, so no variant's state stays behind. */
-  readonly reset?: (context: C) => Effect.Effect<void>;
+   * the walk leaves the step, so no variant's state stays behind. It always runs to its end:
+   * its signal never aborts. */
+  readonly reset?: (context: C, signal: AbortSignal) => DevResult<void>;
   readonly variants?: readonly DevVariant<C>[];
   /** The name of the part to lift with v (part/variants.tsx), when the target holds more
    * than one; otherwise v lifts the one in the target. */
@@ -83,17 +91,25 @@ export interface DevAdapter<C> {
   /**
    * Opens the step's world: its scenario, its person and its page, and gives what the
    * step's code needs. It calls `show` while the world changes, and `show(undefined)` when
-   * it is ready. It is not stopped halfway once it builds something.
+   * it is ready. Its signal aborts when the walk goes on before it is done; it should then
+   * stop where it can, and its result is dropped.
    */
   readonly enter: (
     step: DevStep<C>,
-    options: { readonly fresh: boolean; readonly show: (shift: DevShift | undefined) => void },
-  ) => Effect.Effect<C>;
+    options: {
+      readonly fresh: boolean;
+      readonly show: (shift: DevShift | undefined) => void;
+      readonly signal: AbortSignal;
+    },
+  ) => DevResult<C>;
   /** The context for a step's code on the page as it is, without opening anything. */
   readonly context: () => C;
   readonly people?: {
-    /** A React hook: the people who match the query, as the app reads them. */
-    readonly usePeople: (query: string) => readonly DevPersonChoice[];
+    /** The people who match the query. Its signal aborts when the reviewer types on. */
+    readonly find: (
+      query: string,
+      signal: AbortSignal,
+    ) => readonly DevPersonChoice[] | PromiseLike<readonly DevPersonChoice[]>;
     readonly actAs: (id: string) => void;
   };
   readonly commands?: readonly DevCommand[];

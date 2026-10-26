@@ -1,6 +1,7 @@
 import { Clock, DateTime, Effect, Fiber, Schedule } from "effect";
 import { fromCallback } from "xstate";
 import { registry } from "../core/registry";
+import { fromResult } from "../core/result";
 import { postLine, readListening, readReplies } from "../io/channel";
 import { listenedJourneys } from "../io/listening";
 import { ROUTES } from "../io/routes";
@@ -20,8 +21,9 @@ import type { Entered, Shape } from "./state";
 
 /*
  * The machine's actors for a real page: each runs an Effect, and the machine stops it by
- * leaving the state that runs it. Opening a step's world is not stopped halfway (the
- * adapter's `enter`), and a step's `reset` always finishes, so no half state stays.
+ * leaving the state that runs it. The app's code for a step runs through `fromResult`
+ * (core/result.ts), so its signal aborts then. A step's `reset` always finishes, so no half
+ * state stays.
  */
 
 /** How long the shift card shows at least, so the reviewer can read it. */
@@ -91,21 +93,28 @@ export function liveMachine<C>(live: Live<C>) {
   /** Takes every variant's state off, then shows this one. */
   const showVariant = (step: DevStep<C>, index: number, context: C) =>
     Effect.gen(function* () {
-      if (step.reset !== undefined) yield* Effect.uninterruptible(step.reset(context));
+      const { reset } = step;
+      if (reset !== undefined)
+        yield* Effect.uninterruptible(fromResult((signal) => reset(context, signal)));
       const variant = step.variants?.[index];
       if (variant?.choice !== undefined) {
         const [name, option] = variant.choice;
         const choice = yield* choiceNamed(name);
         choice?.choose(option);
       }
-      if (variant?.apply !== undefined) yield* variant.apply(context);
+      const apply = variant?.apply;
+      if (apply !== undefined) yield* fromResult((signal) => apply(context, signal));
     });
 
   const leave = (leaving: Entered | undefined) => {
     const step = leaving === undefined ? undefined : stepAt(leaving.journey, leaving.at);
-    return step?.reset === undefined
+    const reset = step?.reset;
+    return reset === undefined
       ? Effect.void
-      : quietly("reset the step before", Effect.uninterruptible(step.reset(adapter.context())));
+      : quietly(
+          "reset the step before",
+          Effect.uninterruptible(fromResult((signal) => reset(adapter.context(), signal))),
+        );
   };
 
   const enter = (input: EnterInput) =>
@@ -124,14 +133,22 @@ export function liveMachine<C>(live: Live<C>) {
       const context =
         input.journey === PAGE_JOURNEY
           ? adapter.context()
-          : yield* adapter.enter(step, {
-              fresh: input.fresh,
-              show: (shift) => {
-                shown ||= shift !== undefined;
-                live.shift(shift);
-              },
-            });
-      yield* quietly("open the step's part", step.setup?.(context) ?? Effect.void);
+          : yield* fromResult((signal) =>
+              adapter.enter(step, {
+                fresh: input.fresh,
+                show: (shift) => {
+                  shown ||= shift !== undefined;
+                  live.shift(shift);
+                },
+                signal,
+              }),
+            );
+      const { setup } = step;
+      if (setup !== undefined)
+        yield* quietly(
+          "open the step's part",
+          fromResult((signal) => setup(context, signal)),
+        );
       yield* quietly("show the variant", showVariant(step, input.variant, context));
       if (shown) {
         const now = yield* Clock.currentTimeMillis;
@@ -170,7 +187,10 @@ export function liveMachine<C>(live: Live<C>) {
             for (let tries = 0; tries < 8; tries += 1) {
               yield* Effect.sleep("700 millis");
               if (target.some((t) => document.querySelector(t) !== null)) continue;
-              yield* quietly("open the step's part again", setup(adapter.context()));
+              yield* quietly(
+                "open the step's part again",
+                fromResult((signal) => setup(adapter.context(), signal)),
+              );
             }
           }),
         ),

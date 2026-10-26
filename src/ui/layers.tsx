@@ -1,3 +1,4 @@
+import { Effect, Fiber } from "effect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRegistry } from "../choices";
 import {
@@ -13,7 +14,8 @@ import {
 } from "../keys/keymap";
 import { isKept } from "../notes/note";
 import { UI } from "./geometry";
-import type { DevInfo } from "../types";
+import { fromResult } from "../core/result";
+import type { DevInfo, DevPersonChoice } from "../types";
 import { Palette, type Item } from "./palette";
 import { useJourneys, useThisPage } from "./tree";
 import { usePins, useSession, useStep, useTools } from "./session";
@@ -75,7 +77,19 @@ function Pointed() {
 function People({ people }: { readonly people: NonNullable<DevInfo["people"]> }) {
   const { actor } = useTools();
   const [query, setQuery] = useState("");
-  const found = people.usePeople(query);
+  const [found, setFound] = useState<readonly DevPersonChoice[]>([]);
+  // A new query stops the last search: its signal aborts, and its result is dropped.
+  useEffect(() => {
+    const fiber = Effect.runFork(
+      fromResult((signal) => people.find(query, signal)).pipe(
+        Effect.tap((list) => Effect.sync(() => setFound(list))),
+        Effect.catchCause((cause) => Effect.logError("The dev tools could not find people", cause)),
+      ),
+    );
+    return () => {
+      Effect.runFork(Fiber.interrupt(fiber));
+    };
+  }, [people, query]);
   return (
     <Palette
       label="Act as"

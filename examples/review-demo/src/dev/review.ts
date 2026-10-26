@@ -1,11 +1,10 @@
-import { DevTools, type DevAdapter, type DevJourney } from "@henrikkvamme/blueline";
-import { Effect, Schedule } from "effect";
+import { mount, type DevAdapter, type DevJourney } from "@henrikkvamme/blueline";
 import { navigate, requestPath } from "../router";
 
 /*
  * Blueline on the demo, in development only (app.tsx): one journey over both pages. A step
  * opens its page and waits for its part to show. The rows' and the header's steps name
- * their parts, so `v` lifts their variants.
+ * their parts, so `v` lifts their variants. The code is plain Promises.
  */
 
 const LIST = "/";
@@ -68,30 +67,23 @@ const PAGES: Readonly<Record<string, string>> = {
   "request-decision": REQUEST,
 };
 
-/** Waits for the step's part to show on the page, a second at most. */
-const shown = (selectors: readonly string[]) =>
-  Effect.sync(() => selectors.every((s) => document.querySelector(s) !== null)).pipe(
-    Effect.repeat({
-      until: (found) => found,
-      schedule: Schedule.spaced("50 millis"),
-      times: 20,
-    }),
-    Effect.asVoid,
-  );
+/** Waits for the step's part to show on the page: a second at most, or until the walk goes
+ *  on without it. */
+async function shown(selectors: readonly string[], signal: AbortSignal) {
+  for (let tries = 0; tries < 20 && !signal.aborted; tries += 1) {
+    if (selectors.every((s) => document.querySelector(s) !== null)) return;
+    await new Promise((done) => setTimeout(done, 50));
+  }
+}
 
 const adapter: DevAdapter<void> = {
   journeys: [JOURNEY],
   context: () => undefined,
-  enter: (step) =>
-    Effect.gen(function* () {
-      const page = PAGES[step.id];
-      if (page !== undefined && location.pathname !== page) navigate(page);
-      yield* shown(step.target ?? []);
-    }),
+  enter: async (step, { signal }) => {
+    const page = PAGES[step.id];
+    if (page !== undefined && location.pathname !== page) navigate(page);
+    await shown(step.target ?? [], signal);
+  },
 };
 
-export default function Review({ path }: { readonly path: string }) {
-  return (
-    <DevTools adapter={adapter} storageKey="review-demo.review" path={path} navigate={navigate} />
-  );
-}
+mount({ adapter, storageKey: "review-demo.review", navigate });

@@ -77,6 +77,102 @@ describe("the walk on a page", () => {
     ));
 });
 
+/** A walk whose app gives Promises, each held until the test lets it end. */
+function promised() {
+  const log: string[] = [];
+  const held = new Map<string, { readonly end: () => void; readonly signal: AbortSignal }>();
+  const hold = (what: string, signal: AbortSignal) =>
+    new Promise<void>((end) => {
+      log.push(what);
+      held.set(what, { end, signal });
+    });
+  const step = (id: string): DevStep<string> => ({
+    id,
+    title: `Step ${id}`,
+    look: "",
+    group: { id: "g", title: "Group" },
+    setup: (_, signal) => hold(`setup ${id}`, signal).then(() => void log.push(`set ${id}`)),
+    variants: [
+      { label: "One", apply: () => void log.push(`apply ${id}`) },
+      { label: "Two", apply: () => void log.push(`apply ${id} Two`) },
+    ],
+  });
+  const adapter: DevAdapter<string> = {
+    journeys: [{ id: "prep", title: "Prep", steps: [step("a"), step("b")] }],
+    context: () => "page",
+    enter: (s, { signal }) => hold(`enter ${s.id}`, signal).then(() => "world"),
+  };
+  const actor = createActor(liveMachine({ adapter, shift: () => undefined }), {
+    input: { kept: { ...START, journey: "prep" }, journeys: shapesOf(adapter.journeys), now: 0 },
+  });
+  /** Lets the held Promise end, once the walk holds it. */
+  const end = (what: string) =>
+    Effect.promise(async () => {
+      await vi.waitFor(() => expect(held.has(what)).toBe(true));
+      const it = held.get(what);
+      it?.end();
+      return it?.signal;
+    });
+  return { actor, log, end };
+}
+
+const readyAt = (actor: ReturnType<typeof promised>["actor"], at: number) =>
+  Effect.promise(() =>
+    waitFor(actor, (s) => s.matches({ review: { on: "ready" } }) && s.context.at === at, {
+      timeout: 3000,
+    }),
+  );
+
+describe("an app that gives Promises", () => {
+  it("drops a step's late result when the walk went on, and aborts its signal", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { actor, log, end } = promised();
+        actor.start();
+        actor.send({ type: "choose" });
+        yield* Effect.promise(() => vi.waitFor(() => expect(log).toContain("enter a")));
+        actor.send({ type: "go", by: 1 });
+        const late = yield* end("enter a");
+        yield* end("enter b");
+        yield* end("setup b");
+        yield* readyAt(actor, 1);
+        actor.stop();
+        expect(late?.aborted).toBe(true);
+        expect(log).toEqual(["enter a", "enter b", "setup b", "set b", "apply b"]);
+      }),
+    ));
+
+  it("drops a setup that ends after the reviewer left the review", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { actor, log, end } = promised();
+        actor.start();
+        actor.send({ type: "choose" });
+        yield* end("enter a");
+        yield* Effect.promise(() => vi.waitFor(() => expect(log).toContain("setup a")));
+        actor.send({ type: "leave" });
+        const late = yield* end("setup a");
+        yield* Effect.sleep("20 millis");
+        actor.stop();
+        expect(late?.aborted).toBe(true);
+        // The app's own Promise runs on; the walk shows no variant after it.
+        expect(log).toEqual(["enter a", "setup a", "set a"]);
+      }),
+    ));
+
+  it("aborts what runs when the tools stop", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { actor, log, end } = promised();
+        actor.start();
+        actor.send({ type: "choose" });
+        yield* Effect.promise(() => vi.waitFor(() => expect(log).toContain("enter a")));
+        actor.stop();
+        expect((yield* end("enter a"))?.aborted).toBe(true);
+      }),
+    ));
+});
+
 /** What a posted line says it is. */
 const Posted = Schema.fromJsonString(Schema.Struct({ kind: Schema.String }));
 

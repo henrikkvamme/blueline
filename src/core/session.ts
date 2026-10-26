@@ -54,16 +54,19 @@ export interface SessionOptions<C> {
   readonly storageKey: string;
   /** The page's path now: each path has its own notes and its own journey of parts. */
   readonly path: () => string;
-  /** Shows what changes while a step's world changes, or nothing. */
-  readonly shift: (shift: DevShift | undefined) => void;
 }
 
 export interface Session {
   readonly actor: SessionActor;
   /** The app's adapter, with the journey of the parts on this page. */
   readonly info: () => DevInfo;
-  /** Calls `listener` when `info` changes. */
+  /** What changes while a step's world changes, or nothing. */
+  readonly shift: () => DevShift | undefined;
+  /** Calls `listener` when `info` or `shift` changes. */
   readonly subscribe: (listener: () => void) => () => void;
+  /** Starts the review of a journey, on its step by the step's ID or on its first. Says
+   *  whether the journey is there. */
+  readonly start: (journey: string, step?: string) => boolean;
   /** Reads the page's path again, as after the app went to another page. */
   readonly moved: () => void;
   /** Stops the session: the machine, and what it listens to. */
@@ -71,7 +74,7 @@ export interface Session {
 }
 
 /** Starts the review session on the page. */
-export function startSession<C>({ adapter, storageKey, path, shift }: SessionOptions<C>): Session {
+export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>): Session {
   // The page's path, then the parts on it that have variants: the page's own review has a
   // step for each. The machine runs the adapter's code; the view reads `info`.
   const pageOf = () => [path(), ...pageParts(parts.current().instances)].join("\n");
@@ -81,7 +84,15 @@ export function startSession<C>({ adapter, storageKey, path, shift }: SessionOpt
   };
   let page = pageOf();
   let info = infoOf(page);
+  let shown: DevShift | undefined;
   const listeners = new Set<() => void>();
+  const changed = () => {
+    for (const l of listeners) l();
+  };
+  const shift = (next: DevShift | undefined) => {
+    shown = next;
+    changed();
+  };
 
   const actor = createActor(liveMachine({ adapter, shift, path }), {
     input: {
@@ -92,19 +103,24 @@ export function startSession<C>({ adapter, storageKey, path, shift }: SessionOpt
     },
   });
 
+  const start = (id: string, step?: string) => {
+    const journey = info.journeys.find((j) => j.id === id);
+    if (journey === undefined) return false;
+    const at = Math.max(
+      0,
+      journey.steps.findIndex((s) => s.id === step),
+    );
+    actor.send({ type: "start", journey: id, at, fresh: false });
+    return true;
+  };
+
   // A link from the agent starts its review, on its step, and leaves the address clean. Its
   // journey may be the page's own, whose parts come after the session starts.
   const followLink = () => {
     const linked = linkedReview(location.href);
-    if (linked === undefined) return;
-    const journey = info.journeys.find((j) => j.id === linked.journey);
-    if (journey === undefined) return;
+    if (linked === undefined || !info.journeys.some((j) => j.id === linked.journey)) return;
     history.replaceState(history.state, "", linked.rest);
-    const at = Math.max(
-      0,
-      journey.steps.findIndex((s) => s.id === linked.step),
-    );
-    actor.send({ type: "start", journey: linked.journey, at, fresh: false });
+    start(linked.journey, linked.step);
   };
 
   // The parts on the page show the reviewer's verdicts, as a deleted variant leaves the
@@ -138,7 +154,7 @@ export function startSession<C>({ adapter, storageKey, path, shift }: SessionOpt
     if (place !== wasPlace) actor.send({ type: "place", place: placeId(place ?? "") });
     judge(actor.getSnapshot());
     followLink();
-    for (const l of listeners) l();
+    changed();
   };
 
   actor.start();
@@ -151,10 +167,12 @@ export function startSession<C>({ adapter, storageKey, path, shift }: SessionOpt
   return {
     actor,
     info: () => info,
+    shift: () => shown,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
+    start,
     moved,
     dispose: () => {
       partsMoved();

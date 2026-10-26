@@ -196,7 +196,6 @@ export function DevTools<C>({
   navigate,
   children,
 }: DevToolsProps<C>) {
-  const [shift, setShift] = useState<DevShift | undefined>(undefined);
   const where = useRef(given);
   where.current = given;
   const goTo = useRef(navigate);
@@ -209,7 +208,6 @@ export function DevTools<C>({
       adapter,
       storageKey,
       path: () => where.current ?? location.pathname,
-      shift: setShift,
     });
     setSession(started);
     return () => {
@@ -222,28 +220,27 @@ export function DevTools<C>({
   // The app's dev parts may use the tools (useReviewControl), so they wait for the session.
   if (session === undefined) return null;
   return (
-    <Running session={session} anchors={anchors} goTo={goTo} shift={shift}>
+    <Running session={session} anchors={anchors} goTo={goTo}>
       {children}
     </Running>
   );
 }
 
 /** The tools on a running session. */
-function Running({
+export function Running({
   session,
   anchors,
   goTo,
-  shift,
   children,
 }: {
   readonly session: Session;
   readonly anchors: readonly string[];
   readonly goTo: { readonly current: ((path: string) => void) | undefined };
-  readonly shift: DevShift | undefined;
   readonly children?: React.ReactNode;
 }) {
   const { actor } = session;
   const info = useSyncExternalStore(session.subscribe, session.info);
+  const shift = useSyncExternalStore(session.subscribe, session.shift);
   // Undo and redo turn a step's light from the look it had, so the settle runs backwards.
   useEffect(() => {
     const done = actor.on("done", (e) => finished(e.journey));

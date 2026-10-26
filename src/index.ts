@@ -3,6 +3,7 @@
  * agent, and keys that work like vim. An app gives an adapter; pages name their choices.
  */
 export { DevTools, useReviewControl, type DevToolsProps } from "./ui/devtools";
+export { mount, type Blueline, type MountOptions } from "./mount";
 export { registry, useDevTools, useRegistry, type DevChoice } from "./choices";
 export { ROUTES } from "./io/routes";
 export type { Walk as DevWalk } from "./keys/keymap";
@@ -12,6 +13,7 @@ export type {
   DevJourney,
   DevPerson,
   DevPersonChoice,
+  DevResult,
   DevShift,
   DevStep,
   DevVariant,

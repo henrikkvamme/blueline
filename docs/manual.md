@@ -12,9 +12,14 @@ package's peers. Four places use it:
   tools' classes from there.
 - The dev server's channel to the agent, in `vite.config.ts`:
   `devtoolsChannel({ feedback, status })` from `@henrikkvamme/blueline/vite`.
-- `<DevTools adapter={...} storageKey="<app>.review" />`, in a module that the app loads in
-  development only. The adapter (`DevAdapter` in `src/types.ts`) gives the journeys and
-  opens a step's world.
+- `mount({ adapter, storageKey: "<app>.review" })`, in a module that the app loads in
+  development only, or `<DevTools adapter={...} storageKey="<app>.review" />` in a React
+  app. The adapter (`DevAdapter` in `src/types.ts`) gives the journeys and opens a step's
+  world. Its code for a step gives a value, a Promise or an Effect. It gets an
+  `AbortSignal`, which aborts when the walk goes on without it; a result after that is
+  dropped. `mount` gives a handle, which is also `window.blueline`: `start(journey, step?)`
+  starts a review, `moved()` says that the app went to another page in a way the tools do
+  not see, and `dispose()` takes the tools off.
 - `variants` from `@henrikkvamme/blueline/variants` on each part with more than one design.
 
 The agent's command is `blueline`. `examples/review-demo` is a small app set up this way, with
