@@ -243,7 +243,7 @@ export interface Post {
   /** The step, for a settle. */
   readonly step?: string | undefined;
   readonly session: Context;
-  /** A post sent once this one is, in its order. */
+  /** A post sent once this one is, in its order, with the posts after it. */
   readonly next?: Post | undefined;
 }
 
@@ -398,6 +398,36 @@ const turnedBy = (c: Context, change: Change) => {
   return step === undefined ? undefined : { step, settled: c.feedback[step]?.settled === true };
 };
 
+/**
+ * The settle lines for the steps whose settled state the change to `next` turns, in their
+ * order, as one chain of posts. Each line carries the feedback as it stands once its own step
+ * turned, so its `left` counts the steps open then. The last settle, which waits for Finish,
+ * has no line: the agent never heard of it, so it has nothing to take back.
+ */
+function turnedLines(
+  c: Context,
+  next: Pick<Context, "notes" | "feedback" | "finish">,
+  steps: readonly string[],
+): Post | undefined {
+  const turned = steps.filter(
+    (id) =>
+      (c.feedback[id]?.settled === true) !== (next.feedback[id]?.settled === true) &&
+      id !== c.finish?.step &&
+      id !== next.finish?.step,
+  );
+  let feedback = c.feedback;
+  const posts = turned.map((id): Post => {
+    const { [id]: _, ...rest } = feedback;
+    const f = next.feedback[id];
+    feedback = f === undefined ? rest : { ...feedback, [id]: f };
+    return { kind: "settle", ids: [], step: id, session: { ...c, ...next, feedback } };
+  });
+  return posts.reduceRight<Post | undefined>(
+    (after, post) => ({ ...post, next: after }),
+    undefined,
+  );
+}
+
 /** How many actions `u` can take back. */
 const HISTORY = 50;
 
@@ -533,12 +563,79 @@ export const sessionMachine = setup({
       preview: false,
     }),
     // A journey started again once every step is settled opens its steps for another pass.
+    // Each step opened writes its line, so the agent knows that the review goes on.
     anotherPass: enqueueActions(({ context, event, enqueue }) => {
       if (event.type !== "start") return;
       const steps = passOf(context, event);
-      if (steps.length > 0) enqueue.assign(reopened(context, steps));
+      if (steps.length === 0) return;
+      const next = reopened(context, steps);
+      enqueue.assign(next);
+      const lines = turnedLines(context, { ...next, finish: context.finish }, steps);
+      if (lines === undefined) return;
+      enqueue.assign({ posts: context.posts + 1 });
+      enqueue.spawnChild("post", { id: `post-${context.posts}`, input: lines });
     }),
     nextRun: assign({ run: ({ context }) => context.run + 1 }),
+    /**
+     * u takes the newest change back, and Ctrl+R does it again. A step whose settled state
+     * turns writes its settle line, so the agent never keeps a settle that the page took
+     * back. A settle done again on the last open step waits for Finish, as a settle does.
+     */
+    turn: enqueueActions(({ context, event, enqueue }) => {
+      const redo = event.type === "redo";
+      const change = (redo ? context.future : context.past).at(-1);
+      if (change === undefined) {
+        enqueue.emit({ type: "nothing", redo });
+        return;
+      }
+      const restored = restore(context, change);
+      const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
+      const step = change.at === undefined ? undefined : change.feedback[0]?.[0];
+      // Back from the finish: the last step is open again, and its settle does not go.
+      const kept =
+        context.finish !== null && restored.feedback[context.finish.step]?.settled !== true
+          ? null
+          : context.finish;
+      const finish =
+        kept === null &&
+        step !== undefined &&
+        restored.feedback[step]?.settled === true &&
+        openPlace(ids, restored.feedback, 0).open === 0
+          ? { step, ids: [] }
+          : kept;
+      const inverse = inverseOf(context, change);
+      enqueue.assign({
+        ...restored,
+        finish,
+        past: redo ? [...context.past, inverse] : context.past.slice(0, -1),
+        future: redo ? context.future.slice(0, -1) : [...context.future, inverse],
+      });
+      const lines = turnedLines(
+        context,
+        { ...restored, finish },
+        change.feedback.map(([id]) => id),
+      );
+      if (lines !== undefined) {
+        enqueue.assign({ posts: context.posts + 1 });
+        enqueue.spawnChild("post", { id: `post-${context.posts}`, input: lines });
+      }
+      if (finish !== null && finish !== context.finish) {
+        if (context.preview) enqueue.raise({ type: "preview" });
+        enqueue.raise({ type: "panel", shown: true });
+      }
+      // A settle taken back goes back to its step: also from the page, where the review's
+      // last settle ended the walk.
+      if (!redo && change.at !== undefined && !context.active)
+        enqueue.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
+      else if (change.at !== undefined && change.at !== context.at)
+        enqueue.raise({ type: "jump", at: change.at });
+      enqueue.emit({
+        type: "undone",
+        label: change.label,
+        redo,
+        turned: turnedBy(context, change),
+      });
+    }),
   },
 }).createMachine({
   id: "session",
@@ -613,60 +710,8 @@ export const sessionMachine = setup({
         }),
       ],
     },
-    undo: {
-      actions: enqueueActions(({ context, enqueue }) => {
-        const change = context.past.at(-1);
-        if (change === undefined) {
-          enqueue.emit({ type: "nothing", redo: false });
-          return;
-        }
-        const restored = restore(context, change);
-        enqueue.assign({
-          ...restored,
-          past: context.past.slice(0, -1),
-          future: [...context.future, inverseOf(context, change)],
-          // Back from the finish: the last step is open again, and its settle does not go.
-          finish:
-            context.finish !== null && restored.feedback[context.finish.step]?.settled !== true
-              ? null
-              : context.finish,
-        });
-        // A settle taken back goes back to its step: also from the page, where the review's
-        // last settle ended the walk.
-        if (change.at !== undefined && !context.active)
-          enqueue.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
-        else if (change.at !== undefined && change.at !== context.at)
-          enqueue.raise({ type: "jump", at: change.at });
-        enqueue.emit({
-          type: "undone",
-          label: change.label,
-          redo: false,
-          turned: turnedBy(context, change),
-        });
-      }),
-    },
-    redo: {
-      actions: enqueueActions(({ context, enqueue }) => {
-        const change = context.future.at(-1);
-        if (change === undefined) {
-          enqueue.emit({ type: "nothing", redo: true });
-          return;
-        }
-        enqueue.assign({
-          ...restore(context, change),
-          future: context.future.slice(0, -1),
-          past: [...context.past, inverseOf(context, change)],
-        });
-        if (change.at !== undefined && change.at !== context.at)
-          enqueue.raise({ type: "jump", at: change.at });
-        enqueue.emit({
-          type: "undone",
-          label: change.label,
-          redo: true,
-          turned: turnedBy(context, change),
-        });
-      }),
-    },
+    undo: { actions: "turn" },
+    redo: { actions: "turn" },
     posted: { actions: stopChild(({ event }) => event.child) },
     clear: {
       actions: [
@@ -758,9 +803,16 @@ export const sessionMachine = setup({
             : context.feedback;
         enqueue.assign({ notes, feedback });
         enqueue.assign({ posts: context.posts + 1 });
+        const session = { ...context, notes, feedback };
+        const note: Post = { kind: "note", ids, session };
+        // The step opened again goes first, so the agent reads the message on an open step.
+        // The last settle, which waits for Finish, never went: it has no line to take back.
         enqueue.spawnChild("post", {
           id: `post-${context.posts}`,
-          input: { kind: "note", ids, session: { ...context, notes, feedback } },
+          input:
+            step?.settled === true && context.finish?.step !== event.step
+              ? { kind: "settle", ids: [], step: event.step, session, next: note }
+              : note,
         });
       }),
     },

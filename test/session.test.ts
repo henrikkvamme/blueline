@@ -1088,3 +1088,125 @@ describe("one chat for each step and page", () => {
     expect(s.context).toMatchObject({ active: false, at: 1 });
   });
 });
+
+describe("what the agent hears of the settles", () => {
+  /**
+   * Runs the events on a live session and keeps the agent's view: each settle line it reads
+   * says whether its step is settled now, and how many steps are left open. After every event,
+   * that view must match the session, but for the last settle, which waits for Finish.
+   */
+  const heard = (kept: Partial<typeof START>, events: readonly Event[]) => {
+    const view: Record<string, boolean> = {};
+    const wrong: string[] = [];
+    const machine = sessionMachine.provide({
+      actors: {
+        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+          for (let post: Post | undefined = input; post !== undefined; post = post.next) {
+            if (post.kind !== "settle" || post.step === undefined) continue;
+            const { feedback } = post.session;
+            view[post.step] = feedback[post.step]?.settled === true;
+            const ids = JOURNEYS[0]?.steps.map((s) => s.id) ?? [];
+            const left = ids.filter((id) => feedback[id]?.settled !== true).length;
+            const open = ids.filter((id) => view[id] !== true).length;
+            if (left !== open)
+              wrong.push(
+                `${post.step}: the line says ${String(left)} left, the agent knows ${String(open)}`,
+              );
+          }
+          sendBack({ type: "posted", child: self.id });
+        }),
+      },
+    });
+    const actor = createActor(machine, {
+      input: { kept: { ...START, journey: "prep", ...kept }, journeys: JOURNEYS, now: 0 },
+    }).start();
+    for (const id of ["a", "b", "c"])
+      view[id] = actor.getSnapshot().context.feedback[id]?.settled === true;
+    events.forEach((event, i) => {
+      actor.send(event);
+      const { feedback, finish } = actor.getSnapshot().context;
+      for (const id of ["a", "b", "c"]) {
+        const settled = feedback[id]?.settled === true;
+        if (id !== finish?.step && view[id] !== settled)
+          wrong.push(
+            `after ${events
+              .slice(0, i + 1)
+              .map((e) => e.type)
+              .join(" > ")}: ${id} is ${settled ? "settled" : "open"}, the agent heard otherwise`,
+          );
+      }
+    });
+    actor.stop();
+    return wrong;
+  };
+  const entered = { type: "entered" } as const;
+  const settle = { type: "settle" } as const;
+  const undo = { type: "undo" } as const;
+  const redo = { type: "redo" } as const;
+
+  it("hears that undo opened the settled steps again, as in Henrik's walk of 26 October", () => {
+    // Steps a and b settled, then u twice, then a and b settled again: the agent read a's
+    // second settle with b still settled, as no line said that undo opened them.
+    expect(
+      heard({ active: true }, [
+        entered,
+        settle,
+        entered,
+        settle,
+        entered,
+        undo,
+        undo,
+        entered,
+        settle,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("hears that redo settled a step again, and that undo opened a step it had settled", () => {
+    expect(
+      heard({ active: true }, [entered, settle, entered, undo, redo, entered, settle, undo]),
+    ).toEqual([]);
+  });
+
+  it("hears a step that a message opened again", () => {
+    expect(
+      heard({ active: true }, [
+        entered,
+        settle,
+        { type: "go", by: -1 },
+        entered,
+        { type: "write", id: stepNoteId("a"), step: "a", draft: "Not yet" },
+        { type: "send", id: stepNoteId("a"), step: "a", at: 1 },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("hears another pass over a settled journey, and the undo of it", () => {
+    const done = { a: { settled: true }, b: { settled: true }, c: { settled: true } };
+    expect(
+      heard({ feedback: done }, [
+        { type: "start", journey: "prep", at: 0, fresh: false, again: true },
+        entered,
+        undo,
+        redo,
+      ]),
+    ).toEqual([]);
+  });
+
+  it("hears nothing of the last settle until Finish, through undo, redo and Back", () => {
+    const two = { a: { settled: true }, b: { settled: true } };
+    expect(
+      heard({ active: true, at: 2, feedback: two }, [
+        entered,
+        settle,
+        undo,
+        redo,
+        { type: "back" },
+        entered,
+        settle,
+        { type: "finish" },
+        undo,
+      ]),
+    ).toEqual([]);
+  });
+});

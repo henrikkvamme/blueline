@@ -42,6 +42,10 @@ const quietly = <A>(what: string, effect: Effect.Effect<A>) =>
     Effect.catchCause((cause) => Effect.logError(`The dev tools could not ${what}`, cause)),
   );
 
+/** A post and the posts sent after it, in their order. */
+const chainOf = (post: Post | undefined): readonly Post[] =>
+  post === undefined ? [] : [post, ...chainOf(post.next)];
+
 /** Waits for the page to name a choice, as a page names its choices once it shows. */
 const choiceNamed = (name: string) =>
   Effect.sync(() => registry.choice(name)).pipe(
@@ -170,14 +174,14 @@ export function liveMachine<C>(live: Live<C>) {
       post: fromCallback<Event, Post>(({ input, sendBack, self }) =>
         run(
           Effect.gen(function* () {
-            for (const post of input.next === undefined ? [input] : [input, input.next]) {
+            for (const post of chainOf(input)) {
               const sentAt = DateTime.formatIso(yield* DateTime.now);
               yield* postLine(routes.feedback, postedLine(journeys(), post, sentAt));
             }
           }).pipe(
             Effect.catch(() =>
               Effect.sync(() =>
-                sendBack({ type: "failed", ids: [...input.ids, ...(input.next?.ids ?? [])] }),
+                sendBack({ type: "failed", ids: chainOf(input).flatMap((post) => post.ids) }),
               ),
             ),
             Effect.ensuring(Effect.sync(() => sendBack({ type: "posted", child: self.id }))),
