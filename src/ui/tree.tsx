@@ -75,13 +75,12 @@ export function TreeZone({
 }
 
 function Tree({ heading }: { readonly heading: boolean }) {
-  const { actor, perform } = useTools();
+  const { actor } = useTools();
   const journey = useJourney();
   const at = useSession((s) => s.context.at);
   const feedback = useSession((s) => s.context.feedback);
   const notes = useNotes();
   const steps = journey?.steps ?? [];
-  const anyNews = notes.some(hasNews);
   // The journey walked is done once every step is settled, also after the review ended.
   const done =
     steps.length > 0 &&
@@ -101,7 +100,7 @@ function Tree({ heading }: { readonly heading: boolean }) {
         <span className="flex-1" />
         <Journeys current={current} done />
       </div>
-      {done ? (
+      {done && (
         <Done
           waiting={notes.filter(isWithAgent)}
           news={notes.filter(hasNews).length}
@@ -113,16 +112,6 @@ function Tree({ heading }: { readonly heading: boolean }) {
             foldTree(actor);
           }}
         />
-      ) : (
-        anyNews && (
-          <button
-            type="button"
-            onClick={() => perform({ kind: "reply" })}
-            className="border-t border-dt-line px-4 py-2 text-left text-[12px] text-dt-accent hover:bg-dt-raised max-sm:min-h-11 max-sm:text-[14px]"
-          >
-            Next reply
-          </button>
-        )
       )}
     </>
   );
@@ -756,10 +745,7 @@ function Done({
   readonly onReply: () => void;
 }) {
   return (
-    <section
-      aria-label="Review done"
-      className="flex flex-col gap-2.5 border-t border-dt-line px-4 py-3"
-    >
+    <section aria-label="Review done" className="flex flex-col gap-2.5 px-4 py-3">
       <span className="flex items-center gap-1.5 text-[13px] font-medium text-dt-good">
         <CircleCheck className="size-4" aria-hidden />
         <span className="flex-1">Review done</span>

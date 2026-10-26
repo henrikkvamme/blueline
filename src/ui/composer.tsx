@@ -571,6 +571,12 @@ export function Composer({
               e.preventDefault();
               add(files);
             }}
+            // A field left with only spaces or new lines, as from Shift+Enter or vim's o,
+            // looks empty but hides its words that name the chat: it empties.
+            onBlur={() => {
+              if (draft !== "" && draft.trim() === "")
+                actor.send({ type: "write", id, step, pin, draft: "" });
+            }}
             onScroll={(e) => {
               if (mirror.current !== null) mirror.current.scrollTop = e.currentTarget.scrollTop;
             }}

@@ -318,7 +318,8 @@ function ChatSwitch({ onPage }: { readonly onPage: boolean }) {
   );
 }
 
-/** The page in the panel, off a step: the chat with the agent on this page, under the tree.
+/** The page in the panel, off a step: the chat with the agent on this page, under the tree,
+ * past one quiet line. The tree's row names the page, and the field's words name the chat.
  * A note pointed at an element goes with the next message. */
 function PageView({ ruled }: { readonly ruled: boolean }) {
   const place = useSession((s) => s.context.place);
@@ -330,18 +331,7 @@ function PageView({ ruled }: { readonly ruled: boolean }) {
         ruled && "border-t border-dt-line",
       )}
     >
-      <StepChat
-        key={place}
-        step={place}
-        placeholder="A message on this page"
-        fill={false}
-        chatHead={
-          <div className="flex h-7 shrink-0 items-center gap-1.5 text-[12px] max-sm:h-11">
-            <span className="font-medium text-dt-text max-sm:text-[14px]">This page</span>
-            <span className="min-w-0 truncate text-dt-faint">{placePath(place)}</span>
-          </div>
-        }
-      />
+      <StepChat key={place} step={place} placeholder="A message on this page" fill={false} />
     </section>
   );
 }

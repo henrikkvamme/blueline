@@ -1,12 +1,13 @@
-import { CircleQuestionMark, Ellipsis, EyeOff, RotateCcw, Undo2 } from "lucide-react";
+import { CircleQuestionMark, Ellipsis, EyeOff, Reply, RotateCcw, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "./cx";
-import { useSession, useTools } from "./session";
+import { hasNews } from "../session/replies";
+import { useNotes, useSession, useTools } from "./session";
 import { ICON } from "./step-controls";
 
 /*
  * The panel's other actions, behind one button at its top, so the top stays calm: build the
- * step again, hide the tools, undo, and the keys. Each still has its key, which the `?` menu
+ * step again, the next reply, hide the tools, undo, and the keys. Each still has its key, which the `?` menu
  * lists.
  */
 
@@ -27,6 +28,8 @@ export function MoreMenu() {
   const { actor, perform } = useTools();
   const active = useSession((s) => s.context.active);
   const undo = useSession((s) => s.context.past.at(-1)?.label);
+  // A new reply marks its row in the tree; this goes to it.
+  const news = useNotes().some(hasNews);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -42,6 +45,13 @@ export function MoreMenu() {
           },
         ]
       : []),
+    {
+      id: "reply",
+      label: "Next reply",
+      icon: <Reply className="size-4" aria-hidden />,
+      disabled: !news,
+      run: () => perform({ kind: "reply" }),
+    },
     {
       id: "preview",
       label: "Hide the tools",
