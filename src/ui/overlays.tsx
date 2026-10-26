@@ -488,8 +488,8 @@ interface Settled {
 
 /** The settle on the part it left: a green outline and a check that draws in, which stand
  * and then fade as the light glides on. It follows the part as the page scrolls, and stays
- * where the light stood when the part has gone, as to another page. With reduced motion the
- * check does not draw: the outline and the check only fade. */
+ * where the light stood until the part goes, as to another page; then it leaves. With reduced
+ * motion the check does not draw: the outline and the check only fade. */
 function SettledPart({
   box,
   target,
@@ -502,7 +502,11 @@ function SettledPart({
 }) {
   const [, redraw] = useState(0);
   useFrames(true, () => redraw((n) => (n + 1) % 1024));
-  const rect = boxOf(target) ?? box;
+  const live = boxOf(target);
+  // Its part has gone, as the walk went to another page: nothing there is settled. It stays
+  // unseen until its motion ends.
+  const gone = live === undefined && target.length > 0;
+  const rect = live ?? box;
   return (
     <div
       {...UI}
@@ -511,7 +515,10 @@ function SettledPart({
       onAnimationEnd={(e) => {
         if (e.animationName === "dt-left") onDone();
       }}
-      className="pointer-events-none fixed inset-0 z-[2147483000] animate-dt-left"
+      className={cx(
+        "pointer-events-none fixed inset-0 z-[2147483000] animate-dt-left",
+        gone && "invisible",
+      )}
     >
       <div
         className="absolute rounded-[12px] ring-2 ring-dt-good"
