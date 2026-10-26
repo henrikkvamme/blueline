@@ -141,7 +141,7 @@ export function Bar() {
           <span className="flex-1 text-left">{variety}</span>
         </button>
       )}
-      {ids.length > 0 && <SettleButton compact />}
+      {ids.length > 0 && <SettleButton compact wide={lifts === true} />}
       <span className="mx-1 h-5 w-px shrink-0 bg-dt-line max-sm:mx-0.5" />
       {/* A phone has no room for it in the bar: the `?` menu hides the tools too. */}
       <button

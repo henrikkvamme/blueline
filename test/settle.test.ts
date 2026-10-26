@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { release, settleGate } from "../src/ui/settle";
+import { release, settleGate, settleWords } from "../src/ui/settle";
 
 describe("a settle", () => {
   it("goes on at once, and does nothing more until the next step shows with its light in place", () => {
@@ -60,5 +60,27 @@ describe("a settle", () => {
     quick.up();
     quick.shows();
     expect(quick.free()).toBe(true);
+  });
+});
+
+describe("the words on Settle", () => {
+  it("name the variant the page shows on a step that lists variants", () => {
+    expect(settleWords(false, "Cards", undefined)).toEqual({
+      text: "Keep Cards",
+      label: "Settle the step and keep Cards",
+    });
+    expect(settleWords(false, "Table", undefined).text).toBe("Keep Table");
+  });
+
+  it("say Settle on a step with no variants", () => {
+    expect(settleWords(false, undefined, undefined).text).toBe("Settle");
+  });
+
+  it("name the variant kept once settled, else say Settled", () => {
+    expect(settleWords(true, "Table", "Cards")).toEqual({
+      text: "Kept Cards",
+      label: "Settled, kept Cards: open the step again",
+    });
+    expect(settleWords(true, undefined, undefined).text).toBe("Settled");
   });
 });

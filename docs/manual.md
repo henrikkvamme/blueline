@@ -62,7 +62,11 @@ group. Under it are the step's title, what to look at and what to try. When the 
 more than one variant, the **Variants** list shows them as rows, with **Lift** at its right.
 The raised row is the variant that the page shows. A click on a row shows that variant, as
 `j` and `k` do. Then comes the step's chat, which scrolls, and the message field. At the
-foot are the step before, **Settle** and the step after, as a left and a right chevron. The foot stays in one place from
+foot are the step before, **Settle** and the step after, as a left and a right chevron. On a
+step that lists variants, Settle names the variant that it keeps, as **Keep Cards**, and the
+name changes with the variant shown. A settled step's button reads **Kept Cards**, or
+**Settled** with no variants, in green, and a press opens the step again. The button keeps
+its width: a long name ends in an ellipsis. The foot stays in one place from
 step to step. A click on a variant row, Lift, a chevron or Settle leaves the focus where it
 was, so Enter settles next. Off a step, the panel shows the tree and, past one quiet line,
 the page's chat. The message field's words name the chat: "A message on this page" or "A

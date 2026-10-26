@@ -121,3 +121,25 @@ export function release(): Release {
     free: () => free,
   };
 }
+
+/**
+ * The words on Settle, which name the variant the settle keeps: "Keep Cards" on a step that
+ * lists variants, as the reviewer goes through them, and "Kept Cards" once settled. A step
+ * with no variants, and a settled step that kept none, read "Settle" and "Settled". `label`
+ * says the same for a screen reader, with what a press does.
+ */
+export function settleWords(
+  settled: boolean,
+  /** The variant the page shows, on a step that lists variants. */
+  shown: string | undefined,
+  /** The variant the settle kept, on a settled step. */
+  kept: string | undefined,
+): { readonly text: string; readonly label: string } {
+  if (settled)
+    return kept === undefined
+      ? { text: "Settled", label: "Settled: open the step again" }
+      : { text: `Kept ${kept}`, label: `Settled, kept ${kept}: open the step again` };
+  return shown === undefined
+    ? { text: "Settle", label: "Settle the step" }
+    : { text: `Keep ${shown}`, label: `Settle the step and keep ${shown}` };
+}

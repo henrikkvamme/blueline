@@ -2,6 +2,7 @@ import { Check, ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { NO_VERDICTS, partOn, parts, variantRows, varietyOf } from "../part/store";
 import { cx } from "./cx";
+import { settleWords } from "./settle";
 import { useSession, useStep, useTools, useVariant } from "./session";
 
 /*
@@ -91,35 +92,50 @@ export function StepArrow({ by, foot = false }: { readonly by: -1 | 1; readonly 
 }
 
 /** Settles the step: it is right as it shows, with the variant the page shows; the walk then
- * goes on to the next open step. Pressed on a settled step, which a press opens again. Its
- * width stays the same for both words, so nothing beside it moves. In the panel's foot it is
- * the one primary action, as wide as the room between the step arrows. */
+ * goes on to the next open step. Pressed on a settled step, which a press opens again. On a
+ * step that lists variants it names the one it keeps, "Keep Cards", and once settled the one
+ * it kept, "Kept Cards" (settle.ts). Its width stays the same whatever it says, so nothing
+ * beside it moves: a long name ends in an ellipsis. In the panel's foot it is the one primary
+ * action, as wide as the room between the step arrows; in the bar, `wide` gives it a fixed
+ * room for a name. */
 export function SettleButton({
   compact = false,
   foot = false,
+  wide = false,
 }: {
   readonly compact?: boolean;
   readonly foot?: boolean;
+  readonly wide?: boolean;
 }) {
   const { perform } = useTools();
   const { step } = useStep();
-  const settled = useSession(
-    (s) => step !== undefined && s.context.feedback[step.id]?.settled === true,
+  const place = useVariantPlace();
+  const feedback = useSession((s) =>
+    step === undefined ? undefined : s.context.feedback[step.id],
   );
+  const settled = feedback?.settled === true;
+  const kept =
+    Object.values(feedback?.parts ?? {})
+      .flatMap((v) => v.kept)
+      .at(-1) ?? feedback?.variant;
+  const words = settleWords(settled, place?.label, kept);
+  // Settle and Settled share one room, so a step with no variants keeps its width too.
+  const plain = !wide && !foot;
   return (
     <button
       type="button"
       {...KEEP_FOCUS}
       data-dt-settle=""
       aria-pressed={settled}
-      aria-label={settled ? "Settled" : "Settle"}
-      title={settled ? "Open the step again" : undefined}
+      aria-label={words.label}
+      title={words.label}
       onClick={() => perform({ kind: "event", event: { type: "settle" } })}
       className={cx(
         "flex shrink-0 items-center justify-center gap-1.5 rounded-dt-control font-medium transition-colors duration-150 motion-reduce:transition-none",
         foot
-          ? "h-10 min-w-0 flex-1 text-[14px] max-sm:h-11 max-sm:text-[15px]"
+          ? "h-10 min-w-0 flex-1 px-3 text-[14px] max-sm:h-11 max-sm:text-[15px]"
           : "h-8 px-2.5 text-[12px] max-sm:h-11 max-sm:px-4 max-sm:text-[15px]",
+        wide && "w-40",
         compact && "max-sm:w-11 max-sm:justify-center max-sm:px-0",
         settled
           ? "bg-dt-good/15 text-dt-good hover:bg-dt-good/25"
@@ -127,10 +143,16 @@ export function SettleButton({
       )}
     >
       <Check className="size-4 shrink-0" aria-hidden />
-      <span className={cx("grid text-left", compact && "max-sm:hidden")} aria-hidden>
-        <span className={cx("col-start-1 row-start-1", settled && "invisible")}>Settle</span>
-        <span className={cx("col-start-1 row-start-1", !settled && "invisible")}>Settled</span>
-      </span>
+      {plain && place === undefined && kept === undefined ? (
+        <span className={cx("grid text-left", compact && "max-sm:hidden")} aria-hidden>
+          <span className={cx("col-start-1 row-start-1", settled && "invisible")}>Settle</span>
+          <span className={cx("col-start-1 row-start-1", !settled && "invisible")}>Settled</span>
+        </span>
+      ) : (
+        <span className={cx("min-w-0 truncate", compact && "max-sm:hidden")} aria-hidden>
+          {words.text}
+        </span>
+      )}
     </button>
   );
 }

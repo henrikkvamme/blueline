@@ -178,8 +178,10 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   in the message field also switches.
 - **A fixed foot.** Under the message field, a bar holds the step before, Settle and the step
   after, as a left and a right chevron. Settle is the one primary button, as wide as the room
-  between the chevrons. On a
-  settled step it reads **Settled** in green, keeps its width, and opens the step again. The
+  between the chevrons. On a step that lists variants it names the variant it keeps, as
+  **Keep Cards**, and the name changes as the reviewer goes through the variants. On a settled
+  step it reads **Kept Cards**, or **Settled** on a step with no variants, in green, and opens
+  the step again. Its width never changes: a long name ends in an ellipsis. The
   foot does not move from step to step. A click on a step control leaves the focus where it
   was, so Enter still settles.
 - **Off a step**, the panel shows the tree and the page's chat, with the same top line, type
