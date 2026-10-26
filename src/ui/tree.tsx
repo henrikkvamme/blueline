@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CircleCheck,
   Clock,
+  CornerUpLeft,
   Layers,
   LoaderCircle,
   MapPin,
@@ -23,7 +24,7 @@ import { stepNoteId } from "../session/machine";
 import { hasNews, newsOn } from "../session/replies";
 import { firstOpen } from "../session/state";
 import { cx } from "./cx";
-import { handoffOf, isLive } from "../notes/handoff";
+import { handoffOf, handoffStatus, isLive } from "../notes/handoff";
 import { foldTree, openHandoff } from "./replies";
 import { journeyOf, useNotes, useSession, useTools } from "./session";
 import type { JourneyInfo } from "../types";
@@ -31,7 +32,8 @@ import type { JourneyInfo } from "../types";
 /*
  * Where the reviewer is, in the panel, as a tree: the pages, each with its chat, and this one
  * with its parts, then the journeys, with the one walked open on its steps, and at the foot
- * the settled ones; a settled one marks its hand-off while the agent has it. What the reviewer opens is where they are: a step
+ * the settled ones; a finished one says under its title what the agent does with
+ * the review, while the agent has it or its reply is new, and opens its hand-off. What the reviewer opens is where they are: a step
  * opens it, and a page leaves the step for the page. A step with a new reply has a blue
  * count. While the tree shows it has the keys when no field has them: j and k select a row,
  * l and h open and close it, Enter opens what it names, Escape leaves a step for the page and
@@ -626,11 +628,15 @@ function Journeys({
               open={open}
               depth={0}
               selected={selected === id}
+              tall={live !== undefined}
               onOpen={() => (live === undefined ? start(j) : openHandoff(actor, live.id))}
               className={walked && active && "font-medium text-dt-text"}
             >
-              <span className="min-w-0 flex-1 truncate">{j.title}</span>
-              {live !== undefined && <NoteMark notes={[live]} />}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate">{j.title}</span>
+                {live !== undefined && <HandoffLine note={live} />}
+              </span>
+              {live !== undefined && <HandoffMark note={live} />}
               {settledIn(j) === j.steps.length && (
                 <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Settled" />
               )}
@@ -644,6 +650,40 @@ function Journeys({
       })}
     </section>
   );
+}
+
+/** What the agent does with a finished review, under its journey's title: Sent, Working with
+ * the plan's current item, Replied with the reply's first line, or Taken back. */
+function HandoffLine({ note }: { readonly note: Note }) {
+  const status = handoffStatus(note);
+  const words =
+    status.kind === "sent"
+      ? "Sent"
+      : status.kind === "working"
+        ? status.doing === undefined
+          ? "Working"
+          : `Working: ${status.doing}`
+        : status.kind === "replied"
+          ? `Replied: ${status.reply}`
+          : "Taken back";
+  return (
+    <span
+      className={cx(
+        "truncate text-[12px] font-normal",
+        hasNews(note) ? "text-dt-text" : "text-dt-faint",
+      )}
+    >
+      {words}
+    </span>
+  );
+}
+
+/** The mark of a finished review's row: a new reply, the agent at work, a review that waits
+ * for it, or one taken back. */
+function HandoffMark({ note }: { readonly note: Note }) {
+  if (handoffStatus(note).kind === "taken" && !hasNews(note))
+    return <CornerUpLeft className="size-3 shrink-0 text-dt-faint" aria-label="Taken back" />;
+  return <NoteMark notes={[note]} />;
 }
 
 /** Where each journey last stood: with the open ones, or the settled ones. */

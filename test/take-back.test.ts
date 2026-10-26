@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialTransition, transition, type SnapshotFrom } from "xstate";
-import { handoffId } from "../src/notes/handoff";
+import { handoffId, handoffStatus, newHandoff } from "../src/notes/handoff";
 import { blankNote, noteAfter, sentCount } from "../src/notes/note";
 import {
   canTakeBack,
@@ -253,5 +253,57 @@ describe("a follow-up in a chat", () => {
     expect(back.thread.map(isFollowUp)).toEqual([false, true]);
     expect(followUpOf(back.thread, 1)).toBe(back.thread[1]);
     expect(followUpOf(back.thread, 2)).toBeUndefined();
+  });
+});
+
+describe("a finished review's row in the tree", () => {
+  const id = handoffId("prep", 5);
+  const handoff = () => newHandoff("prep", 5);
+  const plan = (items: readonly { text: string; state: "done" | "doing" | "todo" }[]) => [
+    { kind: "plan" as const, items },
+  ];
+
+  it("says Sent until the agent takes the review", () => {
+    expect(handoffStatus(handoff())).toEqual({ kind: "sent" });
+  });
+
+  it("says Working, with the plan's current item", () => {
+    const working = noteAfter(handoff(), {
+      type: "working",
+      progress: plan([
+        { text: "Read the review", state: "done" },
+        { text: "Apply the kept variants", state: "doing" },
+        { text: "Run the tests", state: "todo" },
+      ]),
+    });
+    expect(handoffStatus(working)).toEqual({ kind: "working", doing: "Apply the kept variants" });
+    expect(handoffStatus(noteAfter(handoff(), { type: "working" }))).toEqual({ kind: "working" });
+  });
+
+  it("says Replied, with the reply's first line", () => {
+    const replied = noteAfter(handoff(), {
+      type: "reply",
+      at: 6,
+      replies: [{ text: "Applied both parts.\nThe tests pass." }],
+      settled: false,
+    });
+    expect(handoffStatus(replied)).toEqual({ kind: "replied", reply: "Applied both parts." });
+  });
+
+  it("says Taken back once the finish is taken back, also after the agent confirms", () => {
+    const back = noteAfter(handoff(), {
+      type: "send",
+      at: 9,
+      text: "Take back",
+      withdraws: { id },
+    });
+    expect(handoffStatus(back)).toEqual({ kind: "taken" });
+    const confirmed = noteAfter(back, {
+      type: "reply",
+      at: 10,
+      replies: [{ text: "Ignored, and waiting." }],
+      settled: false,
+    });
+    expect(handoffStatus(confirmed)).toEqual({ kind: "taken" });
   });
 });

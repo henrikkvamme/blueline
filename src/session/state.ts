@@ -136,8 +136,9 @@ export const KeptSchema = Schema.Struct({
    * step, and the chats whose notes went with it. Only Finish sends it, so the agent wakes
    * once. Null while nothing waits. */
   finish: Schema.NullOr(Schema.Struct({ step: Schema.String, ids: Schema.Array(Schema.String) })),
-  /** The hand-off the panel shows after Finish (notes/handoff.ts), by its note's ID: what the
-   * agent does with the review. Null while the panel shows the tree or a step. */
+  /** The hand-off the panel shows (notes/handoff.ts), by its note's ID: what the agent does
+   * with a finished review, opened from its journey's row. Null while the panel shows the tree
+   * or a step, as it does right after Finish. */
   handoff: Schema.NullOr(Schema.String),
 });
 export type Kept = typeof KeptSchema.Type;

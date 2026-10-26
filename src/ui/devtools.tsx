@@ -407,7 +407,7 @@ export function DevTools<C>({
           }
         }
         if (action.event.type === "settle") return settle(actor.getSnapshot().context.at);
-        // The hand-off that Finish opens is named by its time.
+        // The hand-off that Finish makes is named by its time.
         if (action.event.type === "finish") return actor.send({ type: "finish", at: now() });
         return actor.send(action.event);
       }

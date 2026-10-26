@@ -1075,7 +1075,8 @@ export const sessionMachine = setup({
       ],
     },
     // Finish ends the review: the last settle goes, with the notes held with it, and the
-    // panel shows the hand-off, where the agent's answer comes in. The settle line names the
+    // panel goes back to the page and the tree. The hand-off, where the agent's answer comes
+    // in, opens from the journey's row. The settle line names the
     // hand-off, so the agent answers the review there. The walk stays on its step, so the
     // journey opened again goes on there.
     finish: {
@@ -1098,8 +1099,11 @@ export const sessionMachine = setup({
             next: held.ids.length === 0 ? undefined : { kind: "note", ids: held.ids, session },
           },
         });
+        // The walk is over: the panel goes back to the page and the tree, where the journey's
+        // row, selected, says what the agent does with the review, and opens the hand-off.
         enqueue.raise({ type: "leave" });
-        enqueue.assign({ handoff: handoff.id });
+        enqueue.raise({ type: "tree", open: true });
+        enqueue.raise({ type: "row", id: `journey:${context.journey}` });
         enqueue.emit({ type: "done", journey: context.journey });
       }),
     },

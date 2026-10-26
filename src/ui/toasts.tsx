@@ -9,7 +9,7 @@ import { useTools } from "./session";
 
 /*
  * Short messages at the top of the screen: the agent answered, an undo, the preview, or a
- * send that failed. A finished journey has none: the panel shows its hand-off. Sonner stacks them and lets each go. The dev tools have their own
+ * send that failed. A reply to a finished review is news too: its journey's row marks it, and Open shows its hand-off. Sonner stacks them and lets each go. The dev tools have their own
  * toaster, by its ID, so the app's toasts and theirs stay apart.
  */
 

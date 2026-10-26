@@ -225,14 +225,14 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 - **Three layers, each hidden on its own.** The page is at the bottom, the light is over
   it, and the panel is over the light.
 
-| Action                       | The walk                          | Light                       | Panel                                               |
-| ---------------------------- | --------------------------------- | --------------------------- | --------------------------------------------------- |
-| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                      |
-| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                       |
-| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                               |
-| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step                                 |
-| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                    |
-| Finish review                | ends: the journey is done         | off                         | shows the hand-off, and the journey goes to Settled |
+| Action                       | The walk                          | Light                       | Panel                                           |
+| ---------------------------- | --------------------------------- | --------------------------- | ----------------------------------------------- |
+| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                  |
+| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                   |
+| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                           |
+| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step                             |
+| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                |
+| Finish review                | ends: the journey is done         | off                         | shows the tree, and the journey goes to Settled |
 
 Leaving a step changes the place. Hiding changes only the view. So Esc moves the reviewer,
 and Ctrl+B and `p` only hide.
@@ -354,22 +354,30 @@ The back chevron, Escape and undo open the last step again. The last step's
 settle line, the one with `left: 0`, waits until Finish, so the agent wakes once. A reload
 keeps the finish.
 
-Finish turns the finish into the **hand-off** in the same place. The title reads "Sent to the
-agent", and the same rows stay: the kept variant of each part and the messages and annotations sent. Under them
+Finish ends the walk. Agreed with Henrik on 2026-10-26: the panel goes straight back to the
+page view with the tree. No step is open, and no view holds the panel. As off any step, the
+tree has the keys, and the finished journey's row is selected. The finished journey's row, under **Settled**, carries the hand-off's state in place: a
+small mark, and a short line under its title. The line reads "Sent", then "Working" with the
+item of the plan that the agent is on, then "Replied" with the first line of the reply, or
+"Taken back". A click on the row, or Enter on it in the tree, opens the **hand-off**, and
+only then does `data-blueline` read `handoff`.
+
+The hand-off's title reads "Sent to the agent", and the same rows stay: the kept variant of each part and the messages and annotations sent. Under them
 the agent's part shows, and it changes in place. First a small pulsing dot says "Waiting for
 the agent". When the agent writes `working`, the dot says "The agent is working", and the
 agent's plan shows under it, in place of the last plan. When the agent writes `replied`, the
-reply shows as a chat shows one. A quiet **Done** in the foot, Escape, or the title at the
-panel's top leaves the hand-off for the tree. A reload keeps the hand-off.
+reply shows as a chat shows one. A quiet **Take back** and **Done** stand in the foot. Done,
+Escape, or the title at the panel's top leaves the hand-off for the tree. A reload keeps the
+hand-off.
 
 The agent answers the review on the hand-off's ID. Each Finish makes a new hand-off, a note
 with the ID `finish-<journey>-<time>`, and the last settle line carries it as `id`, with a
 `reply` hint. An answer to an earlier pass never shows on a new one. The agent's answers to
 the messages in the review's chats stay in those chats. While the agent has the hand-off, or its
-reply is not read, the settled journey's row marks it as a chat's row does, and the row opens
-the hand-off and not another pass. Done after a reply settles the hand-off, so the reply
-counts as news no more. A toast tells of a reply that comes while the hand-off is not in
-view, and opens it.
+reply is not read, the settled journey's row shows its line and mark, and the row opens the
+hand-off and not another pass. Done after a reply settles the hand-off, so the reply counts
+as news no more, and the row starts another pass again. A reply is news: a toast tells of it
+while the hand-off is not in view, and opens it on request. Nothing opens by itself.
 
 Each change of a step's settled state, or of the variant a settled step keeps, writes the
 step's settle line: a settle, a settle that keeps another variant, Open the step again, undo,

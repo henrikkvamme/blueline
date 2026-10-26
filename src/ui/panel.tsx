@@ -83,7 +83,7 @@ export function Panel() {
   const active = useSession((s) => s.context.active);
   const tree = useSession((s) => s.context.tree);
   const finishing = useSession((s) => s.context.finish !== null);
-  // After Finish, the hand-off shows in the panel's place off a step, until Done.
+  // A hand-off opened from its journey's row shows in the panel's place off a step, until Done.
   const handoff = useSession((s) =>
     s.context.active ? undefined : s.context.notes.find((n) => n.id === s.context.handoff),
   );

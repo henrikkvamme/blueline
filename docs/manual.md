@@ -40,7 +40,7 @@ saved review in `localStorage`: its format can change.
 | --------------- | -------------------------------------------------- |
 | `step`          | a step is open                                     |
 | `finish`        | every step is settled and the panel asks to finish |
-| `handoff`       | the panel shows the hand-off after Finish          |
+| `handoff`       | the panel shows a hand-off, opened from its row    |
 | `lift`          | a part is lifted                                   |
 | `preview`       | the tools are hidden, on a step or off one         |
 | no attribute    | Blueline is idle, or shows the page with the tree  |
@@ -107,14 +107,14 @@ before and after, and Settle; off a step it is small. The bar and the panel neve
 once, and a reload keeps the panel shown or hidden. An element that the app pins to the
 right edge can still sit under the panel.
 
-| Action                       | The walk                          | Light                       | Panel                                               |
-| ---------------------------- | --------------------------------- | --------------------------- | --------------------------------------------------- |
-| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                      |
-| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                       |
-| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                               |
-| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step; the step's row gets its check  |
-| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                    |
-| Finish review                | ends: the journey is done         | off                         | shows the hand-off; the journey goes to **Settled** |
+| Action                       | The walk                          | Light                       | Panel                                              |
+| ---------------------------- | --------------------------------- | --------------------------- | -------------------------------------------------- |
+| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                     |
+| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                      |
+| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                              |
+| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step; the step's row gets its check |
+| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                   |
+| Finish review                | ends: the journey is done         | off                         | shows the tree; the journey goes to **Settled**    |
 
 ## Settle
 
@@ -146,8 +146,8 @@ again too.
 When the last open step settles, the review does not end at once. The panel shows the
 finish in place of the step: how many steps are settled, the variant kept of each part, and
 how many messages and annotations went to the agent. **Finish review**, or Enter, ends the review: the light goes
-off, the journey goes down to **Settled**, and the panel shows the **hand-off** in place of the
-finish. The back chevron, where the step before was, Escape or `u` opens the last step
+off, the panel goes back to the page and the tree, and the journey goes down to **Settled**.
+The tree has the keys, on the journey's row, so Enter there opens its hand-off. The back chevron, where the step before was, Escape or `u` opens the last step
 again. The Enter that settled the
 last step does not also finish: Finish takes only an Enter pressed after the finish shows.
 A reload keeps the finish. Each change of a step's settled state or kept variant, undo and
@@ -155,13 +155,18 @@ redo too, writes the step's settle line, so the agent always knows which steps a
 and what they keep. The last settle waits for Finish, so until then its step counts as open
 in each line.
 
-The hand-off says "Sent to the agent" over the same rows as the finish. Under them you see
-what the agent does with the review, in place: a pulsing dot while it waits for the agent,
-then "The agent is working" with the agent's plan, then the agent's reply. **Done**, Escape
-or the journey's title at the top goes to the tree. A reload keeps the hand-off. While the
-agent works on it, or its reply is new, the settled journey's row has a mark, and a click on
-the row opens the hand-off again. A reply that comes while the hand-off is not in view shows
-a short message that opens it, and **Next reply** in More goes there too.
+The finished journey's row says what the agent does with the review, in a short line under
+its title: "Sent", then "Working" with the item of the plan that the agent is on, then
+"Replied" with the first line of the reply, or "Taken back". A mark beside it shows the same,
+and a blue dot shows a new reply. A click on the row, or Enter on it in the tree, opens the
+**hand-off**. It says "Sent to the agent" over the same rows as the finish. Under them you
+see what the agent does with the review, in place: a pulsing dot while it waits for the
+agent, then "The agent is working" with the agent's plan, then the agent's reply. **Take
+back** tells the agent to ignore the review, and **Done**, Escape or the journey's title at
+the top goes back to the tree. A reload keeps the hand-off. The row keeps its line while the
+agent works on the review, or its reply is new. After Done on a reply, the row starts another
+pass again. A reply that comes while the hand-off is not in view shows a short message that
+opens it, and **Next reply** in More goes there too. Nothing opens by itself.
 
 After Finish, `u` takes the last settle back and opens its step again. The tree keeps the
 open journeys on top, and the journeys with every step settled at its foot, folded, under

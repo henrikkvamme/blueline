@@ -554,7 +554,15 @@ describe("the review's end", () => {
     const held = after(s, { type: "entered" }, { type: "settle" });
     const done = after(held, { type: "finish" });
     expect(done.matches({ review: "off", panel: "shown" })).toBe(true);
-    expect(done.context).toMatchObject({ active: false, panel: true, tree: false, at: 2 });
+    // The panel goes back to the page with the tree, and holds no hand-off.
+    expect(done.context).toMatchObject({
+      active: false,
+      panel: true,
+      tree: true,
+      handoff: null,
+      row: "journey:prep",
+      at: 2,
+    });
     expect(done.context.finish).toBeNull();
     expect(done.context.posts).toBe(held.context.posts + 1);
     // Finish does nothing when nothing waits for it.
@@ -662,12 +670,12 @@ describe("the review's end", () => {
     actor.stop();
   });
 
-  it("shows the hand-off on finish: a note to the agent, named by the time of the Finish", () => {
+  it("makes the hand-off on finish, named by its time, and leaves it to the tree's row", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
     const held = after(s, { type: "entered" }, { type: "settle" });
     const done = after(held, { type: "finish", at: 77 });
     const id = handoffId("prep", 77);
-    expect(done.context).toMatchObject({ active: false, panel: true, handoff: id });
+    expect(done.context).toMatchObject({ active: false, panel: true, handoff: null });
     expect(done.context.notes.find((n) => n.id === id)).toMatchObject({
       step: handoffStep("prep"),
       state: "waiting",
@@ -675,7 +683,26 @@ describe("the review's end", () => {
     });
     // The page reads the agent's answer while the hand-off waits for it.
     expect(done.matches({ agent: "polling" })).toBe(true);
-    expect(keptOf(done.context).handoff).toBe(id);
+    expect(keptOf(done.context).handoff).toBeNull();
+    // The journey's row opens the hand-off; Done goes back to the tree.
+    const opened = after(done, { type: "handoff", id });
+    expect(opened.context).toMatchObject({ active: false, handoff: id });
+    expect(after(opened, { type: "handoff", id: null }).context.handoff).toBeNull();
+  });
+
+  it("shows a reply to a finished review as news, and opens nothing", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish", at: 1 });
+    const id = handoffId("prep", 1);
+    const replied = after(done, {
+      type: "replies",
+      replies: { [id]: { state: "replied", replies: [{ text: "Applied both parts." }] } },
+    });
+    expect(replied.context).toMatchObject({ active: false, handoff: null });
+    expect(replied.context.notes.find((n) => n.id === id)).toMatchObject({
+      state: "replied",
+      unread: true,
+    });
   });
 
   it("names the hand-off in the settle that Finish sends, and in no other line", () => {
@@ -739,8 +766,9 @@ describe("the review's end", () => {
     const note = replied.context.notes.find((n) => n.id === id);
     expect(note).toMatchObject({ state: "replied", unread: true, progress: undefined });
     expect(note?.thread.map((m) => [m.by, m.text])).toEqual([["agent", "Applied both parts."]]);
-    // Done leaves the hand-off for the tree, and the answer read there is done with.
-    const left = after(replied, { type: "handoff", id: null });
+    // The row opens the hand-off. Done leaves it for the tree, and the answer read there is
+    // done with.
+    const left = after(replied, { type: "handoff", id }, { type: "handoff", id: null });
     expect(left.context.handoff).toBeNull();
     expect(left.context.notes.find((n) => n.id === id)?.state).toBe("settled");
   });
@@ -759,7 +787,13 @@ describe("the review's end", () => {
 
   it("keeps the hand-off through a reload, and leaves it when a journey starts", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
-    const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish", at: 1 });
+    const done = after(
+      s,
+      { type: "entered" },
+      { type: "settle" },
+      { type: "finish", at: 1 },
+      { type: "handoff", id: handoffId("prep", 1) },
+    );
     const reloaded = initialTransition(sessionMachine, {
       kept: keptOf(done.context),
       journeys: JOURNEYS,

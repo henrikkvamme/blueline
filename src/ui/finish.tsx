@@ -16,7 +16,8 @@ import { Foot, KEEP_FOCUS } from "./step-controls";
  * review ends only when the reviewer finishes it; the last settle waits until then, so the
  * agent wakes once. The foot holds Back, which opens the last step again as Escape and u do,
  * in the place of the step before, and Finish review in the place of Settle. Once finished,
- * the hand-off takes its place: the same rows, and what the agent does with the review.
+ * the panel goes back to the page and the tree, and the journey's row opens the hand-off: the
+ * same rows, and what the agent does with the review.
  */
 
 /** What the review kept and sent, as rows: the variant kept of each part, and what was sent.
@@ -108,7 +109,7 @@ export function FinishView() {
 }
 
 /**
- * The hand-off, in the panel in place of the finish once the reviewer finished: the review
+ * The hand-off, in the panel off a step, opened from the finished journey's row: the review
  * went to the agent, with the same rows as the finish, and under them what the agent does with
  * it. First a quiet wait; then, as the agent works, its plan, which changes in place; then its
  * reply, as a chat shows one. Done, or Escape, leaves it for the tree. A reload keeps it.

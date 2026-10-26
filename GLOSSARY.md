@@ -35,12 +35,13 @@ _Avoid_: Approve, accept, done
 
 **Finish**:
 The reviewer's statement that a journey's review is over, once every step is settled. It
-sends the last settle to the agent, and the panel shows the hand-off.
+sends the last settle to the agent, and the panel goes back to the page and the tree.
 _Avoid_: Submit, complete, done
 
 **Hand-off**:
-The panel's view after Finish: what the review sent, and what the agent does with it, from a
-wait to its plan and then its reply. The agent answers it on the ID of the last settle line.
+What a finished review sent, and what the agent does with it, from a wait to its plan and
+then its reply. The finished journey's row in the tree says its state in short, and opens it
+in the panel. The agent answers it on the ID of the last settle line.
 _Avoid_: Done view, summary
 
 ## Parts

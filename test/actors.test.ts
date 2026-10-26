@@ -172,7 +172,8 @@ describe("the page's own review", () => {
     const held = step(step(first, { type: "entered" }), { type: "settle" });
     expect(held.context.finish).toEqual({ step: "page:Suggestion", ids: [] });
     const done = step(held, { type: "finish", at: 3 });
-    expect(done.context.handoff).toBe(handoffId(PAGE_JOURNEY, 3));
+    expect(done.context.handoff).toBeNull();
+    expect(done.context.notes.some((n) => n.id === handoffId(PAGE_JOURNEY, 3))).toBe(true);
     expect(done.context.feedback["page:Suggestion"]?.settled).toBe(true);
   });
 
