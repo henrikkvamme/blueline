@@ -1,4 +1,5 @@
 import type { DevCommand } from "../types";
+import { shared } from "./shared";
 
 /*
  * What the page shows can be chosen: a design or a state to step through. A page names its
@@ -19,25 +20,35 @@ interface Entry {
   readonly commands: readonly DevCommand[];
 }
 
-let entries: ReadonlyMap<string, Entry> = new Map();
-let all: { readonly choices: readonly DevChoice[]; readonly commands: readonly DevCommand[] } = {
-  choices: [],
-  commands: [],
-};
-const listeners = new Set<() => void>();
+interface State {
+  entries: ReadonlyMap<string, Entry>;
+  all: { readonly choices: readonly DevChoice[]; readonly commands: readonly DevCommand[] };
+  readonly listeners: Set<() => void>;
+}
+
+/** Every copy of Blueline on the page shares the registry (shared.ts). */
+const state = shared("registry", (): State => ({
+  entries: new Map(),
+  all: { choices: [], commands: [] },
+  listeners: new Set(),
+}));
+const { listeners } = state;
 
 function publish(next: ReadonlyMap<string, Entry>) {
-  entries = next;
+  state.entries = next;
   const list = [...next.values()];
-  all = { choices: list.flatMap((e) => e.choices), commands: list.flatMap((e) => e.commands) };
+  state.all = {
+    choices: list.flatMap((e) => e.choices),
+    commands: list.flatMap((e) => e.commands),
+  };
   for (const l of listeners) l();
 }
 
 export const registry = {
-  set: (id: string, entry: Entry) => publish(new Map([...entries, [id, entry]])),
-  remove: (id: string) => publish(new Map([...entries].filter(([key]) => key !== id))),
-  current: () => all,
-  choice: (name: string) => all.choices.find((c) => c.name === name),
+  set: (id: string, entry: Entry) => publish(new Map([...state.entries, [id, entry]])),
+  remove: (id: string) => publish(new Map([...state.entries].filter(([key]) => key !== id))),
+  current: () => state.all,
+  choice: (name: string) => state.all.choices.find((c) => c.name === name),
   subscribe: (l: () => void) => {
     listeners.add(l);
     return () => void listeners.delete(l);

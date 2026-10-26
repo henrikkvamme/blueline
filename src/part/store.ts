@@ -1,11 +1,12 @@
-import { Effect } from "effect";
+import { shared } from "../core/shared";
 import { STORED } from "../io/stored";
 import type { JourneyInfo, StepInfo } from "../types";
 
 /*
  * The parts on the page that have variants (variants.tsx), as plain data: the variant and
  * state each part shows, the reviewer's verdicts on its variants, and the part that is
- * lifted. It is read and tested outside React; the parts and the walk only call it.
+ * lifted. It is read and tested outside React; the parts and the walk only call it. Every
+ * copy of Blueline on the page shares it (core/shared.ts).
  */
 
 /** What a part shows: a variant by its label, and a state by its name, none for the page's. */
@@ -63,12 +64,21 @@ const KEY = `${STORED}.part.`;
 export const NO_VERDICTS: Verdicts = { kept: [], dropped: [] };
 const NOTHING: Shown = { variant: undefined, state: undefined };
 
-let now: Parts = { shown: {}, verdicts: {}, noted: {}, instances: [], lifting: undefined };
-const listeners = new Set<() => void>();
-/** Each part's variants, by its name, from the call that made it: known before it shows. */
-const declared = new Map<string, readonly string[]>();
+interface State {
+  now: Parts;
+  readonly listeners: Set<() => void>;
+  /** Each part's variants, by its name, from the call that made it: known before it shows. */
+  readonly declared: Map<string, readonly string[]>;
+}
+
+const state = shared("parts", (): State => ({
+  now: { shown: {}, verdicts: {}, noted: {}, instances: [], lifting: undefined },
+  listeners: new Set(),
+  declared: new Map(),
+}));
+const { listeners, declared } = state;
 const set = (next: Partial<Parts>) => {
-  now = { ...now, ...next };
+  state.now = { ...state.now, ...next };
   for (const l of listeners) l();
 };
 
@@ -148,7 +158,7 @@ export function hugs(node: Element): boolean {
 }
 
 export const parts = {
-  current: () => now,
+  current: () => state.now,
   /** Says a part's variants, as `variants` makes the part. */
   declare: (name: string, labels: readonly string[]) => void declared.set(name, labels),
   subscribe: (l: () => void) => {
@@ -156,34 +166,32 @@ export const parts = {
     return () => void listeners.delete(l);
   },
   shown: (name: string): Shown =>
-    now.shown[name] ??
+    state.now.shown[name] ??
     (stored(name) === undefined ? NOTHING : { variant: stored(name), state: undefined }),
-  verdicts: (name: string): Verdicts => now.verdicts[name] ?? NO_VERDICTS,
+  verdicts: (name: string): Verdicts => state.now.verdicts[name] ?? NO_VERDICTS,
   /** Shows a variant and state on every part of this name. The variant stays across reloads;
-   * the state is the review's for now. */
+   * the state is the review's for state.now. */
   show: (name: string, shown: Shown) => {
     try {
       if (shown.variant !== undefined) localStorage.setItem(`${KEY}${name}`, shown.variant);
     } catch {
       // A browser without storage shows the variant until the page reloads.
     }
-    set({ shown: { ...now.shown, [name]: shown } });
+    set({ shown: { ...state.now.shown, [name]: shown } });
   },
   judge: (verdicts: Readonly<Record<string, Verdicts>>) => set({ verdicts }),
   mark: (noted: Readonly<Record<string, readonly string[]>>) => set({ noted }),
   add: (instance: Instance) => {
-    const same = now.instances.find((i) => i.name === instance.name);
+    const same = state.now.instances.find((i) => i.name === instance.name);
     if (same !== undefined && same.labels.join("\n") !== instance.labels.join("\n"))
-      Effect.runFork(
-        Effect.logError(
-          `Two parts are named "${instance.name}" with other variants: ${same.labels.join(", ")}; and ${instance.labels.join(", ")}. Give one of them another name.`,
-        ),
+      console.error(
+        `Two parts are named "${instance.name}" with other variants: ${same.labels.join(", ")}; and ${instance.labels.join(", ")}. Give one of them another name.`,
       );
-    set({ instances: [...now.instances.filter((i) => i.id !== instance.id), instance] });
+    set({ instances: [...state.now.instances.filter((i) => i.id !== instance.id), instance] });
     return () =>
       set({
-        instances: now.instances.filter((i) => i.id !== instance.id),
-        lifting: now.lifting?.id === instance.id ? undefined : now.lifting,
+        instances: state.now.instances.filter((i) => i.id !== instance.id),
+        lifting: state.now.lifting?.id === instance.id ? undefined : state.now.lifting,
       });
   },
   /** The part in or around the elements, of this name if one is given. With no name, the
@@ -193,7 +201,7 @@ export const parts = {
     name?: string,
     others: readonly string[] = [],
   ): Instance | undefined =>
-    now.instances.find((i) => {
+    state.now.instances.find((i) => {
       const node = i.node();
       if (node === null) return false;
       if (name === undefined ? others.includes(i.name) : i.name !== name) return false;
