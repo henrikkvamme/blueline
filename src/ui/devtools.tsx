@@ -45,7 +45,7 @@ import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
 import { isPhone, useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
 import { focusToWrite, modeOf } from "../vim";
-import { focused, own, ownAll, ownRoot } from "../core/root";
+import { focused, own, ownAll, ownRoots } from "../core/root";
 
 /*
  * The dev tools on a page: give them the app's adapter, and they walk its journeys, take
@@ -605,8 +605,8 @@ function TreeFocus() {
       });
     };
     check();
-    // A move of the focus inside the tools' shadow root sends the document no event.
-    const roots = [...new Set<Document | ShadowRoot>([document, ownRoot()])];
+    // A move of the focus inside one of the tools' shadow roots sends the document no event.
+    const roots = ownRoots();
     for (const r of roots) r.addEventListener("focusout", check);
     const session = actor.subscribe(check);
     const lift = parts.subscribe(check);

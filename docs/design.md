@@ -527,6 +527,71 @@ The slices land in this order, one at a time: W0, A1, A2, A3, A4, B1, B2, D1, A5
 C1 runs beside them in its own worktree once W0 lands, and C2 lands after C1 and B1. The React app at work and Next.js (steps 6 and 7)
 come after E1.
 
+### A3 in steps
+
+A3 lands in five commits. Each one passes `pnpm run verify` and works on the demo and the
+dashboard. Browser checks start with step 2.
+
+1. **The overlay's root.** `src/core/root.ts` holds the roots that Blueline's own nodes are
+   in: the document, and the shadow roots that steps 2 and 3 add and take out with their
+   hosts. `own(selector)` and `ownAll(selector)` look in each. `focused()` follows `activeElement` through shadow roots.
+   `targetOf(event)` takes a DOM event or a React event, and gives the node the event
+   started at (`composedPath()[0]`, on React's `nativeEvent`). Every query for a `data-dt-*`
+   node, and every `activeElement` and `event.target` check in `src/ui`, `src/keys`,
+   `src/vim` and `src/part/lift.tsx`, uses them. A focus listener such as `TreeFocus`'s
+   `focusout` listens on the roots as well as the document: a move of focus inside a shadow
+   root sends the document no event. A query for the page's targets, a pin's selector or a
+   step's `target`, still looks in the document. A point over the overlay's host is
+   Blueline's, not the page's.
+2. **A shadow root and its CSS.** `mount` and `DevTools` render the tools, but not yet the
+   lift, into `host.attachShadow({ mode: "open" })`. A script compiles `src/styles.css`
+   with Tailwind's standalone entry, and writes `src/ui/overlay-css.gen.ts`, a string the
+   shadow root adopts; Tailwind does not scan the generated file. Verify fails when the
+   file is not current. The script makes three changes to the CSS:
+   - Each `rem` becomes `px` at 16 px, so the page's root font size does not resize the
+     tools.
+   - Each `@property` rule becomes a declaration in the `properties` layer, the lowest, on
+     `*, ::before, ::after, ::backdrop`, with `initial` where the rule has no initial
+     value. A browser ignores `@property` in a shadow root, and Tailwind's shadows, rings
+     and transforms need the initial values. A declaration outside the layer would win over
+     the utilities.
+   - The theme's variables, the resets (`all: initial`) and the tools' font go on the
+     tools' own root elements, not on `:root` or `:host`.
+     Blueline's own toasts replace sonner, which writes its CSS into the page's head when it
+     loads. The app still imports `styles.css` for the lift until step 3.
+3. **The lift on slots.** The lift gets its own host on the page. Its stage, its lines and
+   its bar are in the host's shadow root. Each preview is a light child of the host, with
+   `slot="<axis>/<variant>/<state>"`: the row and the column both show the part where they
+   cross, and a slot name fills one slot only. The page's CSS styles each preview, and it
+   keeps the part's props and React context. The stage's `<slot>` stands where `render(o)`
+   stands today, so the previews move with the lines and nothing measures them. A slotted
+   preview inherits from its slot, so the elements between the host and each slot set no
+   inherited property: the theme and the resets stay on the chrome's own elements, and a
+   preview inherits from the page, as it does today from `body`. The lift's shadow root is
+   one of the tools' roots while the lift is up, so a query finds its note's composer, and
+   the focus comes back to that composer. One React still renders
+   both halves, through two portals. The app stops importing `styles.css`.
+4. **The bundle.** Two entries with a fixed boundary:
+   - `@henrikkvamme/blueline` is the overlay. It bundles its own React, React DOM, Effect,
+     XState and lucide, and exports `mount`, the types, the part store and the registry.
+     It needs no peer.
+   - `@henrikkvamme/blueline/react` is the facade on the app's React: `DevTools` (a thin
+     wrapper round `mount`), `useReviewControl` (through the handle), `useDevTools`,
+     `useRegistry` and `variants()`. It imports the part store and the registry only from
+     the main entry, which its build keeps external, so the app and the overlay share one
+     of each. `react` and `react-dom` are its peers.
+     The lift's chrome renders in the overlay from the part store's `lifting`; `variants()`
+     renders only the slotted previews. `effect` and `tailwindcss` stop being peers. An
+     adapter may still return an Effect of the same effect version; any other version gives
+     a Promise. A test checks that the packed `/react` and the main entry share one store
+     and one registry. The dashboard moves in the same step: it imports `DevTools` from
+     `/react`, and its Vite alias covers `/react`. Step 4 is done when the dashboard works on
+     it.
+5. **Browser tests.** Vitest browser mode with Playwright's Chromium runs the demo's
+   adapter in a real shadow root, both from source and from the packed package. The tests
+   type in the composer, walk the tree with keys, open and choose in a menu, and lift a
+   part, go through its variants on both lines and put one on the page.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.

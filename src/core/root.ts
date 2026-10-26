@@ -1,28 +1,33 @@
 /*
- * Where the dev tools' own nodes are: the document, or the shadow root that holds the tools
- * (mount.tsx). A query for a node of the tools looks there; a query for the page's own nodes,
- * as a step's target or a pin's selector, looks in the document. Focus and an event's target
- * are read through the shadow root, which the page sees as one host element.
+ * Where the dev tools' own nodes are: the document, and the shadow roots that hold the tools
+ * (mount.tsx) and the lift. A query for a node of the tools looks in each; a query for the
+ * page's own nodes, as a step's target or a pin's selector, looks in the document. Focus and
+ * an event's target are read through a shadow root, which the page sees as one host element.
  */
 
-let root: Document | ShadowRoot | undefined;
+const roots = new Set<ShadowRoot>();
 
-/** The node the tools' own nodes are in. */
-export const ownRoot = (): Document | ShadowRoot => root ?? document;
+/** The nodes the tools' own nodes are in: the document first. */
+export const ownRoots = (): readonly (Document | ShadowRoot)[] => [document, ...roots];
 
-/** Puts the tools' nodes in `next`, or in the document again with `undefined`. */
-export function setOwnRoot(next: ShadowRoot | undefined) {
-  root = next;
+/** Puts some of the tools' nodes in `root` too, until the returned function takes it out. */
+export function addOwnRoot(root: ShadowRoot): () => void {
+  roots.add(root);
+  return () => void roots.delete(root);
 }
 
 /** The tools' own node that `selector` names. */
-export const own = <E extends Element = HTMLElement>(selector: string): E | null =>
-  ownRoot().querySelector<E>(selector);
+export function own<E extends Element = HTMLElement>(selector: string): E | null {
+  for (const root of ownRoots()) {
+    const found = root.querySelector<E>(selector);
+    if (found !== null) return found;
+  }
+  return null;
+}
 
 /** The tools' own nodes that `selector` names. */
-export const ownAll = <E extends Element = HTMLElement>(selector: string): E[] => [
-  ...ownRoot().querySelectorAll<E>(selector),
-];
+export const ownAll = <E extends Element = HTMLElement>(selector: string): E[] =>
+  ownRoots().flatMap((root) => [...root.querySelectorAll<E>(selector)]);
 
 /** The element that has focus, inside a shadow root too. */
 export function focused(): Element | null {
