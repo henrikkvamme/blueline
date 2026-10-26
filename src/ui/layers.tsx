@@ -105,10 +105,11 @@ function Help({ view }: { readonly view: View }) {
     [adapter.commands, registered],
   );
   const bindings = [...BINDINGS, ...commandBindings(commands)];
-  // The g menu's keys show as g g, and g itself, which only opens that menu, does not.
+  // The g menu's keys show as g g, and g itself, which only opens that menu, does not. The
+  // keys are the page's, so g g is the page's too.
   const keyed = [
     ...bindingsFor(bindings, { ...view, layer: "none" }, "page"),
-    ...bindingsFor(bindings, { ...view, layer: "none" }, "go"),
+    ...goBindings(bindings, { ...view, layer: "none" }, "page"),
   ].filter(
     (b) =>
       b.does !== undefined &&
