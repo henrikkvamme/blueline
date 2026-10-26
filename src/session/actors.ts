@@ -1,6 +1,6 @@
 import { Clock, DateTime, Effect, Fiber, Schedule } from "effect";
 import { fromCallback } from "xstate";
-import { registry } from "../choices";
+import { registry } from "../core/registry";
 import { postLine, readListening, readReplies } from "../io/channel";
 import { listenedJourneys } from "../io/listening";
 import { ROUTES } from "../io/routes";

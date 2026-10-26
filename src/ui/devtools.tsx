@@ -1,9 +1,6 @@
-import { useActorRef } from "@xstate/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { registry } from "../choices";
-import { linkedReview } from "../io/link";
-import { keptOf, loadKept, saveKept } from "../io/storage";
+import { registry } from "../core/registry";
 import {
   BINDINGS,
   captured,
@@ -17,20 +14,10 @@ import {
   type Key,
   type View,
 } from "../keys/keymap";
-import { isKept } from "../notes/note";
-import { liveMachine, shapesOf } from "../session/actors";
+import { journeyIn, startSession, stepIn, type Session } from "../core/session";
 import { LAYERS, treeShown, type Layer as LayerName, type SessionActor } from "../session/machine";
-import { pageJourney, pageParts, placeId } from "../part/page";
-import {
-  partOn,
-  parts,
-  variantOf,
-  variantsOn,
-  varietyOf,
-  type Shown,
-  type Verdicts,
-} from "../part/store";
-import type { DevAdapter, DevInfo, DevShift, JourneyInfo, StepInfo } from "../types";
+import { partOn, parts, variantOf, variantsOn, varietyOf, type Shown } from "../part/store";
+import type { DevAdapter, DevInfo, DevShift } from "../types";
 import { Bar } from "./bar";
 import { firstOpen, lastOpen } from "../session/state";
 import { describe, PANEL, pathTo } from "./geometry";
@@ -117,33 +104,6 @@ const aim = {
 const layerOf = (s: Snapshot): LayerName => {
   const value = s.value.layer;
   return LAYERS.find((l) => l === value) ?? "none";
-};
-
-const journeyIn = (s: Snapshot, adapter: DevInfo): JourneyInfo | undefined =>
-  adapter.journeys.find((j) => j.id === s.context.journey) ?? adapter.journeys[0];
-
-const stepIn = (s: Snapshot, adapter: DevInfo): StepInfo | undefined =>
-  journeyIn(s, adapter)?.steps[s.context.at];
-
-/** The verdicts on each part, by its name: the step's own over the other steps'. */
-const verdictsIn = (s: Snapshot, adapter: DevInfo): Readonly<Record<string, Verdicts>> => {
-  const step = stepIn(s, adapter)?.id;
-  const others = Object.entries(s.context.feedback)
-    .filter(([id]) => id !== step)
-    .map(([, f]) => f.parts ?? {});
-  return Object.assign({}, ...others, step === undefined ? {} : s.context.feedback[step]?.parts);
-};
-
-/** The variants with a note on the step, by the part's name. */
-const notedIn = (s: Snapshot, adapter: DevInfo): Readonly<Record<string, readonly string[]>> => {
-  const step = stepIn(s, adapter)?.id;
-  const noted: Record<string, string[]> = {};
-  for (const n of s.context.notes) {
-    const on = n.pin?.variant;
-    if (on === undefined || n.step !== step || !isKept(n)) continue;
-    (noted[on.part] ??= []).push(on.variant);
-  }
-  return noted;
 };
 
 const viewOf = (s: Snapshot, adapter: DevInfo): View => {
@@ -239,61 +199,50 @@ export function DevTools<C>({
   const [shift, setShift] = useState<DevShift | undefined>(undefined);
   const where = useRef(given);
   where.current = given;
-  const pathNow = () => where.current ?? location.pathname;
   const goTo = useRef(navigate);
   goTo.current = navigate;
-  // The page's path, then the parts on it that have variants: the page's own review has a
-  // step for each.
-  const onPage = useSyncExternalStore(parts.subscribe, () =>
-    [pathNow(), ...pageParts(parts.current().instances)].join("\n"),
+  // The session runs outside React (core/session.ts): it starts with the tools, and stops
+  // when they go or the adapter changes.
+  const [session, setSession] = useState<Session>();
+  useEffect(() => {
+    const started = startSession({
+      adapter,
+      storageKey,
+      path: () => where.current ?? location.pathname,
+      shift: setShift,
+    });
+    setSession(started);
+    return () => {
+      setSession(undefined);
+      started.dispose();
+    };
+  }, [adapter, storageKey]);
+  // The app went to another page, or names it another way.
+  useEffect(() => session?.moved());
+  if (session === undefined) return <>{children}</>;
+  return (
+    <Running session={session} anchors={anchors} goTo={goTo} shift={shift}>
+      {children}
+    </Running>
   );
-  // The parts read what the adapter shows; only the machine runs its code.
-  const info = useMemo<DevInfo>(
-    () => ({
-      ...adapter,
-      journeys: [
-        ...adapter.journeys,
-        pageJourney(onPage.split("\n").slice(1), onPage.split("\n")[0]),
-      ],
-    }),
-    [adapter, onPage],
-  );
-  const machine = useMemo(
-    () => liveMachine({ adapter, shift: setShift, path: () => where.current ?? location.pathname }),
-    [adapter],
-  );
-  const actor = useActorRef(machine, {
-    input: {
-      kept: loadKept(storageKey),
-      journeys: shapesOf(info.journeys),
-      now: now(),
-      place: placeId(pathNow()),
-    },
-  });
-  useEffect(() => {
-    actor.send({ type: "journeys", journeys: shapesOf(info.journeys) });
-  }, [actor, info]);
-  // Each page has its own place for notes.
-  const path = onPage.split("\n")[0] ?? "";
-  useEffect(() => {
-    actor.send({ type: "place", place: placeId(path) });
-  }, [actor, path]);
-  // A link from the agent starts its review, on its step, and leaves the address clean.
-  useEffect(() => {
-    const linked = linkedReview(location.href);
-    if (linked === undefined) return;
-    history.replaceState(history.state, "", linked.rest);
-    const steps = info.journeys.find((j) => j.id === linked.journey)?.steps ?? [];
-    const at = Math.max(
-      0,
-      steps.findIndex((s) => s.id === linked.step),
-    );
-    actor.send({ type: "start", journey: linked.journey, at, fresh: false });
-  }, [actor, info]);
-  useEffect(() => {
-    const sub = actor.subscribe((s) => saveKept(storageKey, keptOf(s.context)));
-    return () => sub.unsubscribe();
-  }, [actor, storageKey]);
+}
+
+/** The tools on a running session. */
+function Running({
+  session,
+  anchors,
+  goTo,
+  shift,
+  children,
+}: {
+  readonly session: Session;
+  readonly anchors: readonly string[];
+  readonly goTo: { readonly current: ((path: string) => void) | undefined };
+  readonly shift: DevShift | undefined;
+  readonly children?: React.ReactNode;
+}) {
+  const { actor } = session;
+  const info = useSyncExternalStore(session.subscribe, session.info);
   // Undo and redo turn a step's light from the look it had, so the settle runs backwards.
   useEffect(() => {
     const done = actor.on("done", (e) => finished(e.journey));
@@ -309,31 +258,8 @@ export function DevTools<C>({
       sub.unsubscribe();
     };
   }, [actor]);
-  // The parts on the page show the reviewer's verdicts, as a deleted variant leaves the
-  // lift, and which variants have a note.
-  useEffect(() => {
-    let was = "";
-    let marked = "";
-    const judge = (s: Snapshot) => {
-      const verdicts = verdictsIn(s, info);
-      const key = JSON.stringify(verdicts);
-      if (key !== was) {
-        was = key;
-        parts.judge(verdicts);
-      }
-      const noted = notedIn(s, info);
-      const marks = JSON.stringify(noted);
-      if (marks !== marked) {
-        marked = marks;
-        parts.mark(noted);
-      }
-    };
-    judge(actor.getSnapshot());
-    const sub = actor.subscribe(judge);
-    return () => sub.unsubscribe();
-  }, [actor, info]);
   const tools = useMemo<Tools>(() => {
-    const commands = () => [...(adapter.commands ?? []), ...registry.current().commands];
+    const commands = () => [...(info.commands ?? []), ...registry.current().commands];
     /** Opens the step's note on a variant of a part, a new one if it has none. */
     const noteOn = (part: string, { variant, state }: Shown & { readonly variant: string }) => {
       const s = actor.getSnapshot();
@@ -594,7 +520,7 @@ export function DevTools<C>({
       navigate: (path) => (goTo.current ?? ((p: string) => location.assign(p)))(path),
     };
     return value;
-  }, [actor, adapter, info, anchors]);
+  }, [actor, info, anchors, goTo]);
   // On a phone, the tools stand above the page's own bottom bar, and the page gets room to
   // scroll its end above the tools.
   const root = useRef<HTMLDivElement>(null);

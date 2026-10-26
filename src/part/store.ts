@@ -1,5 +1,4 @@
 import { Effect } from "effect";
-import type { ReactNode } from "react";
 import { STORED } from "../io/stored";
 import type { JourneyInfo, StepInfo } from "../types";
 
@@ -38,8 +37,9 @@ export interface Judge {
   readonly undo: () => void;
   /** Opens the note on a variant in a state, to write in, where the walk takes notes. */
   readonly note?: (shown: Shown & { readonly variant: string }) => void;
-  /** The open note, to show in the lift. */
-  readonly panel?: ReactNode;
+  /** The open note, to show in the lift: an element of the view's, which the store only
+   * keeps (part/variants.tsx draws it). */
+  readonly panel?: unknown;
   /** How wide the tools' panel is, docked at the window's right: the lift stands in the room
    * beside it. None on a phone, or while the panel is hidden. */
   readonly docked?: number;

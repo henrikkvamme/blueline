@@ -1,4 +1,5 @@
 import {
+  isValidElement,
   lazy,
   Suspense,
   useId,
@@ -107,7 +108,7 @@ export function variants<P extends object>(
                           state: at.state === 0 ? undefined : names[at.state - 1],
                         })
                 }
-                note={lifting.judge.panel}
+                note={isValidElement(lifting.judge.panel) ? lifting.judge.panel : undefined}
                 noted={now.noted[name] ?? []}
                 onPut={(at) =>
                   parts.show(name, {

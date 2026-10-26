@@ -1,6 +1,6 @@
 import { useSelector } from "@xstate/react";
-import { DateTime } from "effect";
 import { createContext, useContext } from "react";
+import { now, type Snapshot } from "../core/session";
 import type { Action } from "../keys/keymap";
 import type { Note } from "../notes/note";
 import { stepNoteId, type SessionActor } from "../session/machine";
@@ -30,7 +30,8 @@ export function useTools(): Tools {
   return tools;
 }
 
-export type Snapshot = ReturnType<SessionActor["getSnapshot"]>;
+/** The time now, for the session's events. */
+export { now, type Snapshot } from "../core/session";
 
 export function useSession<T>(select: (s: Snapshot) => T, same?: (a: T, b: T) => boolean): T {
   return useSelector(useTools().actor, select, same);
@@ -83,9 +84,6 @@ export const useNote = (id: string) => useSession((s) => s.context.notes.find((n
 export const useStepNote = (step: string | undefined) => useNote(stepNoteId(step ?? ""));
 
 export const useNotes = () => useSession((s) => s.context.notes);
-
-/** The time now, for the session's events. */
-export const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** Sends the step's pointed notes now, with no words: the step's own draft waits. */
 export const sendPins = (actor: SessionActor, step: string) =>
