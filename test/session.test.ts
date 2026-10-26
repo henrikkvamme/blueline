@@ -34,15 +34,20 @@ const JOURNEYS: readonly Shape[] = [
 
 type Snapshot = SnapshotFrom<typeof sessionMachine>;
 
-const start = (active = false): Snapshot =>
-  initialTransition(sessionMachine, {
-    kept: { ...START, journey: "prep", active },
-    journeys: JOURNEYS,
-    now: 0,
-  })[0];
-
 const after = (snapshot: Snapshot, ...events: readonly Event[]) =>
   events.reduce((s, e) => transition(sessionMachine, s, e)[0], snapshot);
+
+/** The session as a page loads it; off a review the reviewer shows the panel, as Ctrl+B does,
+ * since the tools start idle there. */
+const start = (active = false): Snapshot =>
+  after(
+    initialTransition(sessionMachine, {
+      kept: { ...START, journey: "prep", active },
+      journeys: JOURNEYS,
+      now: 0,
+    })[0],
+    { type: "panel", shown: true },
+  );
 
 const pin = { what: "the “Safety” field", selector: "#safety" };
 
@@ -247,11 +252,14 @@ describe("the review session", () => {
   });
 
   it("selects the open steps in the tree with Ctrl+J and Ctrl+K", () => {
-    const settled = initialTransition(sessionMachine, {
-      kept: { ...START, journey: "prep", feedback: { b: { settled: true } } },
-      journeys: JOURNEYS,
-      now: 0,
-    })[0];
+    const settled = after(
+      initialTransition(sessionMachine, {
+        kept: { ...START, journey: "prep", feedback: { b: { settled: true } } },
+        journeys: JOURNEYS,
+        now: 0,
+      })[0],
+      { type: "panel", shown: true },
+    );
     const down = after(settled, { type: "cursorOpen", by: 1 });
     expect(down.context.cursor).toBe(2);
     expect(after(down, { type: "cursorOpen", by: 1 }).context.cursor).toBe(2);
@@ -1177,21 +1185,28 @@ describe("the panel", () => {
         journeys: JOURNEYS,
         now: 0,
       })[0],
+      { type: "panel", shown: true },
       { type: "choose" },
       { type: "entered" },
     );
+  const reload = (s: Snapshot) =>
+    initialTransition(sessionMachine, { kept: keptOf(s.context), journeys: JOURNEYS, now: 0 })[0];
 
-  it("shows by default, and a reload keeps whether it shows", () => {
-    expect(start().matches({ panel: "shown" })).toBe(true);
-    const hidden = after(start(), { type: "panel" });
-    expect(hidden.matches({ panel: "hidden" })).toBe(true);
-    expect(keptOf(hidden.context).panel).toBe(false);
-    const reloaded = initialTransition(sessionMachine, {
-      kept: keptOf(hidden.context),
+  it("starts hidden off a review, so the tools are idle, and a reload keeps one inside it", () => {
+    const loaded = initialTransition(sessionMachine, {
+      kept: { ...START, journey: "prep" },
       journeys: JOURNEYS,
       now: 0,
     })[0];
-    expect(reloaded.matches({ panel: "hidden" })).toBe(true);
+    expect(loaded.matches({ panel: "hidden" })).toBe(true);
+    expect(loaded.context.panel).toBe(false);
+    // Inside a review, a reload keeps the panel as it was, shown or hidden.
+    expect(reload(ready()).matches({ panel: "shown" })).toBe(true);
+    expect(reload(after(ready(), { type: "panel" })).matches({ panel: "hidden" })).toBe(true);
+    // Off it, a panel left open starts hidden on the next load.
+    const left = after(ready(), { type: "leave" });
+    expect(left.matches({ review: "off", panel: "shown" })).toBe(true);
+    expect(reload(left).matches({ panel: "hidden" })).toBe(true);
   });
 
   it("hides and shows again with the walk on its step, ready, so the light stays", () => {

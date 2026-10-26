@@ -55,7 +55,8 @@ tab shows each part on a map of the screen.
 
 - Parts: the **panel** on the right, with the **tree** of pages and journeys, the step and
   the chat; the **message field** at the bottom of the panel; the **bar** at the bottom
-  centre, the panel's folded form, full on a step and small at other times; the **light**
+  centre, the panel's folded form, in a review; the faint **launcher** in the corner while
+  the tools are **idle**; the **light**
   around the step's part; a **pin**, the numbered mark of `m` or Alt+click, and its **annotation
   card**; the **lift** (`v` or Space); the **preview** (`p`).
 - Words: a **review** walks a **journey** of **steps** in **groups**; an **open step** is
@@ -66,6 +67,12 @@ tab shows each part on a map of the screen.
   agent's answer is a **reply**, in the chat. `?` lists the **keys**.
 
 ## Where you are
+
+Off a review, the tools are idle: the panel is hidden, a faint launcher sits in the bottom
+right corner, and every key but Ctrl+B is the app's. Alt+click annotates the page at any
+time; the annotation goes to the page's chat, and the card closes when it is sent. The
+launcher, Ctrl+B or a review link from the agent opens the panel. A page loads idle unless a
+review was open.
 
 There is no mode to go into or out of. What you open in the tree is where you are: a step
 opens it, and a page leaves the step for the page. Escape on a step leaves it for the page

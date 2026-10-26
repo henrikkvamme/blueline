@@ -44,7 +44,8 @@ import {
  * - review: off, on the page, or on a step of a journey: entering it, switching its
  *   variant, or ready. The tree's selection says which: a step opens it, a page leaves it;
  *   on a step, the panel's chat is the step's or the page's;
- * - panel: the panel at the side, shown or hidden; hidden, the bar is its folded form;
+ * - panel: the panel at the side, shown or hidden; hidden, the bar is its folded form; off a
+ *   review it starts hidden, so the tools start idle;
  * - layer: what is open over the page, at most one: a picker, as the journeys or this page's
  *   notes, the key menu, the g menu, a pointed note or the send sheet;
  * - agent: whether it reads the agent's replies: while a step is open, or a note waits.
@@ -1359,8 +1360,13 @@ export const sessionMachine = setup({
       states: {
         starting: {
           always: [
-            { guard: ({ context }) => context.panel, target: "shown" },
-            { target: "hidden" },
+            // The panel comes back on a reload only inside a review: off one, the tools
+            // start idle, out of the app's way.
+            {
+              guard: ({ context }) => context.panel && (context.active || context.finish !== null),
+              target: "shown",
+            },
+            { target: "hidden", actions: assign({ panel: false }) },
           ],
         },
         hidden: {

@@ -109,7 +109,13 @@ first in the journeys, and the settled journeys stand at its foot, under **Settl
 
 **Bar**:
 The panel's folded form, at the bottom centre of the page. It shows only while the panel
-is hidden.
+is hidden, in a review.
+
+**Idle**:
+The tools off a review with the panel hidden. They show only a faint **launcher** in the
+corner and take no key but Ctrl+B, so the app has its keys. Alt+click still annotates the
+page.
+_Avoid_: Quiet mode, off
 
 **Annotation card**:
 The card beside a pin, where the reviewer writes the pin's annotation.

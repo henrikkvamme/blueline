@@ -12,6 +12,7 @@ import {
   nameOf,
   rowAction,
   ownsKeys,
+  idle as isIdle,
   walkOf,
   type Key,
   type View,
@@ -138,7 +139,8 @@ describe("the keys", () => {
       for (const zone of ZONES) {
         const aiming = { ...view, aiming: true };
         expect(press(aiming, zone, "Escape")).toEqual({ kind: "aim", on: false });
-        // Every other key does as it does while not pointing.
+        // Every other key does as it does while not pointing; idle tools take no key at all.
+        if (isIdle(view)) continue;
         for (const key of KEYS.filter((k) => k !== "Escape"))
           expect(press(aiming, zone, key)).toEqual(press(view, zone, key));
       }
@@ -189,6 +191,7 @@ describe("the keys", () => {
   it("undo with u, Ctrl+Z and Cmd+Z, and redo with Ctrl+R, Ctrl+Shift+Z and Cmd+Shift+Z", () => {
     for (const view of VIEWS)
       for (const zone of ["page", "control", "panel"] as const) {
+        if (zone !== "panel" && isIdle(view)) continue;
         expect(press(view, zone, "u")).toEqual(undo);
         expect(press(view, zone, "z", { ctrl: true })).toEqual(undo);
         expect(press(view, zone, "z", { meta: true })).toEqual(undo);
@@ -292,12 +295,15 @@ describe("the keys", () => {
 
   it("point at an element for a note with m", () => {
     for (const view of VIEWS.filter((v) => v.layer === "none" && v.finishing !== true))
-      expect(press(view, "page", "m")).toEqual({ kind: "aim", on: true });
+      expect(press(view, "page", "m")).toEqual(
+        isIdle(view) ? undefined : { kind: "aim", on: true },
+      );
   });
 
   it("preview with p, from the page and the tree, but not after g, where p is this page", () => {
     for (const view of VIEWS.filter((v) => v.layer === "none"))
       for (const zone of ["page", "control", "panel"] as const) {
+        if (zone !== "panel" && isIdle(view)) continue;
         expect(press(view, zone, "p")).toEqual(preview);
         // A held p does it once; its release decides the rest (holdToggle).
         expect(press(view, zone, "p", { repeat: true })).toBeUndefined();
@@ -514,10 +520,14 @@ describe("the keys", () => {
   it("open the g menu with g, on the page and in the tree", () => {
     for (const view of VIEWS.filter((v) => v.layer === "none"))
       for (const zone of ["page", "panel"] as const)
-        expect(press(view, zone, "g")).toEqual({
-          kind: "event",
-          event: { type: "open", layer: "go" },
-        });
+        expect(press(view, zone, "g")).toEqual(
+          zone === "page" && isIdle(view)
+            ? undefined
+            : {
+                kind: "event",
+                event: { type: "open", layer: "go" },
+              },
+        );
     // a is the g menu's alone, so the page keeps the plain key.
     for (const view of VIEWS.filter((v) => v.layer === "none"))
       expect(press(view, "page", "a")).toBeUndefined();
@@ -615,6 +625,27 @@ describe("the keys first", () => {
     expect(ownsKeys({ ...idle, layer: "go" })).toBe(true);
     expect(ownsKeys({ ...idle, aiming: true })).toBe(true);
     expect(ownsKeys(idle)).toBe(false);
+  });
+
+  it("take no key but Ctrl+B while idle, off a review with the panel hidden", () => {
+    const quiet: View = { ...idle, panel: false };
+    expect(isIdle(quiet)).toBe(true);
+    for (const zone of ["page", "control"] as const) {
+      for (const key of KEYS) {
+        expect(press(quiet, zone, key)).toBeUndefined();
+        expect(captured(bindings, quiet, zone, { key })).toBeUndefined();
+      }
+      expect(press(quiet, zone, "b", { ctrl: true })).toEqual({ kind: "panel" });
+    }
+    // The panel, a menu, the preview and pointing each end idle.
+    for (const view of [
+      idle,
+      { ...quiet, layer: "help" as const },
+      { ...quiet, preview: true },
+      { ...quiet, aiming: true },
+      { ...quiet, active: true },
+    ])
+      expect(isIdle(view)).toBe(false);
   });
 
   it("take j, k and the digits on a step with one variant too, and leave it the arrows", () => {

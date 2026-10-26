@@ -17,7 +17,8 @@ import { SettleButton, StepArrow, useVariety } from "./step-controls";
 /*
  * The bar at the bottom centre: the panel's folded form, which shows only while the panel is
  * hidden. On a step it is full: the step's number and title, the step before and after, and
- * Settle. Off a step it is small in the same place: the page's chat and the panel. The
+ * Settle. Off a review the tools are idle, and keep out of the app's way: only a small, faint
+ * launcher in the corner shows the panel, with a dot for replies not read. The
  * preview hides the rest of the tools, and leaves only an eye that shows them again, so the
  * page shows the tools are on. Each bar has a `?` for the keys and commands, which also does
  * what each one does. On a phone the full bar takes the screen's width, above the page's own
@@ -74,14 +75,7 @@ export function Bar() {
     );
   // The panel shows: it has all the bar has.
   if (panel) return null;
-  if (!active)
-    return (
-      <Small>
-        <PageChat drafts={drafts} news={news} />
-        <HelpButton shape="rounded-full" />
-        <PanelButton news={0} shape="rounded-full" />
-      </Small>
-    );
+  if (!active) return <Launcher drafts={drafts} news={answered} />;
   return (
     <div
       {...DOCK}
@@ -177,22 +171,40 @@ function PreviewEye({ count, news }: { readonly count: React.ReactNode; readonly
   );
 }
 
-/** Shows the panel, with the page's chat and its field, to write on the page, with the notes
- * not sent and the replies not read. */
-function PageChat({ drafts, news }: { readonly drafts: number; readonly news: number }) {
+/** While the tools are idle, the one thing they show: a faint button in the corner that shows
+ * the panel, to start a review or read the page's chat. It is clear only on hover, or with a
+ * reply not read or an annotation that waits for the next message. */
+function Launcher({ drafts, news }: { readonly drafts: number; readonly news: number }) {
   const { perform } = useTools();
+  const label =
+    news > 0
+      ? `Blueline: ${String(news)} new replies`
+      : drafts > 0
+        ? `Blueline: ${String(drafts)} annotations not sent`
+        : "Blueline";
   return (
     <button
+      {...DOCK}
       type="button"
-      aria-label={drafts > 0 ? `This page, ${String(drafts)} not sent` : "This page"}
-      onClick={() => perform({ kind: "focus", to: "note" })}
-      className="flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] text-dt-text hover:bg-dt-raised max-sm:h-11 max-sm:px-4 max-sm:text-[14px]"
+      aria-label={label}
+      title={`${label}. Show the panel to start a review (Ctrl+B); Alt+click annotates the page.`}
+      onClick={() => perform({ kind: "panel" })}
+      className={cx(
+        "fixed right-3 bottom-3 z-[2147483002] grid size-7 place-items-center rounded-full bg-dt-panel text-dt-muted shadow-dt-float transition-opacity hover:text-dt-text hover:opacity-100 focus-visible:opacity-100 max-sm:bottom-(--dt-base) max-sm:size-11",
+        news > 0 || drafts > 0 ? "opacity-90" : "opacity-35",
+        ARRIVE,
+      )}
     >
-      <MessageSquare className="size-3.5 text-dt-accent" aria-hidden />
-      This page
-      {/* A fixed place for the count, so the bar keeps its width as notes come and go. */}
-      <span className="min-w-[1ch] text-dt-warn tabular-nums">{drafts > 0 ? drafts : ""}</span>
-      {news > 0 && <News count={news} />}
+      <MessageSquare className="size-3.5 max-sm:size-4" aria-hidden />
+      {(news > 0 || drafts > 0) && (
+        <span
+          aria-hidden
+          className={cx(
+            "absolute top-0 right-0 size-2 rounded-full",
+            news > 0 ? "bg-dt-accent" : "bg-dt-warn",
+          )}
+        />
+      )}
     </button>
   );
 }

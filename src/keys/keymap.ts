@@ -103,6 +103,18 @@ const active = (v: View) => v.active && v.finishing !== true;
 const walking = (v: View) => active(v) && !v.preview;
 const varied = (v: View) => active(v) && v.variants > 1;
 
+/** Whether the tools are idle: no review, no panel, no menu and no pointing. Then they keep
+ * out of the app's way and take no key but Ctrl+B, which shows the panel (`bindingsFor`).
+ * Alt+click still annotates the page (ui/devtools.tsx). */
+export const idle = (view: View): boolean =>
+  !view.active &&
+  !view.panel &&
+  !view.preview &&
+  view.layer === "none" &&
+  view.aiming !== true &&
+  view.finishing !== true &&
+  view.lifting !== true;
+
 export const BINDINGS: readonly Binding[] = [
   // The review, on the page. The keys go as the panel stands: across its foot to the step
   // before and after, and down its list of variants. The preview keeps the same keys.
@@ -467,6 +479,10 @@ export const bindingsFor = (
   view: View,
   zone: Zone | "go",
 ): readonly Binding[] => {
+  // Idle, the tools keep out of the app's way: on the page only Ctrl+B is theirs, to show the
+  // panel. The tree has the focus only while the panel shows.
+  if ((zone === "page" || zone === "control") && idle(view))
+    return bindings.filter((b) => typeof b.does !== "function" && b.does.kind === "panel");
   // A control of the app's keeps its own keys, so a press on it does what the app says.
   if (zone === "control")
     return bindingsFor(bindings, view, "page").flatMap((b) => {
