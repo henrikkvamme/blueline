@@ -1,16 +1,16 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { claimedBy, cursorAtByte, freshFor, NO_CLAIMS } from "../bin/claims";
+import { claimedBy, cursorAtByte, freshFor, givenBack, laterOf, NO_CLAIMS } from "../bin/claims";
 import { takeLines, type Line } from "../bin/lines";
 import { listenerPick } from "../bin/listen";
 import { reply } from "../bin/reply";
-import { claim, feedbackLines, withLock } from "../bin/wire";
+import { claim, claimsPath, feedbackLines, unclaim, withLock } from "../bin/wire";
 import { stamped } from "../src/vite";
 
 const line = (fields: object) => `${JSON.stringify(fields)}\n`;
@@ -77,6 +77,49 @@ describe("a claim", () => {
     // Every journey: the note on k needs the agent, and the settle before it comes with it.
     expect(ids(listenerPick(lines, undefined).take)).toEqual(["a", "b", "c"]);
     expect(listenerPick(lines.slice(1, 2), "j")).toEqual({ take: [], through: undefined, held: 1 });
+  });
+});
+
+describe("a line given back", () => {
+  const lines = linesOf(
+    line({ line: "A", kind: "note" }) +
+      line({ line: "B", kind: "note" }) +
+      line({ line: "C", kind: "note" }),
+  );
+  const [A, B, C] = lines;
+
+  it("is fresh for every reader, also behind its cursor, until one claims it", () => {
+    // The agent pulls A, a hook with the same name claims B, a wake claims C.
+    let claims = claimedBy(NO_CLAIMS, "agent", [A!], "A", 1);
+    claims = claimedBy(claims, "agent", [B!], "B", 2);
+    claims = claimedBy(claims, "wake", [C!], "C", 3);
+    // The pull was cancelled: A goes back, and no cursor moves.
+    claims = givenBack(claims, "agent", ["A"], 4);
+    expect(claims.cursors).toEqual({ agent: "B", wake: "C" });
+    expect(ids(freshFor(lines, claims, "agent"))).toEqual(["A"]);
+    expect(ids(freshFor(lines, claims, "wake"))).toEqual(["A"]);
+    // The wake takes it; it is no longer returned, and nobody else gets it.
+    claims = claimedBy(claims, "wake", [A!], undefined, 5);
+    expect(claims.returned ?? {}).toEqual({});
+    expect(ids(freshFor(lines, claims, "agent"))).toEqual([]);
+    expect(ids(freshFor(lines, claims, "wake"))).toEqual([]);
+  });
+
+  it("goes back only from the reader that holds it, once", () => {
+    const claims = claimedBy(NO_CLAIMS, "agent", [A!], "A", 1);
+    expect(givenBack(claims, "other", ["A"], 2)).toBe(claims);
+    const back = givenBack(claims, "agent", ["A"], 2);
+    expect(back.claimed).toEqual({});
+    expect(givenBack(back, "agent", ["A"], 3)).toBe(back);
+  });
+
+  it("never moves a cursor back", () => {
+    expect(laterOf(lines, "B", "A")).toBe("B");
+    expect(laterOf(lines, "A", "C")).toBe("C");
+    expect(laterOf(lines, undefined, "A")).toBe("A");
+    // A cursor the file no longer has: the file was started again.
+    expect(laterOf(lines, "gone", "A")).toBe("A");
+    expect(laterOf(lines, "B", undefined)).toBe("B");
   });
 });
 
@@ -251,4 +294,120 @@ describe("the files at once", () => {
       ),
     ).toBe("failed");
   });
+  it("reads a claims file as W0 wrote it, and keeps its fields", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    writeFileSync(feedback, line({ line: "a", kind: "note" }) + line({ line: "b", kind: "note" }));
+    const w0 = { cursors: { other: "a" }, claimed: { a: { by: "other", at: 1 } } };
+    writeFileSync(claimsPath(feedback), JSON.stringify(w0));
+    const takeAll = claim(feedback, "me", (fresh) => ({ take: fresh, through: fresh.at(-1)?.id }));
+    expect(ids(await run(takeAll))).toEqual(["b"]);
+    const written = JSON.parse(readFileSync(claimsPath(feedback), "utf8"));
+    expect(written.cursors).toEqual({ other: "a", me: "b" });
+    expect(written.claimed.a).toEqual({ by: "other", at: 1 });
+    expect(written.returned).toBeUndefined();
+  });
+
+  it("gives lines back to the next reader, and tells the receipt what it took", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    writeFileSync(feedback, line({ line: "A", kind: "note" }));
+    const takeAll = (reader: string, receipt?: (taken: readonly Line[]) => void) =>
+      claim(feedback, reader, (fresh) => ({ take: fresh, through: fresh.at(-1)?.id }), receipt);
+    let receipt: readonly Line[] = [];
+    expect(ids(await run(takeAll("agent", (taken) => (receipt = taken))))).toEqual(["A"]);
+    expect(ids(receipt)).toEqual(["A"]);
+    writeFileSync(feedback, line({ line: "A", kind: "note" }) + line({ line: "B", kind: "note" }));
+    expect(ids(await run(takeAll("wake")))).toEqual(["B"]);
+    await run(unclaim(feedback, "agent", ids(receipt)));
+    // The wake's cursor is past A; it still gets A, and does not move back.
+    expect(ids(await run(takeAll("wake")))).toEqual(["A"]);
+    expect(ids(await run(takeAll("agent")))).toEqual([]);
+    expect(JSON.parse(readFileSync(claimsPath(feedback), "utf8")).cursors.wake).toBe("B");
+  });
+
+  it("keeps the receipt of a claim that is stopped while it writes", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    writeFileSync(feedback, line({ line: "A", kind: "note" }));
+    // Stopped after 0 to 40 turns of the scheduler: the claim is whole or none, and its
+    // receipt says which.
+    for (let turns = 0; turns <= 40; turns += 1) {
+      rmSync(claimsPath(feedback), { force: true });
+      let receipt: readonly Line[] = [];
+      await run(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkChild(
+            claim(
+              feedback,
+              "agent",
+              (fresh) => ({ take: fresh, through: fresh.at(-1)?.id }),
+              (taken) => (receipt = taken),
+            ),
+          );
+          for (let t = 0; t < turns; t += 1) yield* Effect.yieldNow;
+          yield* Fiber.interrupt(fiber);
+        }),
+      );
+      const written = existsSync(claimsPath(feedback))
+        ? JSON.parse(readFileSync(claimsPath(feedback), "utf8"))
+        : NO_CLAIMS;
+      const claimed = ids(await run(feedbackLines(feedback))).filter(
+        (id) => written.claimed[id] !== undefined,
+      );
+      expect(ids(receipt)).toEqual(claimed);
+    }
+  });
+
+  it("fails a claim whose claims file cannot be written, and keeps the lines", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    writeFileSync(feedback, line({ line: "A", kind: "note" }));
+    // A folder where the file goes: the rename fails.
+    mkdirSync(claimsPath(feedback));
+    let receipt: readonly Line[] = [];
+    const takeAll = claim(
+      feedback,
+      "agent",
+      (fresh) => ({ take: fresh, through: fresh.at(-1)?.id }),
+      (taken) => (receipt = taken),
+    );
+    expect(
+      await run(
+        takeAll.pipe(
+          Effect.as("took"),
+          Effect.orElseSucceed(() => "failed"),
+        ),
+      ),
+    ).toBe("failed");
+    expect(receipt).toEqual([]);
+    rmSync(claimsPath(feedback), { recursive: true });
+    expect(ids(await run(takeAll))).toEqual(["A"]);
+  });
+  it("gives a listener a line given back, with no new line in the feedback file", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    writeFileSync(feedback, line({ line: "A", kind: "note" }));
+    const takeAll = claim(feedback, "agent", (fresh) => ({ take: fresh, through: "A" }));
+    expect(ids(await run(takeAll))).toEqual(["A"]);
+    const command = path.join(import.meta.dirname, "..", "bin", "blueline.ts");
+    const listener = spawn(process.execPath, [command, "listen", feedback, "--as", "wake"]);
+    try {
+      let out = "";
+      const printed = (text: string) =>
+        new Promise<void>((done) => {
+          const look = () => out.includes(text) && done();
+          listener.stdout.on("data", (chunk: Buffer) => {
+            out += chunk.toString();
+            look();
+          });
+          look();
+        });
+      await printed("[listening]");
+      await run(unclaim(feedback, "agent", ["A"]));
+      await printed('"line":"A"');
+    } finally {
+      listener.kill();
+    }
+  }, 10_000);
 });

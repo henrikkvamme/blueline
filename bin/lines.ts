@@ -14,6 +14,7 @@ export const USAGE = `Usage:
   blueline reply <status.json> <note id> replied <text> [--variant <label>] [--blocks <file.json>]
   blueline reply <status.json> <note id> settled
   blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
+  blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
   blueline serve [stop]
   blueline add <origin> [--root <dir>]
   blueline remove <origin> [--root <dir>]`;
@@ -64,7 +65,26 @@ export type Command =
       readonly keep: string | undefined;
       /** Where the code is; the working directory by default. */
       readonly src: string;
+    }
+  /** An MCP server on stdio for one agent (bin/mcp.ts). */
+  | {
+      readonly kind: "mcp";
+      readonly file: string;
+      readonly journey: string | undefined;
+      /** The reader's name for the claims, as for `listen`. */
+      readonly name: string;
+      /** The status file; `status.json` beside the feedback file by default. */
+      readonly status: string | undefined;
+      /** Where the code is, for `apply`; the working directory by default. */
+      readonly src: string;
+      /** The longest time one wait waits, in ms. */
+      readonly waitMs: number;
     };
+
+/** The longest wait: below a 1-hour cache's lifetime less 60 s (ADR 0005). */
+const WAIT_MAX_S = 3540;
+/** The wait with no `--wait`: below Codex's default tool timeout, 60 s, less 10 s. */
+const WAIT_S = 50;
 
 /** The command in the arguments, or none when they make no command. */
 export function commandOf(args: readonly string[]): Command | undefined {
@@ -92,6 +112,21 @@ export function commandOf(args: readonly string[]): Command | undefined {
     const journey = flags.get("journey") ?? "page";
     const step = flags.get("step");
     return { kind, file, url, journey, step, name: flags.get("as") ?? journey };
+  }
+  if (kind === "mcp" && file !== undefined && words.length === 2) {
+    const wait = flags.get("wait") ?? String(WAIT_S);
+    const seconds = /^\d+$/.test(wait) ? Number(wait) : 0;
+    if (seconds < 1 || seconds > WAIT_MAX_S) return undefined;
+    const journey = flags.get("journey");
+    return {
+      kind,
+      file,
+      journey,
+      name: flags.get("as") ?? journey ?? "agent",
+      status: flags.get("status"),
+      src: flags.get("src") ?? ".",
+      waitMs: seconds * 1000,
+    };
   }
   const part = flags.get("part");
   if (kind === "apply" && file !== undefined && part !== undefined && words.length === 2)

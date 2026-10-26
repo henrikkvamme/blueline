@@ -582,6 +582,28 @@ last settle, which leaves no step open, wakes the agent: the review is done, and
 applies the kept variants. The tools send that settle only when the reviewer finishes the
 review, so the agent wakes once, at the end. A listener that starts again still has the settles it held.
 
+### An MCP server for the agent
+
+`blueline mcp` gives an agent the review as MCP tools, on stdio. Add it to the agent's
+harness as a server with this command:
+
+```sh
+blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
+```
+
+- `wait_for_feedback` waits for the reviewer's next lines and returns them, tagged as
+  `listen` tags them. With nothing new in `--wait` seconds, 50 by default, it returns
+  "Nothing new" and the agent calls it again. Set `--wait` below the harness's tool
+  timeout less 10 seconds.
+- `reply` answers a line on its `id`, as `blueline reply` does, with its blocks as data.
+- `apply` applies the verdicts on a part's variants, as `blueline apply` does, to the code
+  under `--src`.
+
+Each line goes to one reader: a line that the agent pulled never comes again by a listener or
+a wake, and a call that the agent cancels gives its lines back. `--as` names the reader, as
+for `listen`. The tools and their words never change, so they stay in the agent's prompt
+cache.
+
 ### One server for the machine
 
 `blueline serve` keeps every app's channel on the machine, on `127.0.0.1:4399`, or the port in

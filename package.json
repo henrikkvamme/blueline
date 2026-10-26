@@ -70,6 +70,7 @@
     "demo": "pnpm --filter review-demo dev"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
     "@xstate/react": "6.1.0",
     "effect": "4.0.6",
     "lucide-react": "1.61.0",
@@ -79,6 +80,7 @@
   "devDependencies": {
     "@effect/platform-node": "4.0.6",
     "@effect/tsgo": "0.56.1",
+    "@modelcontextprotocol/client": "2.4.0",
     "@tailwindcss/node": "4.3.3",
     "@tailwindcss/oxide": "4.3.3",
     "@types/node": "24.19.2",

@@ -15,6 +15,8 @@ import {
   claimedBy,
   cursorAtByte,
   freshFor,
+  givenBack,
+  laterOf,
   NO_CLAIMS,
   type Claims,
 } from "./claims.ts";
@@ -154,44 +156,98 @@ export interface Pick {
 
 /**
  * Claims lines for `reader`, at once for every reader: under the feedback file's lock, it
- * reads the lines after the reader's cursor that no other reader claimed, lets `pick` choose,
- * records the claims and moves the cursor. A reader with a read mark from before the claims
- * starts at that mark.
+ * reads the lines after the reader's cursor that no other reader claimed, and the lines given
+ * back, lets `pick` choose, records the claims and moves the cursor. A reader with a read
+ * mark from before the claims starts at that mark.
+ *
+ * The work under the lock cannot be interrupted, so a claim is whole or none. `claimed` gets
+ * the lines taken as soon as they are written, in that same part: a reader that is stopped
+ * after it still knows what it holds, and can give it back (`unclaim`).
  */
 export const claim = Effect.fn(function* (
   feedback: string,
   reader: string,
   pick: (fresh: readonly Line[]) => Pick,
+  claimed?: (taken: readonly Line[]) => void,
 ) {
   return yield* withLock(
     feedback,
-    Effect.gen(function* () {
-      const bytes = yield* feedbackBytes(feedback);
-      const lines = takeLines(bytes).lines;
-      let claims: Claims = yield* readFile(claimsPath(feedback), ClaimsFile, NO_CLAIMS);
-      let migrated = false;
-      if (claims.cursors[reader] === undefined) {
-        const none: Readonly<Record<string, number>> = {};
-        const marks = yield* readFile(`${feedback}.read.json`, MarksFile, none).pipe(
-          Effect.orElseSucceed(() => none),
-        );
-        const mark = marks[reader];
-        // A mark past the end means the file was started again: every line is new.
-        const cursor =
-          mark === undefined || mark > bytes.length ? undefined : cursorAtByte(lines, mark);
-        if (cursor !== undefined) {
-          claims = { ...claims, cursors: { ...claims.cursors, [reader]: cursor } };
-          migrated = true;
+    Effect.uninterruptible(
+      Effect.gen(function* () {
+        const bytes = yield* feedbackBytes(feedback);
+        const lines = takeLines(bytes).lines;
+        let claims: Claims = yield* readFile(claimsPath(feedback), ClaimsFile, NO_CLAIMS);
+        let migrated = false;
+        if (claims.cursors[reader] === undefined) {
+          const none: Readonly<Record<string, number>> = {};
+          const marks = yield* readFile(`${feedback}.read.json`, MarksFile, none).pipe(
+            Effect.orElseSucceed(() => none),
+          );
+          const mark = marks[reader];
+          // A mark past the end means the file was started again: every line is new.
+          const cursor =
+            mark === undefined || mark > bytes.length ? undefined : cursorAtByte(lines, mark);
+          if (cursor !== undefined) {
+            claims = { ...claims, cursors: { ...claims.cursors, [reader]: cursor } };
+            migrated = true;
+          }
         }
-      }
-      const { take, through } = pick(freshFor(lines, claims, reader));
-      // A round with nothing new writes nothing, as a listener reads every second.
-      const moved = through !== undefined && through !== claims.cursors[reader];
-      if (take.length > 0 || moved || migrated) {
-        const next = claimedBy(claims, reader, take, through, yield* Clock.currentTimeMillis);
-        yield* writeWhole(claimsPath(feedback), yield* Schema.encodeEffect(ClaimsFile)(next));
-      }
-      return take;
-    }),
+        const picked = pick(freshFor(lines, claims, reader));
+        const { take } = picked;
+        const through = laterOf(lines, claims.cursors[reader], picked.through);
+        // A round with nothing new writes nothing, as a listener reads every second.
+        const moved = through !== undefined && through !== claims.cursors[reader];
+        if (take.length > 0 || moved || migrated) {
+          const next = claimedBy(claims, reader, take, through, yield* Clock.currentTimeMillis);
+          yield* writeWhole(claimsPath(feedback), yield* Schema.encodeEffect(ClaimsFile)(next));
+          if (take.length > 0) claimed?.(take);
+        }
+        return take;
+      }),
+    ),
   );
+});
+
+/** Gives back the lines `ids` that `reader` claimed and could not deliver (bin/claims.ts
+ * `givenBack`). Lines it no longer holds stay as they are. */
+export const unclaim = Effect.fn(function* (
+  feedback: string,
+  reader: string,
+  ids: readonly string[],
+) {
+  yield* withLock(
+    feedback,
+    Effect.uninterruptible(
+      Effect.gen(function* () {
+        const claims = yield* readFile(claimsPath(feedback), ClaimsFile, NO_CLAIMS);
+        const next = givenBack(claims, reader, ids, yield* Clock.currentTimeMillis);
+        if (next !== claims)
+          yield* writeWhole(claimsPath(feedback), yield* Schema.encodeEffect(ClaimsFile)(next));
+      }),
+    ),
+  );
+});
+
+/** What a reader that polls compares between rounds: the feedback file's size, and the
+ * claims file's place on disk, size and time, as a line given back changes only the claims.
+ * Each write of the claims is a new file (`writeWhole`), so its place changes with it. A file
+ * that is missing counts as empty. */
+export const changeOf = Effect.fn(function* (feedback: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const mark = (file: string) =>
+    fs.stat(file).pipe(
+      Effect.map((info) =>
+        [
+          Option.getOrUndefined(info.ino),
+          info.size,
+          Option.getOrUndefined(info.mtime)?.getTime(),
+        ].join(":"),
+      ),
+      Effect.orElseSucceed(() => "none"),
+    );
+  const bytes = yield* fs.stat(feedback).pipe(
+    Effect.map((info) => String(info.size)),
+    Effect.orElseSucceed(() => "0"),
+  );
+  return `${bytes} ${yield* mark(claimsPath(feedback))}`;
 });

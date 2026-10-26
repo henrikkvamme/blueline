@@ -1,12 +1,13 @@
-import { Console, Effect, FileSystem, Path, PlatformError } from "effect";
+import { Effect, FileSystem, Path, PlatformError } from "effect";
 import { applyVerdicts, dropPartFields, verdictsIn, type Applied } from "./apply.ts";
 import type { Command } from "./lines.ts";
 import { writeWhole } from "./wire.ts";
 
 /*
  * `apply` takes the reviewer's verdicts on a part's variants from the feedback file and
- * applies them to the code under `--src` (bin/apply.ts): it prints each change, and fails
- * when it cannot tell which variant to keep.
+ * applies them to the code under `--src` (bin/apply.ts): it returns each change, which the
+ * command prints and `blueline mcp`'s `apply` tool returns, and fails with words for the
+ * agent when it cannot tell which variant to keep.
  */
 
 /** Folders with no code of ours. */
@@ -37,8 +38,7 @@ export const applyCommand = Effect.fn(function* (command: Extract<Command, { kin
   const fs = yield* FileSystem.FileSystem;
   const lines = (yield* fs.readFileString(command.file)).split("\n");
   const verdicts = verdictsIn(lines, command.part);
-  if (verdicts === undefined)
-    return yield* Console.log(`The reviewer has no verdicts on ${command.part} yet.`);
+  if (verdicts === undefined) return [`The reviewer has no verdicts on ${command.part} yet.`];
   const files = yield* codeIn(command.src);
   const sources = yield* Effect.forEach(files, (file) =>
     fs.readFileString(file).pipe(Effect.map((source) => ({ file, source }))),
@@ -57,10 +57,12 @@ export const applyCommand = Effect.fn(function* (command: Extract<Command, { kin
   if (resolved && changed.length > 0)
     for (const a of applied.filter((a) => a.changes.length === 0))
       changed.push({ ...dropPartFields(a.file, a.was, command.part), file: a.file, was: a.was });
+  const said: string[] = [];
   for (const a of changed.filter((a) => a.changes.length > 0)) {
     yield* writeWhole(a.file, a.source);
-    for (const change of a.changes) yield* Console.log(change);
+    said.push(...a.changes);
   }
   if (changed.length === 0)
-    yield* Console.log(`Nothing to change for ${command.part} under ${command.src}.`);
+    said.push(`Nothing to change for ${command.part} under ${command.src}.`);
+  return said;
 });

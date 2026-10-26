@@ -1,6 +1,6 @@
 import { Clock, Console, Effect, FileSystem, Schema } from "effect";
 import { ReplySchema } from "../src/io/replies.ts";
-import { BlockSchema } from "../src/notes/blocks.ts";
+import { BlockSchema, type Block } from "../src/notes/blocks.ts";
 import { replyAfter, type Command } from "./lines.ts";
 import { readFile, withLock, writeWhole } from "./wire.ts";
 
@@ -10,7 +10,8 @@ import { readFile, withLock, writeWhole } from "./wire.ts";
  * never reads half of it. `--blocks` adds what the reply shows besides its words, from a
  * JSON file with a list of blocks (src/notes/blocks.ts); one that does not read fails, and
  * says where. On `working`, the blocks are the agent's progress, as a plan: each working
- * reply puts its own in place of the last, and the next reply ends it.
+ * reply puts its own in place of the last, and the next reply ends it. `blueline mcp`'s
+ * `reply` tool writes with `answer`, with the blocks from its input.
  */
 
 /** The answers by note ID. One that is not an answer is kept as it is. */
@@ -29,6 +30,14 @@ export const reply = Effect.fn(function* (command: Extract<Command, { kind: "rep
           Effect.flatMap(Schema.decodeEffect(BlocksFile)),
           Effect.tapError((error) => Console.error(`The blocks do not read: ${String(error)}`)),
         );
+  yield* answer(command, blocks);
+});
+
+/** Writes the answer to a note in the status file, under its lock. */
+export const answer = Effect.fn(function* (
+  command: Extract<Command, { kind: "reply" }>,
+  blocks: readonly Block[] | undefined,
+) {
   yield* withLock(
     command.file,
     Effect.gen(function* () {

@@ -9,6 +9,7 @@ import { Console, Effect, Stdio } from "effect";
 import { applyCommand } from "./apply-run.ts";
 import { commandOf, USAGE } from "./lines.ts";
 import { listen, review } from "./listen.ts";
+import { mcp } from "./mcp.ts";
 import { reply } from "./reply.ts";
 import { add, remove, serve, stop } from "./serve.ts";
 
@@ -31,9 +32,12 @@ const program = Effect.gen(function* () {
       return yield* add(command.root, command.origin);
     case "remove":
       return yield* remove(command.root, command.origin);
+    case "mcp":
+      return yield* Effect.scoped(mcp(command));
     case "apply":
       // What the agent must decide, as a plain line, and no stack.
       return yield* applyCommand(command).pipe(
+        Effect.flatMap((said) => Console.log(said.join("\n"))),
         Effect.catchIf(
           (error) => typeof error === "string",
           (message) => Console.error(message).pipe(Effect.andThen(Effect.fail("apply"))),

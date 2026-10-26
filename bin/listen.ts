@@ -1,9 +1,9 @@
-import { Clock, Console, Effect, FileSystem, Schema } from "effect";
+import { Clock, Console, Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { reviewLink } from "../src/io/link.ts";
 import { HEARTBEAT_MS, ListeningSchema, type Listening } from "../src/io/listening.ts";
 import { ageOf, cameLate, wakes, type Command, type Line } from "./lines.ts";
-import { claim, readFile, writeWhole } from "./wire.ts";
+import { changeOf, claim, readFile, writeWhole } from "./wire.ts";
 
 /*
  * `listen` prints each note in the feedback file that this listener has not read yet, then
@@ -50,6 +50,24 @@ const sayListening = Effect.fn(function* (
 });
 
 /**
+ * The lines a reader took, as the agent reads them: each after a tag that says when it was
+ * sent. A settle is only `status`. A note is `old` in the reader's first round, which had
+ * the notes from before it listened, `late` when it came long after it was sent, or `new`.
+ */
+export function tagged(taken: readonly Line[], now: number, first: boolean): string[] {
+  return taken.map((line) => {
+    const age = ageOf(line.sentAt, now);
+    if (!wakes(line)) return `[status, sent ${age}] ${line.raw}`;
+    const tag = first
+      ? `old, sent ${age}, before you listened`
+      : cameLate(line.sentAt, now, LATE_MS)
+        ? `late, sent ${age}`
+        : `new, sent ${age}`;
+    return `[${tag}] ${line.raw}`;
+  });
+}
+
+/**
  * What a listener takes of its fresh lines: its journey's lines up to the last one that
  * needs the agent. The settles after that one wait, unclaimed, for the next.
  */
@@ -66,27 +84,25 @@ export const listen = Effect.fn(function* (
   journey: string | undefined,
   name: string,
 ) {
-  const fs = yield* FileSystem.FileSystem;
   const listening = `${feedback}.listening.json`;
   yield* Effect.addFinalizer(() =>
     sayListening(listening, name, journey, undefined).pipe(Effect.ignore),
   );
   let saidAt = 0;
   let backlog = true;
-  // The file's size at the last round: a file that did not change has nothing new.
-  let size = -1;
+  // The files at the last round: when they did not change, nothing is new.
+  let seen = "";
   for (;;) {
     const now = yield* Clock.currentTimeMillis;
-    const info = yield* fs.stat(feedback).pipe(Effect.option);
-    const bytes = info._tag === "Some" ? Number(info.value.size) : 0;
-    if (bytes !== size) {
+    const change = yield* changeOf(feedback);
+    if (change !== seen) {
       let held = 0;
       const taken = yield* claim(feedback, name, (fresh) => {
         const pick = listenerPick(fresh, journey);
         held = pick.held;
         return pick;
       }).pipe(
-        Effect.tap(() => Effect.sync(() => (size = bytes))),
+        Effect.tap(() => Effect.sync(() => (seen = change))),
         Effect.catch((error: unknown) =>
           Console.error(`[listener] could not read the notes, tries again: ${String(error)}`).pipe(
             Effect.as([] as readonly Line[]),
@@ -94,16 +110,7 @@ export const listen = Effect.fn(function* (
         ),
       );
       // One write, so the watcher wakes the agent once for a note and the settles before it.
-      const printed = taken.map((line) => {
-        const age = ageOf(line.sentAt, now);
-        if (!wakes(line)) return `[status, sent ${age}] ${line.raw}`;
-        const tag = backlog
-          ? `old, sent ${age}, before you listened`
-          : cameLate(line.sentAt, now, LATE_MS)
-            ? `late, sent ${age}`
-            : `new, sent ${age}`;
-        return `[${tag}] ${line.raw}`;
-      });
+      const printed = tagged(taken, now, backlog);
       if (printed.length > 0) yield* Console.log(printed.join("\n"));
       if (backlog) {
         backlog = false;

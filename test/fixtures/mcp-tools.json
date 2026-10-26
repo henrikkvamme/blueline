@@ -1,0 +1,67 @@
+{
+  "instructions": "Blueline gives you the reviewer's lines from the review panel. Call wait_for_feedback when you wait for the reviewer. Answer each message with reply, on its id. Apply the reviewer's verdicts on a part's variants with apply.",
+  "tools": [
+    {
+      "name": "wait_for_feedback",
+      "description": "Waits for the reviewer's next lines and returns them, each a JSON line after a tag that says when it was sent. A line with an id, a chat's message or the hand-off of a finished review, needs your answer: before you work on it, call reply with state working and your plan, then reply with state replied. A settle before it only says where the review is. The settle with left 0 ends the review: apply the kept variants. Each line comes to you once, here or in a hook. When nothing comes for a while, it says so: call it again to wait more.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "reply",
+      "description": "Answers a line in the review panel, on its id. working: you are on it, and blocks is your plan, such as {\"kind\":\"plan\",\"items\":[{\"text\":\"Move the button\",\"state\":\"doing\"}]}; each working reply puts its plan in place of the last. replied: your answer in text, with the variant it shows on the page and blocks, if any. settled: only after the reviewer said it is right.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The line's id."
+          },
+          "state": {
+            "type": "string",
+            "enum": ["working", "replied", "settled"]
+          },
+          "text": {
+            "type": "string",
+            "description": "Your answer, for replied."
+          },
+          "variant": {
+            "type": "string",
+            "description": "The label of the variant your answer shows on the page, for replied."
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "What the panel shows besides your words: your plan, for working."
+          }
+        },
+        "required": ["id", "state"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "apply",
+      "description": "Applies the reviewer's verdicts on a part's variants to the code and returns each change. With one variant kept, the part's variants() call becomes that variant. With more than one kept, it says which: call it again with keep.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "part": {
+            "type": "string",
+            "description": "The part's name."
+          },
+          "keep": {
+            "type": "string",
+            "description": "The label of the variant to keep."
+          }
+        },
+        "required": ["part"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}
