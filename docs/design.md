@@ -1062,6 +1062,119 @@ still, and puts the page back.
      gradient and `<use>`, a fixed child at its place in a transformed parent, a dark page's
      background, and a page of 5000 rows copied in bounded time.
 
+### C1 in steps
+
+`blueline mcp` is an MCP server on stdio for one agent. It gives the agent three tools:
+`wait_for_feedback`, `reply` and `apply`. It reads and writes the W0 files, as `listen`,
+`reply` and `apply` do, so it does not need `blueline serve`. C2 adds the hooks, the
+registration in `.blueline/agents.json` and `blueline setup`, which writes the command into
+each harness.
+
+1. **The command.**
+   `blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]`.
+   - `--as` is the reader's name for the claims, as for `listen`: by default the journey, or
+     `agent`. A hook of the same agent uses the same name, so the agent has one cursor.
+   - `--journey` limits the lines to one journey, as for `listen`. It is a flag and not a
+     tool input: the cursor goes past the lines of other journeys, so one reader keeps one
+     journey.
+   - `--status` is `status.json` beside the feedback file by default, as the server keeps
+     them. `--src` is the working folder by default.
+   - `--wait` is the longest time one `wait_for_feedback` call waits: 240 s by default, from
+     1 to 3540. ADR 0005 sets it below the client's tool timeout less 10 s and the cache
+     lifetime less 60 s. `blueline setup` (C2) sets it for each harness. It is a flag, so no
+     tool or its words hold it.
+   - Nothing but the protocol goes to stdout. Each tool returns its text; a message for a
+     person goes to stderr.
+2. **The SDK.** The official TypeScript SDK, v2: `@modelcontextprotocol/server` 2.4.0, the
+   latest stable release, Apache-2.0. It depends only on `@modelcontextprotocol/core` and
+   `zod`. `serveStdio` serves both the 2025 protocol, with `initialize`, and the 2026-07-28
+   one. It is a dependency of the package, as the command is not bundled. The tests use
+   `@modelcontextprotocol/client` 2.4.0, a dev dependency.
+   - Not Effect's `effect/ai/McpServer`: it is marked unstable, so it needs a new
+     `allowedUnstableApis` entry, while a stable SDK does the job.
+   - The SDK takes a tool's input as a Standard Schema with JSON Schema. Blueline gives the
+     JSON Schema as fixed JSON, and checks the input with Effect Schema. Effect's own JSON
+     Schema for `Schema.optional` says `null`, and it would follow each change to the blocks.
+3. **The words never change** (ADR 0005, cache rules). `src/mcp/tools.ts` holds the server's
+   instructions, and each tool's name, description and input schema, as plain constants,
+   in this order. They hold no counts, times, paths or state. The server says
+   `tools: { listChanged: false }`, registers the tools before it connects, and never sends
+   `notifications/tools/list_changed`. A test holds the whole `tools/list` answer and the
+   instructions as a fixture. A change to the words fails it, and the change must be
+   deliberate, as it costs every agent its prompt cache once.
+   - **Instructions:** "Blueline gives you the reviewer's lines from the review panel.
+     Call wait_for_feedback when you wait for the reviewer. Answer each message with reply,
+     on its id. Apply the reviewer's verdicts on a part's variants with apply."
+   - **`wait_for_feedback`**, no input. "Waits for the reviewer's next lines and returns
+     them, each a JSON line after a tag that says when it was sent. A line with an id, a
+     chat's message or the hand-off of a finished review, needs your answer: before you work
+     on it, call reply with state working and your plan, then reply with state replied. A
+     settle before it only says where the review is. The settle with left 0 ends the review:
+     apply the kept variants. Each line comes to you once, here or in a hook. When nothing
+     comes in some minutes, it says so: call it again to wait more."
+   - **`reply`**: `id` (string, required), `state` (`working`, `replied` or `settled`,
+     required), `text`, `variant` and `blocks` (a list of objects). "Answers a line in the
+     review panel, on its id. working: you are on it, and blocks is your plan, such as
+     {"kind":"plan","items":[{"text":"Move the button","state":"doing"}]}; each working reply
+     puts its plan in place of the last. replied: your answer in text, with the variant it
+     shows on the page and blocks, if any. settled: only after the reviewer said it is
+     right."
+   - **`apply`**: `part` (string, required) and `keep` (string). "Applies the reviewer's
+     verdicts on a part's variants to the code and returns each change. With one variant
+     kept, the part's variants() call becomes that variant. With more than one kept, it says
+     which: call it again with keep."
+4. **How `wait_for_feedback` waits.** Each call claims through W0's `claim`, by the reader's
+   name, with `listenerPick`, as `listen` does: the lines up to the last line that needs the
+   agent, and the settles before it. A settle alone does not end the wait; it waits,
+   unclaimed, for the next line. The call claims at once, and then each second when the
+   feedback file's size has changed.
+   - **Lines.** One text result, one line for each claimed line, tagged as `listen` tags them
+     (one shared function): `status`, `new`, `late`, or `old ... before you listened` for
+     the first lines this server gives.
+   - **Time.** At `--wait`, the call returns one fixed line: "Nothing new. Call
+     wait_for_feedback again to wait more."
+   - **Abort.** A client's `notifications/cancelled` aborts the request's signal, and the
+     wait stops. The pick reads the signal under the lock: an aborted call claims nothing.
+     The claim and the result after it cannot be interrupted. A cancel that comes after
+     the claim, in the time to write one message, loses those lines for this reader.
+   - **The client goes away.** When stdin ends, the SDK closes the transport and aborts
+     every request in flight, so no wait claims after it. `blueline mcp` then ends with
+     code 0. A signal ends it the same way.
+   - A line that one reader claimed is never another reader's (W0), so a line that the agent
+     pulled does not come again by a wake, and a line that a wake took does not come here.
+5. **`reply` and `apply`** do what the commands do. The commands' code is split, so the
+   tool and the command share it:
+   - `bin/reply.ts`: the write under the status file's lock takes the blocks as data; the
+     command reads them from `--blocks`, and the tool from its input. A `replied` with no
+     text, or a `settled` with text or blocks, is an error result that says why. Blocks that
+     do not read are an error result that names the first issue.
+   - `bin/apply-run.ts` returns its lines, and the command prints them. The tool returns
+     them. A failure that says what the agent must decide, such as which variant to keep, is
+     an error result with those words.
+6. **Files.** `bin/mcp.ts` runs the server: the Effect side runs each handler with the
+   command's services, as a Promise with the request's signal. `src/mcp/tools.ts` has the
+   words and the input schemas, with no Node import. `bin/lines.ts` gets the usage line and
+   the parse, and `bin/blueline.ts` one `case`. The manual gets a short part under "The
+   agent channel".
+7. **Tests.** In Node, on `blueline mcp` from the source as a child process, with the SDK's
+   client over stdio, on a temporary folder:
+   - The `tools/list` answer and the instructions equal the fixture; the capabilities say
+     `listChanged: false`; a raw 2025 `initialize` and `tools/list` get the same tools, and
+     no `list_changed` comes in the session.
+   - A note that comes while the call waits ends it, with the settles before it, tagged; a
+     settle alone does not end it.
+   - A line the agent pulled is not given again by a wake (`claim` by another reader), nor
+     by the next call. A line a wake took first is not given here.
+   - With `--wait 1`, the call returns the fixed line.
+   - A call the client cancels claims nothing: a line that comes after goes to a wake.
+   - When stdin ends during a wait, the process ends with code 0 within a second, and a
+     line that comes after goes to a wake.
+   - `reply` writes the status file as the command does, for each state, also with blocks;
+     each wrong input is an error result. `apply` returns the changes, says when there are
+     no verdicts, and returns the "call it again with keep" error.
+   - The command line: `mcp` with each flag, and a wrong `--wait`.
+   - Packed: `dist/bin/blueline.js mcp` lists the same tools.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.
