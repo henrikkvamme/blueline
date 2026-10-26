@@ -309,8 +309,26 @@ describe("blueline serve on bad input", () => {
     writeFileSync(state, "");
     const refused = await register(root, "http://localhost:1");
     expect(refused.status).toBe(500);
+    expect(await preflight("/blueline/unkept/", "http://localhost:1")).toBe(403);
+    // Once the folder is there again, the same registration is kept.
     rmSync(state);
     mkdirSync(state);
+    expect((await register(root, "http://localhost:1")).status).toBe(200);
+    expect(readFileSync(path.join(state, "apps.json"), "utf8")).toContain("unkept");
+  });
+
+  it("lets one of several registrations at once set the app's files", async () => {
+    const root = repository("race");
+    const tried = await Promise.all(
+      [1, 2, 3, 4].map((n) =>
+        register(root, `http://localhost:${String(n)}`, { feedback: `${String(n)}.jsonl` }),
+      ),
+    );
+    const kept = tried.filter((t) => t.status === 200);
+    expect(kept).toHaveLength(1);
+    expect(tried.filter((t) => t.status === 409)).toHaveLength(3);
+    const status = await fetch(`${url}${kept[0]?.app?.base ?? ""}status`);
+    expect(status.status).toBe(200);
   });
 });
 

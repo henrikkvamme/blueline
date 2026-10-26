@@ -142,14 +142,16 @@ async function register(
   const app = apps.app(root, await repositoryOf(root), filesOf(root, files));
   if (app === "conflict")
     return end(response, 409, { error: "A running dev server registered other files." });
+  // Open at once, so no other registration changes the app's files while this one waits.
+  const close = apps.open(app.name, given.origin);
+  if (gone) return close();
+  response.on("close", close);
   try {
     await saved();
   } catch (error) {
+    close();
     return end(response, 500, { error: String(error) });
   }
-  if (gone) return;
-  const close = apps.open(app.name, given.origin);
-  response.on("close", close);
   const registered: Registered = {
     protocol: PROTOCOL,
     name: app.name,
@@ -254,6 +256,7 @@ export async function serve(options: ServeOptions): Promise<Served> {
   // One save at a time, each with the apps as they are when it starts; the last says
   // whether the apps are kept.
   let saving = Promise.resolve();
+  let failed = false;
   const save = () => {
     saving = saving
       .catch(() => undefined)
@@ -262,8 +265,10 @@ export async function serve(options: ServeOptions): Promise<Served> {
         await mkdir(options.state, { recursive: true });
         await writeFile(`${file}.next`, text);
         await rename(`${file}.next`, file);
+        failed = false;
       })
       .catch((error: unknown) => {
+        failed = true;
         throw new Error(
           `Blueline cannot keep its apps in ${file}: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -271,7 +276,11 @@ export async function serve(options: ServeOptions): Promise<Served> {
     // A failed save is answered where a registration waits for it, and does not stop the server.
     saving.catch(() => undefined);
   };
-  const saved = () => saving;
+  /** The apps' last save, made again when it failed, so a repaired folder keeps them. */
+  const saved = () => {
+    if (failed) save();
+    return saving;
+  };
   const apps = makeApps(await kept(file), save);
   const health: Health = {
     blueline: true,
