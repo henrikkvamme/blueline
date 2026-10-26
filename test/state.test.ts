@@ -1,6 +1,14 @@
 import { Option, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { KeptSchema, openPlace, stepBy } from "../src/session/state";
+import {
+  KeptSchema,
+  openPlace,
+  placed,
+  START,
+  stepBy,
+  withPlace,
+  type Shape,
+} from "../src/session/state";
 
 describe("the step h and l go to", () => {
   const steps = ["a", "b", "c", "d"];
@@ -50,5 +58,33 @@ describe("a review kept by an older version", () => {
     const old: unknown = JSON.parse('{ "a": { "settled": true, "picked": "Card" } }');
     const read = Schema.decodeUnknownOption(KeptSchema.fields.feedback)(old);
     expect(Option.getOrUndefined(read)?.["a"]?.settled).toBe(true);
+  });
+});
+
+describe("the place kept across a changed config", () => {
+  const shape = (...steps: readonly [id: string, variants: readonly string[]][]): Shape[] => [
+    { id: "j", steps: steps.map(([id, variants]) => ({ id, group: "g", variants })) },
+  ];
+  const before = shape(["a", []], ["b", ["One", "Two"]], ["c", []]);
+  const kept = withPlace({ ...START, journey: "j", at: 1, variants: { b: 1 } }, before);
+
+  it("keeps the step by its ID and each variant by its label", () => {
+    expect(kept).toMatchObject({ step: "b", labels: { b: "Two" } });
+    const after = placed(kept, shape(["c", []], ["b", ["Two", "One", "Three"]], ["a", []]));
+    expect(after).toMatchObject({ at: 1, variants: { b: 0 } });
+  });
+
+  it("takes the place the step had when it is gone, and the first variant when its is", () => {
+    expect(placed(kept, shape(["a", []], ["x", []], ["b", ["Three"]]))).toMatchObject({
+      at: 2,
+      variants: { b: 0 },
+    });
+    expect(placed(kept, shape(["a", []], ["x", []]))).toMatchObject({ at: 1 });
+    expect(placed({ ...kept, at: 5 }, shape(["x", []]))).toMatchObject({ at: 0 });
+  });
+
+  it("reads a review kept by place only, as before", () => {
+    const old = { ...START, journey: "j", at: 2, variants: { b: 1 } };
+    expect(placed(old, before)).toMatchObject({ at: 2, variants: { b: 1 } });
   });
 });

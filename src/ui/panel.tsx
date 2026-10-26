@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, PanelRightClose } from "lucide-react";
+import { ChevronDown, ChevronRight, PanelRightClose, TriangleAlert } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { placePath } from "../part/page";
 import { stepNoteId, treeShown } from "../session/machine";
@@ -334,6 +334,7 @@ function StepView() {
               {step.try !== undefined && (
                 <p className="mt-2 text-[14px] leading-[1.55] text-dt-muted">{step.try}</p>
               )}
+              <StepTrouble step={step.id} />
             </section>
             <StepVariants />
           </>
@@ -480,5 +481,17 @@ export function StepChat({
         />
       </div>
     </>
+  );
+}
+
+/** Why the step's code failed or was late, until the step opens again. */
+function StepTrouble({ step }: { readonly step: string }) {
+  const reason = useSession((s) => s.context.trouble[step]);
+  if (reason === undefined) return null;
+  return (
+    <p role="alert" className="mt-2 flex gap-1.5 text-[13px] leading-normal text-dt-bad">
+      <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+      {reason}
+    </p>
   );
 }

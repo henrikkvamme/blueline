@@ -62,14 +62,15 @@ describe("the walk on a page", () => {
         actor.send({ type: "go", by: 1 });
         yield* ready(1);
         actor.stop();
+        // Each variant: reset, setup, the variant; leaving a: its reset.
         expect(log).toEqual([
           "enter a",
+          "reset a",
           "setup a",
           "reset a",
-          "reset a",
           "enter b",
-          "setup b",
           "reset b",
+          "setup b",
           "apply b One",
         ]);
         expect(shifts.at(-1)).toBeUndefined();
@@ -315,6 +316,7 @@ describe("the lines the agent reads", () => {
     entered: undefined,
     opening: undefined,
     leaving: undefined,
+    trouble: {},
     cursor: 0,
     row: undefined,
     tree: false,
@@ -443,5 +445,193 @@ describe("the lines the agent reads", () => {
     expect(
       postedLine([steps], { kind: "note", ids: [stepNoteId("b")], session }, "now"),
     ).not.toHaveProperty("parts");
+  });
+});
+
+/** A walk of steps with every phase, each of which says what it does. */
+function phased(more: Readonly<Record<string, Partial<DevStep<string>>>> = {}) {
+  const log: string[] = [];
+  const said = (what: string) => () => void log.push(what);
+  const step = (id: string): DevStep<string> => ({
+    id,
+    title: `Step ${id}`,
+    look: "",
+    group: { id: "g", title: "Group" },
+    setup: said(`setup ${id}`),
+    reset: said(`reset ${id}`),
+    ready: said(`ready ${id}`),
+    exit: said(`exit ${id}`),
+    ...more[id],
+  });
+  const adapter: DevAdapter<string> = {
+    journeys: [{ id: "prep", title: "Prep", steps: [step("a"), step("b"), step("c")] }],
+    context: () => "page",
+    enter: (s) => {
+      log.push(`enter ${s.id}`);
+      return "world";
+    },
+  };
+  const machine = liveMachine({ adapter, shift: () => undefined });
+  const actor = createActor(machine, {
+    input: { kept: { ...START, journey: "prep" }, journeys: shapesOf(adapter.journeys), now: 0 },
+  });
+  const ready = (at: number) =>
+    waitFor(actor, (s) => s.matches({ review: { on: "ready" } }) && s.context.at === at, {
+      timeout: 3000,
+    });
+  return { actor, machine, log, ready };
+}
+
+/** A Promise the test ends. */
+function held() {
+  let end = () => undefined as void;
+  const promise = new Promise<void>((done) => (end = done));
+  return { promise, end: () => end() };
+}
+
+describe("a step's phases", () => {
+  it("runs reset, setup, the variant and ready for a step, and reset then exit on leaving", async () => {
+    const { actor, log, ready } = phased();
+    actor.start();
+    actor.send({ type: "choose" });
+    await ready(0);
+    actor.send({ type: "go", by: 1 });
+    await ready(1);
+    expect(log).toEqual([
+      "enter a",
+      "reset a",
+      "setup a",
+      "ready a",
+      "reset a",
+      "exit a",
+      "enter b",
+      "reset b",
+      "setup b",
+      "ready b",
+    ]);
+    actor.stop();
+  });
+
+  it("runs exit when reset failed, and opens the next step only after both", async () => {
+    const exit = held();
+    let resets = 0;
+    const { actor, log, ready } = phased({
+      a: {
+        reset: () => {
+          resets += 1;
+          if (resets > 1) throw new Error("no reset");
+        },
+        exit: () => {
+          log.push("exit a");
+          return exit.promise;
+        },
+      },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await ready(0);
+    actor.send({ type: "go", by: 1 });
+    await vi.waitFor(() => expect(log).toContain("exit a"));
+    await new Promise((done) => setTimeout(done, 50));
+    expect(log).not.toContain("enter b");
+    exit.end();
+    await ready(1);
+    expect(log.slice(log.indexOf("exit a"))).toEqual([
+      "exit a",
+      "enter b",
+      "reset b",
+      "setup b",
+      "ready b",
+    ]);
+    actor.stop();
+  });
+
+  it("opens only the newest step when the reviewer goes on while the walk leaves", async () => {
+    const exit = held();
+    const { actor, log, ready } = phased({
+      a: { exit: () => (log.push("exit a"), exit.promise) },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await ready(0);
+    actor.send({ type: "go", by: 1 });
+    await vi.waitFor(() => expect(log).toContain("exit a"));
+    actor.send({ type: "go", by: 1 });
+    exit.end();
+    await ready(2);
+    expect(log).not.toContain("enter b");
+    expect(log).toContain("enter c");
+    actor.stop();
+  });
+
+  it("leaves the step on leave, and when the tools are taken off", async () => {
+    const { actor, machine, log, ready } = phased();
+    actor.start();
+    actor.send({ type: "choose" });
+    await ready(0);
+    actor.send({ type: "leave" });
+    await vi.waitFor(() => expect(log.slice(-2)).toEqual(["reset a", "exit a"]));
+    actor.send({ type: "choose" });
+    await ready(0);
+    const { entered } = actor.getSnapshot().context;
+    actor.stop();
+    machine.dispose(entered);
+    await vi.waitFor(() => expect(log.slice(-2)).toEqual(["reset a", "exit a"]));
+  });
+
+  it("fails a phase too late with its reason, runs none after it, and drops the reason when the step opens again", async () => {
+    let tries = 0;
+    const { actor, log, ready } = phased({
+      a: {
+        timeout: 100,
+        setup: (_, signal) => {
+          tries += 1;
+          log.push("setup a");
+          // The first setup never ends; its signal aborts at the deadline.
+          return tries > 1
+            ? undefined
+            : new Promise<void>((_done, fail) =>
+                signal.addEventListener("abort", () => fail(new Error("aborted"))),
+              );
+        },
+      },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await vi.waitFor(() =>
+      expect(actor.getSnapshot().context.trouble).toEqual({ a: "setup did not end in 0.1 s" }),
+    );
+    expect(log).not.toContain("ready a");
+    actor.send({ type: "go", by: 1 });
+    await ready(1);
+    actor.send({ type: "go", by: -1 });
+    await ready(0);
+    expect(actor.getSnapshot().context.trouble).toEqual({});
+    expect(log.at(-1)).toBe("ready a");
+    actor.stop();
+  });
+
+  it("says why a phase failed, and keeps no reason of a run the walk left", async () => {
+    const setup = held();
+    const { actor, ready } = phased({
+      a: {
+        ready: () => {
+          throw new Error("no panel");
+        },
+      },
+      b: { setup: () => setup.promise },
+    });
+    actor.start();
+    actor.send({ type: "choose" });
+    await vi.waitFor(() =>
+      expect(actor.getSnapshot().context.trouble).toEqual({ a: "ready failed: no panel" }),
+    );
+    actor.send({ type: "go", by: 1 });
+    await vi.waitFor(() => expect(actor.getSnapshot().context.at).toBe(1));
+    actor.send({ type: "go", by: 1 });
+    await ready(2);
+    setup.end();
+    expect(actor.getSnapshot().context.trouble).toEqual({ a: "ready failed: no panel" });
+    actor.stop();
   });
 });

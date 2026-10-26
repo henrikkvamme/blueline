@@ -7,6 +7,7 @@ import { PAGE_JOURNEY, pageJourney, pageParts, placeId } from "../part/page";
 import { parts, type Verdicts } from "../part/store";
 import { liveMachine, shapesOf } from "../session/actors";
 import type { SessionActor, sessionMachine } from "../session/machine";
+import { placed, withPlace } from "../session/state";
 import type { DevAdapter, DevInfo, DevShift, JourneyInfo, StepInfo } from "../types";
 
 /*
@@ -54,6 +55,8 @@ export interface SessionOptions<C> {
   readonly storageKey: string;
   /** The page's path now: each path has its own notes and its own journey of parts. */
   readonly path: () => string;
+  /** Why the app's config is not used, for the tree. */
+  readonly problem?: string | undefined;
 }
 
 export interface Session {
@@ -74,13 +77,22 @@ export interface Session {
 }
 
 /** Starts the review session on the page. */
-export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>): Session {
+export function startSession<C>({
+  adapter,
+  storageKey,
+  path,
+  problem,
+}: SessionOptions<C>): Session {
   // The page's path, then the parts on it that have variants: the page's own review has a
   // step for each. The machine runs the adapter's code; the view reads `info`.
   const pageOf = () => [path(), ...pageParts(parts.current().instances)].join("\n");
   const infoOf = (page: string): DevInfo => {
     const [place, ...names] = page.split("\n");
-    return { ...adapter, journeys: [...adapter.journeys, pageJourney(names, place)] };
+    return {
+      ...adapter,
+      journeys: [...adapter.journeys, pageJourney(names, place)],
+      ...(problem === undefined ? {} : { problem }),
+    };
   };
   let page = pageOf();
   let info = infoOf(page);
@@ -104,8 +116,9 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
   // A link to a journey the app does not have is not kept, so a later link still counts.
   let linked = first !== undefined && known(first.journey) ? first : undefined;
   const waits = linked !== undefined;
-  const stored = loadKept(storageKey);
-  const actor = createActor(liveMachine({ adapter, shift, path }), {
+  const stored = placed(loadKept(storageKey), shapesOf(info.journeys));
+  const machine = liveMachine({ adapter, shift, path });
+  const actor = createActor(machine, {
     input: {
       kept: waits ? { ...stored, active: false } : stored,
       journeys: shapesOf(info.journeys),
@@ -173,7 +186,9 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
   };
 
   actor.start();
-  const kept = actor.subscribe((s) => saveKept(storageKey, keptOf(s.context)));
+  const kept = actor.subscribe((s) =>
+    saveKept(storageKey, withPlace(keptOf(s.context), s.context.journeys)),
+  );
   const judging = actor.subscribe(judge);
   judge(actor.getSnapshot());
   const partsMoved = parts.subscribe(moved);
@@ -193,7 +208,9 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
       partsMoved();
       judging.unsubscribe();
       kept.unsubscribe();
+      const { entered, opening } = actor.getSnapshot().context;
       actor.stop();
+      machine.dispose(opening ?? entered);
       listeners.clear();
     },
   };

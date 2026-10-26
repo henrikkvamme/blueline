@@ -7,7 +7,7 @@ import { listenedJourneys } from "../io/listening";
 import { ROUTES } from "../io/routes";
 import { PAGE_JOURNEY, pageJourney, pageParts } from "../part/page";
 import { parts } from "../part/store";
-import type { DevAdapter, DevShift, DevStep, JourneyInfo } from "../types";
+import type { DevAdapter, DevResult, DevShift, DevStep, JourneyInfo } from "../types";
 import { postedLine } from "./lines";
 import {
   sessionMachine,
@@ -43,6 +43,46 @@ const quietly = <A>(what: string, effect: Effect.Effect<A>) =>
     Effect.asVoid,
     Effect.catchCause((cause) => Effect.logError(`The dev tools could not ${what}`, cause)),
   );
+
+const seconds = (ms: number) => `${String(Math.round(ms / 100) / 10)} s`;
+
+/**
+ * One phase of a step's code: it ends at the step's `timeout`, when it has one, and a
+ * failure or a phase too late gives its reason, as the step's row shows it.
+ */
+const bounded = <C, A>(
+  step: DevStep<C>,
+  name: string,
+  code: (context: C, signal: AbortSignal) => DevResult<A>,
+  context: C,
+): Effect.Effect<A, string> => {
+  const ran = fromResult((signal) => code(context, signal)).pipe(
+    Effect.catchDefect((defect) =>
+      Effect.logError(`The dev tools could not run the step's ${name}`, defect).pipe(
+        Effect.andThen(Effect.fail(`${name} failed: ${messageOf(defect)}`)),
+      ),
+    ),
+  );
+  const { timeout } = step;
+  return timeout === undefined
+    ? ran
+    : Effect.timeoutOrElse(ran, {
+        duration: timeout,
+        orElse: () => Effect.fail(`${name} did not end in ${seconds(timeout)}`),
+      });
+};
+
+/** A phase the step may not have. */
+const phase = <C>(
+  step: DevStep<C>,
+  name: string,
+  code: ((context: C, signal: AbortSignal) => DevResult<void>) | undefined,
+  context: C,
+): Effect.Effect<void, string> =>
+  code === undefined ? Effect.void : bounded(step, name, code, context);
+
+const messageOf = (defect: unknown) =>
+  defect instanceof Error ? defect.message : typeof defect === "string" ? defect : String(defect);
 
 /** A post and the posts sent after it, in their order. */
 const chainOf = (post: Post | undefined): readonly Post[] =>
@@ -90,34 +130,67 @@ export function liveMachine<C>(live: Live<C>) {
   const stepAt = (journey: string, at: number): DevStep<C> | undefined =>
     (journeys().find((j) => j.id === journey) ?? journeys()[0])?.steps[at];
 
-  /** Takes every variant's state off, then shows this one. */
+  // Leaving a step runs its reset, then its exit, to their end, one step after another;
+  // the next step's world opens only once they ended.
+  let cleaning: Promise<void> = Promise.resolve();
+  let pending = 0;
+  const cleanup = (leaving: Entered | undefined): Promise<void> => {
+    const step = leaving === undefined ? undefined : stepAt(leaving.journey, leaving.at);
+    if (step === undefined || (step.reset === undefined && step.exit === undefined))
+      return cleaning;
+    const context = adapter.context();
+    const leave = Effect.gen(function* () {
+      yield* phase(step, "reset", step.reset, context).pipe(
+        Effect.catch((reason) => Effect.logWarning(reason)),
+      );
+      yield* phase(step, "exit", step.exit, context).pipe(
+        Effect.catch((reason) => Effect.logWarning(reason)),
+      );
+    });
+    pending += 1;
+    cleaning = cleaning
+      .then(() => Effect.runPromise(leave))
+      .finally(() => {
+        pending -= 1;
+      });
+    return cleaning;
+  };
+  // With nothing to clean, the step opens at once, as before.
+  const cleaned = Effect.suspend(() =>
+    pending === 0 ? Effect.void : Effect.promise(() => cleaning),
+  );
+
+  /** Takes every variant's state off, opens the part, shows this variant, and waits until
+   * the step is ready. A phase that fails stops the ones after it, with its reason. */
   const showVariant = (step: DevStep<C>, index: number, context: C) =>
     Effect.gen(function* () {
-      const { reset } = step;
-      if (reset !== undefined)
-        yield* Effect.uninterruptible(fromResult((signal) => reset(context, signal)));
+      if (step.reset !== undefined)
+        yield* Effect.uninterruptible(phase(step, "reset", step.reset, context));
+      yield* phase(step, "setup", step.setup, context);
       const variant = step.variants?.[index];
       if (variant?.choice !== undefined) {
         const [name, option] = variant.choice;
         const choice = yield* choiceNamed(name);
         choice?.choose(option);
       }
-      const apply = variant?.apply;
-      if (apply !== undefined) yield* fromResult((signal) => apply(context, signal));
+      yield* phase(step, `the variant ${variant?.label ?? ""}`.trim(), variant?.apply, context);
+      yield* phase(step, "ready", step.ready, context);
     });
 
-  const leave = (leaving: Entered | undefined) => {
-    const step = leaving === undefined ? undefined : stepAt(leaving.journey, leaving.at);
-    const reset = step?.reset;
-    return reset === undefined
-      ? Effect.void
-      : quietly(
-          "reset the step before",
-          Effect.uninterruptible(fromResult((signal) => reset(adapter.context(), signal))),
-        );
-  };
+  /** Runs a step's code to its end and says why it failed, as its row shows it; a step the
+   * walk left says nothing. */
+  const troubled = (
+    step: DevStep<C>,
+    sendBack: (event: Event) => void,
+    walk: Effect.Effect<void, string>,
+  ) =>
+    walk.pipe(
+      Effect.catch((reason) =>
+        Effect.sync(() => sendBack({ type: "trouble", step: step.id, reason })),
+      ),
+    );
 
-  const enter = (input: EnterInput) =>
+  const enter = (input: EnterInput, sendBack: (event: Event) => void) =>
     Effect.gen(function* () {
       const step = stepAt(input.journey, input.at);
       if (step === undefined) return;
@@ -126,32 +199,37 @@ export function liveMachine<C>(live: Live<C>) {
         for (const [part, variant] of Object.entries(input.kept))
           parts.show(part, { variant, state: parts.shown(part).state });
       });
-      yield* leave(input.leaving);
+      void cleanup(input.leaving);
+      yield* cleaned;
       const started = yield* Clock.currentTimeMillis;
       let shown = false;
-      // A step of the page's review is on the page already.
-      const context =
-        input.journey === PAGE_JOURNEY
-          ? adapter.context()
-          : yield* fromResult((signal) =>
-              adapter.enter(step, {
-                fresh: input.fresh,
-                // A step the walk left shows nothing more over the next one.
-                show: (shift) => {
-                  if (signal.aborted) return;
-                  shown ||= shift !== undefined;
-                  live.shift(shift);
-                },
-                signal,
-              }),
-            );
-      const { setup } = step;
-      if (setup !== undefined)
-        yield* quietly(
-          "open the step's part",
-          fromResult((signal) => setup(context, signal)),
-        );
-      yield* quietly("show the variant", showVariant(step, input.variant, context));
+      yield* troubled(
+        step,
+        sendBack,
+        Effect.gen(function* () {
+          // A step of the page's review is on the page already.
+          const context =
+            input.journey === PAGE_JOURNEY
+              ? adapter.context()
+              : yield* bounded(
+                  step,
+                  "enter",
+                  (_: C, signal) =>
+                    adapter.enter(step, {
+                      fresh: input.fresh,
+                      // A step the walk left shows nothing more over the next one.
+                      show: (shift) => {
+                        if (signal.aborted) return;
+                        shown ||= shift !== undefined;
+                        live.shift(shift);
+                      },
+                      signal,
+                    }),
+                  adapter.context(),
+                );
+          yield* showVariant(step, input.variant, context);
+        }),
+      );
       if (shown) {
         const now = yield* Clock.currentTimeMillis;
         yield* Effect.sleep(Math.max(0, SHIFT_MS - (now - started)));
@@ -160,39 +238,43 @@ export function liveMachine<C>(live: Live<C>) {
       quietly("open the step", walk),
     );
 
-  return sessionMachine.provide({
+  const machine = sessionMachine.provide({
     actors: {
       enterStep: fromCallback<Event, EnterInput>(({ input, sendBack }) =>
-        run(enter(input).pipe(Effect.andThen(Effect.sync(() => sendBack({ type: "entered" }))))),
+        run(
+          enter(input, sendBack).pipe(
+            Effect.andThen(Effect.sync(() => sendBack({ type: "entered" }))),
+          ),
+        ),
       ),
+      // The walk left the step for the page: its reset and exit run to their end.
+      leaveStep: fromCallback<Event, Entered | undefined>(({ input }) => {
+        void cleanup(input);
+        return () => undefined;
+      }),
       switchVariant: fromCallback<Event, SwitchInput>(({ input, sendBack }) =>
         run(
           Effect.gen(function* () {
             const step = stepAt(input.journey, input.at);
             if (step !== undefined)
-              yield* quietly(
-                "show the variant",
-                showVariant(step, input.variant, adapter.context()),
-              );
+              yield* troubled(step, sendBack, showVariant(step, input.variant, adapter.context()));
             sendBack({ type: "switched" });
           }),
         ),
       ),
-      // A page that loads late can undo the step's setup, as a draft that opens on its
-      // own step. While the part is not there, the walk opens it again, a few times.
-      keep: fromCallback<Event, KeepInput>(({ input }) =>
+      // A page that loads late can draw the step's part again, as a draft that opens on its
+      // own step. While the part is not there, the walk shows the variant again from its
+      // start, a few times.
+      keep: fromCallback<Event, KeepInput>(({ input, sendBack }) =>
         run(
           Effect.gen(function* () {
             const step = stepAt(input.journey, input.at);
-            const { setup, target } = step ?? {};
-            if (setup === undefined || target === undefined) return;
+            const target = step?.target;
+            if (step === undefined || target === undefined || step.setup === undefined) return;
             for (let tries = 0; tries < 8; tries += 1) {
               yield* Effect.sleep("700 millis");
               if (target.some((t) => document.querySelector(t) !== null)) continue;
-              yield* quietly(
-                "open the step's part again",
-                fromResult((signal) => setup(adapter.context(), signal)),
-              );
+              yield* troubled(step, sendBack, showVariant(step, input.variant, adapter.context()));
             }
           }),
         ),
@@ -243,6 +325,9 @@ export function liveMachine<C>(live: Live<C>) {
       ),
     },
   });
+  /** Takes the tools off: the step's reset and exit start, and nothing waits for them. */
+  const dispose = (entered: Entered | undefined) => void cleanup(entered);
+  return Object.assign(machine, { dispose });
 }
 
 export type LiveMachine = ReturnType<typeof liveMachine>;

@@ -29,6 +29,7 @@ import { swipeOf, swipeStarts, type Point } from "../ui/swipe";
 import { liftActionLabel, liftActions, type LiftAction } from "./lift-actions";
 import { parts, type StageOption } from "./store";
 import { elementOf } from "../core/root";
+import { isSent } from "../keys/sent";
 
 /*
  * The lift: v takes the reviewed part off the page onto a stage, with the page dimmed
@@ -382,6 +383,7 @@ export function Lift({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isSent(e)) return;
       // A note's field keeps its keys; Escape there closes the note, not the lift.
       const t = elementOf(e);
       if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)))

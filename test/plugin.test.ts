@@ -146,6 +146,20 @@ describe("the Vite plugin", () => {
     expect(await (await fetch(`${off.url}/`)).text()).not.toContain(TAG);
   });
 
+  it("has the tag import the app's config through Vite, from the dev server's base", async () => {
+    const { root, url } = await vite({}, { base: "/app/" });
+    expect(await (await fetch(`${url}${TAG}`)).text()).not.toContain("blueline.config");
+    writeFileSync(
+      path.join(root, "blueline.config.ts"),
+      "const journeys: readonly unknown[] = [];\nexport default { journeys };\n",
+    );
+    const tag = await (await fetch(`${url}${TAG}`)).text();
+    expect(tag).toContain('"/app/blueline.config.ts"');
+    const config = await fetch(`${url}/app/blueline.config.ts`);
+    expect(config.status).toBe(200);
+    expect(await config.text()).not.toContain("readonly unknown[]");
+  });
+
   it("serves the overlay from the server, and 304 while it is the same", async () => {
     const { url } = await vite();
     await registered(url);

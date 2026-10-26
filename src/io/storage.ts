@@ -78,6 +78,10 @@ export function loadKept(key: string): Kept {
       folds: field(fields.folds, raw["folds"], START.folds),
       finish: field(fields.finish, raw["finish"], START.finish),
       handoff: field(fields.handoff, raw["handoff"], START.handoff),
+      ...(typeof raw["step"] === "string" ? { step: raw["step"] } : {}),
+      ...(isRecord(raw["labels"])
+        ? { labels: field(Schema.Record(Schema.String, Schema.String), raw["labels"], {}) }
+        : {}),
     };
   } catch {
     return START;

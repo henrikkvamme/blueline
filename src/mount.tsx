@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import { claim, owner } from "./core/owner";
 import { part } from "./part/part";
 import { startSession } from "./core/session";
+import { configAdapter } from "./config/adapter";
+import { checkConfig } from "./config/rules";
 import type { DevAdapter } from "./types";
 import { Running } from "./ui/devtools";
 import { openHost } from "./ui/host";
@@ -50,14 +52,19 @@ const MOVES = ["popstate", "hashchange"] as const;
 
 /** Puts the dev tools on the page. A page has one overlay: the newest, from `mount` or
  * `<DevTools>`, takes the one before off. */
-export function mount<C>({
+export function mount<C>(options: MountOptions<C>): Blueline {
+  return mountTools(options);
+}
+
+function mountTools<C>({
   adapter,
   storageKey,
   anchors = ["data-review", "data-testid", "id"],
   path = () => location.pathname,
   navigate,
-}: MountOptions<C>): Blueline {
-  const session = startSession({ adapter, storageKey, path });
+  problem,
+}: MountOptions<C> & { readonly problem?: string | undefined }): Blueline {
+  const session = startSession({ adapter, storageKey, path, problem });
   const host = openHost();
   const root = createRoot(host.container);
   root.render(<Running session={session} anchors={anchors} goTo={{ current: navigate }} />);
@@ -104,18 +111,37 @@ export interface PageOptions {
   readonly storageKey: string;
   /** Where the page's channel is: the dev server's routes when none. */
   readonly routes?: NonNullable<DevAdapter<void>["channel"]>;
+  /** The app's journeys as data, from `blueline.config.ts` (config/index.ts). */
+  readonly config?: unknown;
+  /** Why the page could not load the app's config. */
+  readonly problem?: string;
 }
 
-/** The page's own review, as a script tag or the Vite plugin puts it on a page. Does nothing
- * when an overlay owns the page already, as the app's own `mount` or `<DevTools>`: the app's
- * tools come first. */
-export function mountPage({ storageKey, routes }: PageOptions): Blueline | undefined {
+/** The page's own review, as a script tag or the Vite plugin puts it on a page, with the
+ * app's config. A config that breaks a rule is not used: the page has its own review only,
+ * and the tree and the console say why. Does nothing when an overlay owns the page already,
+ * as the app's own `mount` or `<DevTools>`: the app's tools come first. */
+export function mountPage({
+  storageKey,
+  routes,
+  config,
+  problem: unloaded,
+}: PageOptions): Blueline | undefined {
   if (owner() !== undefined) return undefined;
+  const channel = routes === undefined ? {} : { channel: routes };
+  const checked = config === undefined ? undefined : checkConfig(config);
+  if (checked?.kind === "ok")
+    return mount({
+      adapter: configAdapter(checked.config, { storageKey, ...channel }),
+      storageKey,
+    });
+  const problem = checked?.kind === "broken" ? checked.reason : unloaded;
+  if (problem !== undefined) console.error(`Blueline does not use the config: ${problem}`);
   const adapter: DevAdapter<void> = {
     journeys: [],
     context: () => undefined,
     enter: () => undefined,
-    ...(routes === undefined ? {} : { channel: routes }),
+    ...channel,
   };
-  return mount({ adapter, storageKey });
+  return mountTools({ adapter, storageKey, problem });
 }

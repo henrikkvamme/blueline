@@ -16,6 +16,7 @@
     ".": "./src/index.ts",
     "./react": "./src/react.ts",
     "./choices": "./src/choices.ts",
+    "./config": "./src/config/index.ts",
     "./variants": "./src/part/variants.tsx",
     "./vite": "./src/vite.ts",
     "./workshop": "./src/workshop/workshop.tsx",
@@ -37,6 +38,10 @@
       "./choices": {
         "types": "./dist/choices.d.ts",
         "default": "./dist/choices.js"
+      },
+      "./config": {
+        "types": "./dist/config.d.ts",
+        "default": "./dist/config.js"
       },
       "./variants": {
         "types": "./dist/variants.d.ts",

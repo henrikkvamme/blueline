@@ -80,6 +80,8 @@ export interface Context extends Kept {
   /** What the walk leaves: the step it last started, which a key press may have stopped
    * halfway, so its variant's state can be on the page. */
   readonly leaving: Entered | undefined;
+  /** Why a step's code failed or was late, by the step's ID, until the step opens again. */
+  readonly trouble: Readonly<Record<string, string>>;
   /** The tree's selected step. */
   readonly cursor: number;
   /** The tree's selected row when it is not a step, as a note or a journey: its id. */
@@ -212,6 +214,8 @@ export type Event =
   | { readonly type: "journeys"; readonly journeys: readonly Shape[] }
   | { readonly type: "entered" }
   | { readonly type: "switched" }
+  /** A step's code failed or was late: why, as its row shows it. */
+  | { readonly type: "trouble"; readonly step: string; readonly reason: string }
   | { readonly type: "undo" }
   /** Ends the review once every step is settled: the last settle goes, held until now, and
    * the panel shows the hand-off. `at`, in ms, names the hand-off. */
@@ -289,6 +293,7 @@ export interface EnterInput {
 export interface KeepInput {
   readonly journey: string;
   readonly at: number;
+  readonly variant: number;
 }
 
 export interface SwitchInput {
@@ -607,6 +612,7 @@ export const sessionMachine = setup({
   actors: {
     // The dev tools give the real actors; these stand in for tests and do nothing.
     enterStep: fromCallback<Event, EnterInput>(() => undefined),
+    leaveStep: fromCallback<Event, Entered | undefined>(() => undefined),
     switchVariant: fromCallback<Event, SwitchInput>(() => undefined),
     post: fromCallback<Event, Post>(() => undefined),
     keep: fromCallback<Event, KeepInput>(() => undefined),
@@ -637,10 +643,12 @@ export const sessionMachine = setup({
       handoff: null,
     }),
     // The page view: the panel shows the page's chat.
+    // The step it leaves is left once off: its reset and exit run (`leaveStep`).
     deactivate: assign({
       active: false,
       row: undefined,
       tree: false,
+      leaving: ({ context }) => context.opening,
       entered: undefined,
       opening: undefined,
       preview: false,
@@ -750,6 +758,7 @@ export const sessionMachine = setup({
     entered: undefined,
     opening: undefined,
     leaving: undefined,
+    trouble: {},
     cursor: input.kept.at,
     row: undefined,
     tree: false,
@@ -761,6 +770,11 @@ export const sessionMachine = setup({
     future: [],
   }),
   on: {
+    trouble: {
+      actions: assign({
+        trouble: ({ context, event }) => ({ ...context.trouble, [event.step]: event.reason }),
+      }),
+    },
     listening: { actions: assign({ listened: ({ event }) => event.listened }) },
     journeys: { actions: assign({ journeys: ({ event }) => event.journeys }) },
     place: { actions: assign({ place: ({ event }) => event.place }) },
@@ -1186,6 +1200,7 @@ export const sessionMachine = setup({
       states: {
         starting: { always: [{ guard: "wasActive", target: "on" }, { target: "off" }] },
         off: {
+          invoke: { src: "leaveStep", input: ({ context }) => context.leaving },
           on: {
             start: {
               target: "on",
@@ -1289,8 +1304,10 @@ export const sessionMachine = setup({
             entering: {
               entry: assign(({ context }) => {
                 const variants = keptVariants(context);
+                const { [stepOf(context)?.id ?? ""]: _, ...trouble } = context.trouble;
                 return {
                   tree: false,
+                  trouble,
                   variants,
                   leaving: context.opening,
                   opening: {
@@ -1348,7 +1365,11 @@ export const sessionMachine = setup({
               always: { guard: "variantStale", target: "switching" },
               invoke: {
                 src: "keep",
-                input: ({ context }) => ({ journey: context.journey, at: context.at }),
+                input: ({ context }) => ({
+                  journey: context.journey,
+                  at: context.at,
+                  variant: variantOf(context),
+                }),
               },
             },
           },

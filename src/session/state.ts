@@ -140,6 +140,10 @@ export const KeptSchema = Schema.Struct({
    * with a finished review, opened from its journey's row. Null while the panel shows the tree
    * or a step, as it does right after Finish. */
   handoff: Schema.NullOr(Schema.String),
+  /** The step by its ID, and each step's variant by its label (`placed`), so a changed
+   * journey keeps the place. A review kept before them has the place only. */
+  step: Schema.optional(Schema.String),
+  labels: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type Kept = typeof KeptSchema.Type;
 
@@ -168,6 +172,39 @@ export interface Shape {
     readonly group: string;
     readonly variants: readonly string[];
   }[];
+}
+
+/** The kept review with its step's ID and its variants' labels, as the journeys name them. */
+export function withPlace(kept: Kept, journeys: readonly Shape[]): Kept {
+  const steps = journeys.flatMap((j) => j.steps);
+  const step = journeys.find((j) => j.id === kept.journey)?.steps[kept.at]?.id;
+  const labels = Object.fromEntries(
+    Object.entries(kept.variants).flatMap(([id, index]) => {
+      const label = steps.find((s) => s.id === id)?.variants[index];
+      return label === undefined ? [] : [[id, label] as const];
+    }),
+  );
+  return { ...kept, ...(step === undefined ? {} : { step }), labels };
+}
+
+/**
+ * The kept review in the journeys as they are now: the step by its ID, else at its place or
+ * the journey's first; each variant by its label, else the first.
+ */
+export function placed(kept: Kept, journeys: readonly Shape[]): Kept {
+  const journey = journeys.find((j) => j.id === kept.journey);
+  if (journey === undefined) return kept;
+  const found = kept.step === undefined ? -1 : journey.steps.findIndex((s) => s.id === kept.step);
+  const at = found >= 0 ? found : kept.at < journey.steps.length ? Math.max(0, kept.at) : 0;
+  if (kept.labels === undefined) return { ...kept, at };
+  const steps = journeys.flatMap((j) => j.steps);
+  const variants = Object.fromEntries(
+    Object.entries(kept.labels).map(([id, label]) => [
+      id,
+      Math.max(0, steps.find((s) => s.id === id)?.variants.indexOf(label) ?? 0),
+    ]),
+  );
+  return { ...kept, at, variants };
 }
 
 /** What the walk last opened: the step it leaves takes its variants' state off. */

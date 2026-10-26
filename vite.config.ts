@@ -115,6 +115,9 @@ export default defineConfig({
       entry: {
         react: "src/react.ts",
         choices: "src/choices.ts",
+        // The config's types and `defineConfig`, with no import: `blueline serve` serves it
+        // to a config that a tag by hand loads.
+        config: "src/config/index.ts",
         variants: "src/part/variants.tsx",
         workshop: "src/workshop/workshop.tsx",
       },

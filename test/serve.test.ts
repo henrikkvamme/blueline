@@ -412,6 +412,107 @@ describe("blueline serve for pages", () => {
     expect((await fetch(`${url}/blueline/nobody/tag.js`)).status).toBe(404);
   });
 
+  it("serves an app's config without its types, its import named at this server", async () => {
+    const root = repository("configured");
+    writeFileSync(
+      path.join(root, "blueline.config.ts"),
+      [
+        'import { defineConfig, type BluelineConfig } from "@henrikkvamme/blueline/config";',
+        "const steps: BluelineConfig['journeys'][number]['steps'] = [];",
+        'export default defineConfig({ journeys: [{ id: "j", title: "J", steps }] });',
+        "",
+      ].join("\n"),
+    );
+    const a = await registered(root, page);
+    const config = await fetch(`${url}${a.base}config.js`, { headers: { origin: page } });
+    expect(config.status).toBe(200);
+    expect(config.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(config.headers.get("access-control-allow-origin")).toBe(page);
+    const text = await config.text();
+    expect(text).toContain(`import { defineConfig } from "${url}/blueline/config.js"`);
+    expect(text).not.toContain("BluelineConfig");
+    expect(text).toContain("const steps = [];");
+    const tag = await (await fetch(`${url}${a.base}tag.js`, { headers: { origin: page } })).text();
+    expect(tag).toContain(`"${url}${a.base}config.js"`);
+    expect(tag).toContain(`new EventSource("${url}${a.base}events")`);
+    expect((await raw(`${a.base}config.js`, { origin: "http://localhost:1" })).status).toBe(403);
+    expect((await fetch(`${url}/blueline/nobody/config.js`)).status).toBe(404);
+  });
+
+  it("gives a tag no config, and 404 for it, when the root has none", async () => {
+    const a = await registered(repository("plain"), page);
+    const tag = await (await fetch(`${url}${a.base}tag.js`, { headers: { origin: page } })).text();
+    expect(tag).not.toContain("config.js");
+    expect((await fetch(`${url}${a.base}config.js`, { headers: { origin: page } })).status).toBe(
+      404,
+    );
+  });
+
+  it("refuses a config that imports other code, and names the Vite plugin", async () => {
+    const root = repository("importing");
+    writeFileSync(
+      path.join(root, "blueline.config.js"),
+      'import { steps } from "./steps.js";\nexport default { journeys: [{ id: "j", title: "J", steps }] };\n',
+    );
+    const a = await registered(root, page);
+    const refused = await fetch(`${url}${a.base}config.js`, { headers: { origin: page } });
+    expect(refused.status).toBe(500);
+    const why = await refused.text();
+    expect(why).toContain("./steps.js");
+    expect(why).toContain("devtoolsChannel()");
+    writeFileSync(
+      path.join(root, "blueline.config.js"),
+      'export default await import("./steps.js");\n',
+    );
+    expect((await fetch(`${url}${a.base}config.js`, { headers: { origin: page } })).status).toBe(
+      500,
+    );
+  });
+
+  it("serves the built config module to any page", async () => {
+    await served?.close();
+    const config = path.join(mkdtempSync(path.join(base, "dist-")), "config.js");
+    writeFileSync(config, "export const defineConfig = (config) => config;\n");
+    const result = await serve({ port: 0, state, config });
+    if (result.kind !== "started") throw new Error("Another server answered.");
+    served = result;
+    url = `http://127.0.0.1:${String(result.port)}`;
+    const module = await fetch(`${url}/blueline/config.js`, { headers: { origin: page } });
+    expect(module.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await module.text()).toContain("defineConfig");
+  });
+
+  it("tells a page of the app's origins when the config changes, and no other page", async () => {
+    const root = repository("watched");
+    const file = path.join(root, "blueline.config.ts");
+    writeFileSync(file, "export default { journeys: [] };\n");
+    const a = await registered(root, page);
+    expect((await raw(`${a.base}events`, { origin: "http://localhost:1" })).status).toBe(403);
+    const stop = new AbortController();
+    ended.push(() => stop.abort());
+    const events = await fetch(`${url}${a.base}events`, {
+      headers: { origin: page },
+      signal: stop.signal,
+    });
+    expect(events.headers.get("content-type")).toBe("text/event-stream");
+    expect(events.headers.get("access-control-allow-origin")).toBe(page);
+    const reader = events.body?.getReader();
+    if (reader === undefined) throw new Error("No events");
+    let text = "";
+    const heard = (async () => {
+      while (!text.includes("event: change")) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        text += new TextDecoder().decode(chunk.value);
+      }
+    })();
+    // The server watches once the page listens.
+    await vi.waitFor(() => expect(text).toContain(": listening"));
+    writeFileSync(file, 'export default { journeys: [{ id: "j", title: "J", steps: [] }] };\n');
+    await heard;
+    expect(text).toContain("event: change");
+  });
+
   it("keeps an origin for a tag by hand across restarts, until it is removed", async () => {
     const root = repository("by-hand");
     const keep = (origin: string, headers: Record<string, string> = {}) =>

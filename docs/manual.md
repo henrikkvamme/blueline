@@ -28,6 +28,8 @@ their own CSS. Three places use it:
   or `<DevTools>` takes the one before off, and a lifted part lands. `useReviewControl()`
   starts a review on the overlay that has the page, or on the next one to start.
 - `variants` from `@henrikkvamme/blueline/variants` on each part with more than one design.
+- Or no adapter code: the journeys as data, in `blueline.config.ts` in the app's root (see
+  "Journeys in a config").
 
 The agent's command is `blueline`. `examples/review-demo` is a small app set up this way, with
 one journey over two pages and one part with variants; `pnpm run demo` starts it on port 4310.
@@ -62,6 +64,73 @@ saved review in `localStorage`: its format can change.
 
 The `DevWalk` type names the values. A CSS rule can use it too, as
 `:root[data-blueline="step"] .shortcut-hint { display: none; }`.
+
+## Journeys in a config
+
+An app can give its journeys as data, with no adapter code. `blueline.config.ts` (or
+`.js`) in the app's root gives them, and the page's own review gets them: through the Vite
+plugin, or through a tag by hand.
+
+```ts
+import { defineConfig } from "@henrikkvamme/blueline/config";
+
+export default defineConfig({
+  journeys: [
+    {
+      id: "request",
+      title: "Handle a request",
+      steps: [
+        {
+          id: "inbox",
+          title: "The inbox",
+          look: "Each request shows its sender and its age.",
+          group: "Manager",
+          enter: [{ open: "/inbox" }],
+          setup: [{ click: "#filters" }],
+          reset: [{ press: "Escape", on: "#filters" }],
+          ready: ["#inbox [data-row]"],
+          target: ["#inbox"],
+          variants: [{ label: "Dense", show: [{ click: "#dense" }] }, { label: "Roomy" }],
+        },
+      ],
+    },
+  ],
+});
+```
+
+- A step has what a `DevStep` has, with `group` as one string, its ID and its title.
+- `enter` opens the step's world; `setup` opens its part, again before each variant;
+  `reset` takes a variant's state off; `exit` runs when the walk leaves the step, after
+  `reset`. Each is a list of actions or a function that gets an `AbortSignal`.
+- `ready` is the selectors that show the step is ready, or a function.
+- `timeout` is how many milliseconds each of these may take: 5000 by default. A phase that
+  fails or is too late stops the phases after it. The step's mark on the bar and its row,
+  and its words in the panel, say why in red, until the step opens again.
+- A variant has a `label`, unique in its step, and a `choice` (`[name, option]`) or `show`.
+
+The actions:
+
+| Action                                            | What it does                                                                                                                                                               |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{ open: path }`                                  | Goes to the path with a new page load, unless the page is there. Only the first action of `enter`.                                                                         |
+| `{ click: selector }`                             | Clicks the element.                                                                                                                                                        |
+| `{ type: text, into: selector }`                  | Focuses the field and sets its value as typing does, so React and other frameworks see it.                                                                                 |
+| `{ press: key, on?, shift?, ctrl?, alt?, meta? }` | Sends the key down and up to the element, or to the focused one. Enter on a field in a form submits it, unless a handler stopped it. Blueline's own keys do not act on it. |
+| `{ wait: selector }`                              | Waits for the element.                                                                                                                                                     |
+| `{ emit: name, detail? }`                         | Sends a window `CustomEvent`.                                                                                                                                              |
+
+Each action that names an element waits for it first. When an action loads a new page, as a
+click on a link does, the step goes on on the new page at the next action.
+
+Journey IDs are unique, and step IDs are unique across all journeys: notes, verdicts and
+variants are kept by them, and the review keeps its step and variant when the config
+changes. `page`, and IDs that start with `page:` or `place:`, are the page review's. A config
+that breaks a rule is not used: the tree says why in place of the journeys, and so does the
+console.
+
+A change to the config loads the page again, on the same step. Through the Vite plugin the
+config may import the app's code. A tag by hand loads it from `blueline serve`, which takes
+its types off; it may import only `@henrikkvamme/blueline/config`.
 
 ## Names
 
@@ -530,6 +599,8 @@ blueline add http://localhost:3000
 It prints the tag to put in the page in development, as
 `<script type="module" src="http://127.0.0.1:4399/blueline/<app>/tag.js"></script>`. The origin
 stays until `blueline remove http://localhost:3000`. A page cannot keep its own origin.
+When the root has `blueline.config.ts`, the tag loads it from the server at
+`/blueline/<app>/config.js`, and the page loads again when the file changes.
 
 ### Answer the review
 

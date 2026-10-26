@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
@@ -7,7 +8,9 @@ import { promisify } from "node:util";
 import pkg from "../../package.json" with { type: "json" };
 import { filesOf, makeApps, type App, type Apps, type GivenFiles } from "./apps.ts";
 import { answer, type ChannelRoute } from "./channel.ts";
+import { CONFIG_FILES, configFile, configModule } from "./config.ts";
 import { packageRoot } from "./package.ts";
+import { tagModule } from "./tag.ts";
 
 /*
  * `blueline serve`: one server on the machine for every app's channel (ADR 0003). A dev
@@ -16,7 +19,8 @@ import { packageRoot } from "./package.ts";
  * only a request that names it as its `Host`, so a site that points a name of its own at
  * the loopback address reads nothing. A request with no `Origin` is a tool's, as the
  * agent's; a page's must come from one of its app's registered origins. The server also
- * serves the overlay, and a tag for a page that loads it by hand.
+ * serves the overlay, and a tag for a page that loads it by hand, with the app's config and
+ * an event when the config changes.
  */
 
 /** Changes only when the routes or the registration change. */
@@ -48,6 +52,8 @@ export interface ServeOptions {
   readonly state: string;
   /** The built overlay it serves: by default this package's `dist/index.js`. */
   readonly overlay?: string;
+  /** The built config module it serves: by default this package's `dist/config.js`. */
+  readonly config?: string;
   /** Runs when a tool asks the server to stop (`blueline serve stop`), once it closed. */
   readonly stopped?: () => void;
 }
@@ -215,8 +221,8 @@ async function remove(
   end(response, 200, registeredOf(app));
 }
 
-/** The built overlay, read again only when its file changes. */
-function overlayFile(file: string) {
+/** A built module, read again only when its file changes. */
+function builtFile(file: string) {
   let read: { mtime: number; size: number; body: Buffer; etag: string } | undefined;
   return async () => {
     const found = await stat(file);
@@ -228,19 +234,19 @@ function overlayFile(file: string) {
   };
 }
 
-async function serveOverlay(
-  overlay: ReturnType<typeof overlayFile>,
+async function serveBuilt(
+  built: ReturnType<typeof builtFile>,
   request: IncomingMessage,
   response: ServerResponse,
 ) {
   // Code with no data: any page may load it, and a module script loads in CORS mode.
   response.setHeader("access-control-allow-origin", "*");
-  const found = await overlay().catch(() => undefined);
+  const found = await built().catch(() => undefined);
   if (found === undefined) {
     response.statusCode = 503;
     response.setHeader("content-type", "text/plain; charset=utf-8");
     return void response.end(
-      "Blueline has no build of its overlay. Run `pnpm run pack` in Blueline.",
+      "Blueline has no build of its modules. Run `pnpm run pack` in Blueline.",
     );
   }
   response.setHeader("etag", found.etag);
@@ -251,11 +257,12 @@ async function serveOverlay(
   response.end(found.body);
 }
 
-/** The module a page loads by hand: the overlay on the app's channel, at this server. */
-function tag(app: App, host: string, response: ServerResponse) {
+/** The module a page loads by hand: the overlay on the app's channel, at this server, with
+ * the app's config when its root has one. */
+async function tag(app: App, host: string, response: ServerResponse) {
   const at = `http://${host}`;
   const base = `${at}/blueline/${app.name}/`;
-  const options = {
+  const page = {
     storageKey: `blueline.${app.name}`,
     routes: {
       feedback: `${base}feedback`,
@@ -264,11 +271,81 @@ function tag(app: App, host: string, response: ServerResponse) {
       listening: `${base}listening`,
     },
   };
+  const config = (await configFile(app.root)) !== undefined;
   response.setHeader("content-type", "text/javascript; charset=utf-8");
   response.setHeader("cache-control", "no-store");
   response.end(
-    `import { mountPage } from "${at}/blueline/overlay.js";\nmountPage(${JSON.stringify(options)});\n`,
+    tagModule({
+      overlay: `${at}/blueline/overlay.js`,
+      page,
+      ...(config ? { config: `${base}config.js`, events: `${base}events` } : {}),
+    }),
   );
+}
+
+/** The app's config as a module, its import of the config module named at this server. */
+async function config(app: App, host: string, response: ServerResponse) {
+  const file = await configFile(app.root);
+  if (file === undefined) return end(response, 404);
+  const made = await configModule(file, `http://${host}/blueline/config.js`);
+  response.setHeader("cache-control", "no-store");
+  if (made.kind === "refused") {
+    response.statusCode = 500;
+    response.setHeader("content-type", "text/plain; charset=utf-8");
+    return void response.end(made.reason);
+  }
+  response.setHeader("content-type", "text/javascript; charset=utf-8");
+  response.end(made.text);
+}
+
+/** Says to each listener when an app's config changes, with one watch of its root for all. */
+function configWatch() {
+  const watched = new Map<string, { watcher: FSWatcher; listeners: Set<() => void> }>();
+  const names: readonly string[] = CONFIG_FILES;
+  return {
+    listen: (root: string, listener: () => void) => {
+      let entry = watched.get(root);
+      if (entry === undefined) {
+        const listeners = new Set<() => void>();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        // An editor may write a file in more than one step: the page hears once.
+        const watcher = watch(root, (_event, name) => {
+          if (name === null || !names.includes(name)) return;
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            for (const l of listeners) l();
+          }, 50);
+        });
+        watcher.on("error", () => watcher.close());
+        entry = { watcher, listeners };
+        watched.set(root, entry);
+      }
+      const { listeners, watcher } = entry;
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size > 0) return;
+        watcher.close();
+        watched.delete(root);
+      };
+    },
+    close: () => {
+      for (const { watcher } of watched.values()) watcher.close();
+      watched.clear();
+    },
+  };
+}
+type ConfigWatch = ReturnType<typeof configWatch>;
+
+/** Sends the page an event each time the app's config changes, while it listens. */
+function events(app: App, watching: ConfigWatch, response: ServerResponse) {
+  response.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-store",
+  });
+  response.write(": listening\n\n");
+  const stop = watching.listen(app.root, () => response.write("event: change\ndata:\n\n"));
+  response.once("close", stop);
 }
 
 async function listApps(apps: Apps, url: URL, request: IncomingMessage, response: ServerResponse) {
@@ -279,10 +356,19 @@ async function listApps(apps: Apps, url: URL, request: IncomingMessage, response
   end(response, 200, apps.inRepository(repository));
 }
 
-function channel(apps: Apps, url: URL, request: IncomingMessage, response: ServerResponse) {
+/** An app's own modules and events, beside its channel. */
+const OWN = ["tag.js", "config.js", "events"];
+
+function channel(
+  apps: Apps,
+  watching: ConfigWatch,
+  url: URL,
+  request: IncomingMessage,
+  response: ServerResponse,
+) {
   const [name = "", route = "", ...rest] = url.pathname.slice("/blueline/".length).split("/");
   const app = apps.named(name);
-  if (app === undefined || (!isRoute(route) && route !== "tag.js")) return end(response, 404);
+  if (app === undefined || (!isRoute(route) && !OWN.includes(route))) return end(response, 404);
   const origin = request.headers.origin;
   if (origin !== undefined) {
     if (!apps.allows(name, origin)) return end(response, 403);
@@ -297,7 +383,11 @@ function channel(apps: Apps, url: URL, request: IncomingMessage, response: Serve
       response.setHeader("access-control-allow-private-network", "true");
     return end(response, 204);
   }
-  if (route === "tag.js") return tag(app, request.headers.host ?? "", response);
+  const host = request.headers.host ?? "";
+  const fail = () => end(response, 500);
+  if (route === "tag.js") return void tag(app, host, response).catch(fail);
+  if (route === "config.js") return void config(app, host, response).catch(fail);
+  if (route === "events") return events(app, watching, response);
   if (!isRoute(route)) return end(response, 404);
   answer(
     app.files,
@@ -404,7 +494,9 @@ export async function serve(options: ServeOptions): Promise<Served> {
     return saving;
   };
   const apps = makeApps(await kept(file), save);
-  const overlay = overlayFile(options.overlay ?? path.join(packageRoot(), "dist", "index.js"));
+  const overlay = builtFile(options.overlay ?? path.join(packageRoot(), "dist", "index.js"));
+  const configBuilt = builtFile(options.config ?? path.join(packageRoot(), "dist", "config.js"));
+  const watching = configWatch();
   const health: Health = {
     blueline: true,
     protocol: PROTOCOL,
@@ -418,6 +510,7 @@ export async function serve(options: ServeOptions): Promise<Served> {
   const close = () => {
     closing ??= (async () => {
       server.closeAllConnections();
+      watching.close();
       await new Promise<void>((done) => server.close(() => done()));
       await saving.catch(() => undefined);
     })();
@@ -440,14 +533,17 @@ export async function serve(options: ServeOptions): Promise<Served> {
     if (url.pathname === "/blueline/remove")
       return void remove(apps, saved, request, response).catch(fail);
     if (url.pathname === "/blueline/overlay.js")
-      return void serveOverlay(overlay, request, response).catch(fail);
+      return void serveBuilt(overlay, request, response).catch(fail);
+    if (url.pathname === "/blueline/config.js")
+      return void serveBuilt(configBuilt, request, response).catch(fail);
     if (url.pathname === "/blueline/stop") {
       if (request.method !== "POST") return end(response, 405);
       if (request.headers.origin !== undefined) return end(response, 403);
       end(response, 204);
       return void close().then(() => options.stopped?.());
     }
-    if (url.pathname.startsWith("/blueline/")) return channel(apps, url, request, response);
+    if (url.pathname.startsWith("/blueline/"))
+      return channel(apps, watching, url, request, response);
     end(response, 404);
   });
 

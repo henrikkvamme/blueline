@@ -947,6 +947,13 @@ in step 3.
      import gets 500 and a reason that names the Vite plugin. `/blueline/<app>/events` sends
      the page an event when the file changes (server-sent), and the page loads again. Both
      routes keep B2's rules: the server's own `Host`, and the app's origins only, with CORS.
+   - **As built.** The server takes the config's types off with TypeScript's
+     `transpileModule`, and finds its imports in TypeScript's tree, in place of Node's
+     `stripTypeScriptTypes` and `es-module-lexer`: Node's prints an experimental warning,
+     and TypeScript is a dependency already (`blueline apply`). It loads only for a config
+     by hand. The bar marks a step whose phase failed too, as the walk shows the bar and not
+     the panel. An action loads a new page, and the step goes on at the first action that did
+     not end, so an `open` that is the page now ends at once.
 5. **Tests.**
    - Node: the config's rules and their reasons; `config.js` with types stripped and its
      import named again, 500 for another import, 403 for another origin and 404 for another

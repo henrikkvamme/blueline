@@ -12,7 +12,7 @@ import { hasNews } from "../session/replies";
 import { cx } from "./cx";
 import { DOCK } from "./geometry";
 import { useNotes, useSession, useStep, useTools } from "./session";
-import { SettleButton, StepArrow, useVariety } from "./step-controls";
+import { SettleButton, StepArrow, StepTrouble, useVariety } from "./step-controls";
 
 /*
  * The bar at the bottom centre: the panel's folded form, which shows only while the panel is
@@ -44,6 +44,7 @@ export function Bar() {
   const feedback = useSession((s) => s.context.feedback);
   const pagePlace = useSession((s) => s.context.place);
   const preview = useSession((s) => s.context.preview);
+  const trouble = useSession((s) => s.context.trouble);
   const ids = journey?.steps.map((s) => s.id) ?? [];
   // A step of the journey names a part, or has states of its own, for v to lift.
   const lifts = journey?.steps.some((s) => s.part !== undefined || (s.variants?.length ?? 0) > 1);
@@ -112,6 +113,7 @@ export function Bar() {
                 </span>
               ))}
             </span>
+            <StepTrouble reason={trouble[journey?.steps[at]?.id ?? ""]} />
           </>
         )}
       </span>

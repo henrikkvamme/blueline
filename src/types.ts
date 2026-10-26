@@ -46,6 +46,14 @@ export interface DevStep<C> {
    * the walk leaves the step, so no variant's state stays behind. It always runs to its end:
    * its signal never aborts. */
   readonly reset?: (context: C, signal: AbortSignal) => DevResult<void>;
+  /** Ends once the step's part is ready to look at, after each variant shows. */
+  readonly ready?: (context: C, signal: AbortSignal) => DevResult<void>;
+  /** Runs when the walk leaves the step, after `reset`, also when `reset` failed. */
+  readonly exit?: (context: C, signal: AbortSignal) => DevResult<void>;
+  /** How many milliseconds each of the step's phases may take: its world, `setup`, a
+   * variant, `ready`, `reset` and `exit`. A phase later than that fails, and its reason shows
+   * on the step's row. No limit when none. */
+  readonly timeout?: number;
   readonly variants?: readonly DevVariant<C>[];
   /** The name of the part to lift with v (part/variants.tsx), when the target holds more
    * than one; otherwise v lifts the one in the target. */
@@ -123,7 +131,7 @@ export interface DevAdapter<C> {
 }
 
 /** A step as the dev tools' parts show it, without its code. */
-export type StepInfo = Omit<DevStep<never>, "setup" | "reset" | "variants"> & {
+export type StepInfo = Omit<DevStep<never>, "setup" | "reset" | "ready" | "exit" | "variants"> & {
   readonly variants?: readonly { readonly label: string }[];
 };
 
@@ -139,4 +147,6 @@ export interface DevInfo {
   readonly people?: DevAdapter<never>["people"];
   readonly commands?: readonly DevCommand[];
   readonly channel?: DevAdapter<never>["channel"];
+  /** Why the app's config is not used, as the tree shows it in place of its journeys. */
+  readonly problem?: string;
 }

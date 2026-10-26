@@ -5,7 +5,9 @@ import path from "node:path";
 import type { Plugin } from "vite";
 import type { GivenFiles } from "./server/apps.ts";
 import type { ChannelRoute } from "./server/channel.ts";
+import { configFile } from "./server/config.ts";
 import { holdRegistration, placeOf, type Holding, type Place } from "./server/start.ts";
+import { tagModule } from "./server/tag.ts";
 
 export { isJson, LINE_FORMAT, stamped } from "./server/channel.ts";
 
@@ -15,8 +17,9 @@ export { isJson, LINE_FORMAT, stamped } from "./server/channel.ts";
  * server listens, the plugin starts the server if none runs and registers the app's root,
  * and the page's routes go on to the app's channel there. A note the reviewer sends is one
  * JSON line in the app's feedback file, which the agent watches; the agent answers in its
- * status file. The plugin also puts the overlay on each page, unless the app mounts its own.
- * The channel is for development only: a build has no dev tools.
+ * status file. The plugin also puts the overlay on each page, unless the app mounts its own,
+ * with the app's journeys from `blueline.config.ts` in its root, which Vite serves with the
+ * app's code. The channel is for development only: a build has no dev tools.
  *
  * An app that loads Blueline from its source, as a linked package, would also load
  * Blueline's own install of React beside the app's, and two copies of React on one page
@@ -126,9 +129,17 @@ const refuse = (response: ServerResponse, status: number, why?: string) => {
   response.end(why);
 };
 
-/** The module that mounts the overlay on the page, on the page's routes. */
-const tagOf = (routes: Routes) =>
-  `import { mountPage } from "${OVERLAY}";\nmountPage(${JSON.stringify({ storageKey: "blueline", routes })});\n`;
+/** The module that mounts the overlay on the page, on the page's routes, with the app's
+ * config through Vite, from the dev server's base. A change to it loads the page again, as
+ * Vite does for a module with no hot update. */
+const tagOf = async (routes: Routes, root: string, base: string) => {
+  const file = await configFile(root);
+  return tagModule({
+    overlay: OVERLAY,
+    page: { storageKey: "blueline", routes },
+    config: file === undefined ? undefined : `${base}${path.basename(file)}`,
+  });
+};
 
 export function devtoolsChannel(options: ChannelOptions = {}): Plugin {
   const routes = options.routes ?? ROUTES;
@@ -189,10 +200,12 @@ export function devtoolsChannel(options: ChannelOptions = {}): Plugin {
         OVERLAY,
         via(() => "/blueline/overlay.js"),
       );
-      server.middlewares.use(TAG, (_request, response) => {
-        response.setHeader("content-type", "text/javascript; charset=utf-8");
-        response.setHeader("cache-control", "no-store");
-        response.end(tagOf(routes));
+      server.middlewares.use(TAG, (_request, response, next) => {
+        tagOf(routes, server.config.root, server.config.base).then((text) => {
+          response.setHeader("content-type", "text/javascript; charset=utf-8");
+          response.setHeader("cache-control", "no-store");
+          response.end(text);
+        }, next);
       });
     },
     buildEnd: () => holding?.stop(),

@@ -6,6 +6,7 @@ import { cursorOf, keepCursor } from "../io/cursors";
 import { clampNormal, initialVim, vimKey, type Mode, type Register, type VimState } from "./engine";
 import { afterPointer, apply, docOf, show, type Placed, type VimField } from "./field";
 import { focused as focusedElement } from "../core/root";
+import { isSent } from "../keys/sent";
 
 export type VimOptions = {
   enabled: boolean;
@@ -93,7 +94,7 @@ export function useVim(
 
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     const el = ref.current;
-    if (!el || e.isComposing || e.defaultPrevented) return;
+    if (!el || e.isComposing || e.defaultPrevented || isSent(e)) return;
     const s = { ...state.current, register };
     const r = vimKey(s, docOf(el, s, placed.current), e);
     if (!r.handled) {

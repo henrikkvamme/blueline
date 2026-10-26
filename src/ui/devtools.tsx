@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { registry } from "../core/registry";
+import { isSent } from "../keys/sent";
 import {
   BINDINGS,
   captured,
@@ -677,7 +678,7 @@ function Keys() {
         peek.down(performance.now());
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing) return;
+      if (e.defaultPrevented || e.isComposing || isSent(e)) return;
       const key = keyOf(e);
       const action = dispatch(bindings(), view(), zoneOf(focused()), key);
       if (action === undefined) return;
@@ -690,9 +691,10 @@ function Keys() {
     };
     const enter = release();
     const down = (e: KeyboardEvent) => {
-      if (e.key === "Enter" && !e.repeat) enter.down();
+      if (e.key === "Enter" && !e.repeat && !isSent(e)) enter.down();
     };
     const up = (e: KeyboardEvent) => {
+      if (isSent(e)) return;
       if (e.key === "Enter") enter.up();
       if (e.key === "p" || e.key === "P") peeked();
     };
@@ -708,7 +710,7 @@ function Keys() {
     });
     // The tools' own keys go first, and the app never sees them.
     const onFirstKey = (e: KeyboardEvent) => {
-      if (e.isComposing) return;
+      if (e.isComposing || isSent(e)) return;
       const at = focused();
       const key = keyOf(e);
       const action = captured(bindings(), view(), zoneOf(at), key, ownerOf(at));
@@ -791,11 +793,12 @@ function useAltHeld(on: boolean): readonly [boolean, () => void] {
   useEffect(() => {
     if (!on) return setHeld(false);
     const down = (e: KeyboardEvent) => {
+      if (isSent(e)) return;
       if (e.key !== "Alt") setHeld(false);
       else if (!e.repeat) setHeld(true);
     };
     const up = (e: KeyboardEvent) => {
-      if (e.key === "Alt") setHeld(false);
+      if (e.key === "Alt" && !isSent(e)) setHeld(false);
     };
     const leave = () => setHeld(false);
     window.addEventListener("keydown", down, true);

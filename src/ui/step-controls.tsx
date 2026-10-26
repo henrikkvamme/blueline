@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Layers } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Layers, TriangleAlert } from "lucide-react";
 import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { NO_VERDICTS, partOn, parts, variantOf, variantRows, varietyOf } from "../part/store";
 import { keepsAnother } from "../session/state";
@@ -292,5 +292,19 @@ export function Foot({ children }: { readonly children: ReactNode }) {
     <div className="flex shrink-0 items-center gap-1.5 border-t border-dt-line px-3 py-2.5">
       {children}
     </div>
+  );
+}
+
+/** Why the step's code failed or was late: the panel's step has the words in full. */
+export function StepTrouble({ reason }: { readonly reason: string | undefined }) {
+  if (reason === undefined) return null;
+  return (
+    <TriangleAlert
+      role="img"
+      aria-label={reason}
+      className="size-3.5 shrink-0 self-center text-dt-bad"
+    >
+      <title>{reason}</title>
+    </TriangleAlert>
   );
 }

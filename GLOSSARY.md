@@ -21,6 +21,15 @@ _Avoid_: Section, chapter
 One thing in a journey to look at, with what to look for and what to try.
 _Avoid_: Stop, item
 
+**Config**:
+An app's journeys as data, in `blueline.config.ts` in its root, with no adapter code.
+_Avoid_: Manifest, journey file
+
+**Phase**:
+One part of a step's code, as the walk runs it: enter, reset, setup, the variant, ready and
+exit. Each has the step's timeout.
+_Avoid_: Hook, stage
+
 **Page review**:
 The page's own journey, named This page: one step for each part that the page shows. The
 tree lists it first under the journeys.

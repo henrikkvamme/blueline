@@ -27,6 +27,7 @@ import { cx } from "./cx";
 import { handoffOf, handoffStatus, isLive } from "../notes/handoff";
 import { foldTree, openHandoff } from "./replies";
 import { journeyOf, useNotes, useSession, useTools } from "./session";
+import { StepTrouble } from "./step-controls";
 import type { JourneyInfo } from "../types";
 import { elementOf } from "../core/root";
 
@@ -85,10 +86,25 @@ function Tree({ heading }: { readonly heading: boolean }) {
   return (
     <div className="flex flex-1 flex-col">
       <Pages heading={heading} />
+      <ConfigProblem />
       <Journeys current={current} done={false} />
       <span className="flex-1" />
       <Journeys current={current} done />
     </div>
+  );
+}
+
+/** Why the app's config is not used, in place of its journeys. */
+function ConfigProblem() {
+  const { adapter } = useTools();
+  if (adapter.problem === undefined) return null;
+  return (
+    <section aria-label="Journeys" className="flex flex-col p-1.5 pt-0">
+      <Heading text="Journeys" />
+      <p role="alert" className="px-2.5 py-1 text-[12px] text-dt-bad">
+        The config is not used: {adapter.problem}
+      </p>
+    </section>
   );
 }
 
@@ -356,6 +372,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
   const selected = useSession((s) => s.context.row);
   const feedback = useSession((s) => s.context.feedback);
   const folds = useSession((s) => s.context.folds);
+  const trouble = useSession((s) => s.context.trouble);
   const notes = useNotes();
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -421,6 +438,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
               >
                 {step.title}
               </span>
+              <StepTrouble reason={trouble[step.id]} />
               <AgentMark notes={notes.filter((n) => n.step === step.id)} />
               {news.length > 0 ? (
                 <span
