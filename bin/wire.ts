@@ -1,4 +1,15 @@
-import { Clock, Effect, FileSystem, Path, PlatformError, Random, Schedule, Schema } from "effect";
+import { DatabaseSync } from "node:sqlite";
+import {
+  Clock,
+  Effect,
+  FileSystem,
+  Path,
+  PlatformError,
+  Random,
+  Schedule,
+  Schema,
+  Semaphore,
+} from "effect";
 import {
   ClaimsSchema,
   claimedBy,
@@ -11,7 +22,7 @@ import { takeLines, type Line } from "./lines.ts";
 
 /*
  * The agent's side of the feedback file and the status file: whole writes, one lock per
- * file, and claims (bin/claims.ts). Every command that reads lines for an agent claims them
+ * file (`withLock`), and claims (bin/claims.ts). Every command that reads lines for an agent claims them
  * here, under the feedback file's lock, so two readers at once never take one line. Every
  * reply writes the status file under its own lock, so two replies at once both stay.
  */
@@ -40,113 +51,53 @@ export const readFile = Effect.fn(function* <A>(
   return yield* Schema.decodeEffect(schema)(yield* fs.readFileString(file));
 });
 
-/** The file in a lock that names its owner: the process and a token of its own. */
-const OWNER = "owner";
-
-/** A lock with no owner file: a process died between making and naming it. */
-const UNNAMED_MS = 10_000;
-
-/** Whether the process runs. EPERM: it runs, as another user's. */
-function runs(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error instanceof Error && "code" in error && error.code === "EPERM";
-  }
-}
-
 const isMissing = (error: PlatformError.PlatformError) => error.reason._tag === "NotFound";
 
-/**
- * Takes a lock folder in one step: a folder of its own with the owner file is renamed to the
- * lock's name, which fails while another lock with its owner file is there. So a lock always
- * names its owner. Fails when the lock is held.
- */
-const takeLock = Effect.fn(function* (lock: string, token: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const own = `${lock}.${(yield* Random.nextIntBetween(0, Number.MAX_SAFE_INTEGER)).toString(36)}`;
-  yield* fs.makeDirectory(own);
-  yield* fs.writeFileString(path.join(own, OWNER), token);
-  const took = yield* fs.rename(own, lock).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  );
-  if (took) return;
-  yield* fs.remove(own, { recursive: true }).pipe(Effect.ignore);
-  return yield* Effect.fail(`${lock} is held`);
-});
+/** Each lock's queue in this process, by the lock's path. */
+const queues = new Map<string, Semaphore.Semaphore>();
 
-/** The lock's owner token, if it has one. */
-const ownerOf = (lock: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    return yield* fs.readFileString(path.join(lock, OWNER)).pipe(Effect.option);
+const queueOf = (lock: string) => {
+  const known = queues.get(lock);
+  if (known !== undefined) return known;
+  const made = Semaphore.makeUnsafe(1);
+  queues.set(lock, made);
+  return made;
+};
+
+/**
+ * Opens the lock's database and starts a write transaction on it, which SQLite lets only one
+ * connection hold. Fails at once while another process holds it.
+ */
+const openLock = (lock: string) =>
+  Effect.try({
+    try: () => {
+      const db = new DatabaseSync(lock, { timeout: 0 });
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        return db;
+      } catch (error) {
+        db.close();
+        throw error;
+      }
+    },
+    catch: () => `${lock} is held`,
   });
 
-/** Gives up the lock if `token` still owns it: moved aside in one step, then removed, so no
- * one takes the lock's name while it is half removed. */
-const dropLock = Effect.fn(function* (lock: string, token: string | undefined) {
-  const fs = yield* FileSystem.FileSystem;
-  if (token !== undefined) {
-    const owner = yield* ownerOf(lock);
-    if (owner._tag === "None" || owner.value !== token) return;
-  }
-  const aside = `${lock}.gone.${(yield* Random.nextIntBetween(0, Number.MAX_SAFE_INTEGER)).toString(36)}`;
-  if (
-    yield* fs.rename(lock, aside).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
-    )
-  )
-    yield* fs.remove(aside, { recursive: true }).pipe(Effect.ignore);
-});
-
-/** Whether the lock's owner is dead: its process no longer runs, or it has no owner file
- * long after it was made. */
-const deadOwner = Effect.fn(function* (lock: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const owner = yield* ownerOf(lock);
-  if (owner._tag === "Some") {
-    const pid = Number(owner.value.split(" ")[0]);
-    return Number.isInteger(pid) && pid > 0 && !runs(pid) ? owner.value : undefined;
-  }
-  const info = yield* fs.stat(lock).pipe(Effect.option);
-  if (info._tag === "None" || info.value.mtime._tag === "None") return undefined;
-  const age = (yield* Clock.currentTimeMillis) - info.value.mtime.value.getTime();
-  return age > UNNAMED_MS ? "" : undefined;
-});
+const closeLock = (db: DatabaseSync) =>
+  Effect.sync(() => {
+    try {
+      db.exec("ROLLBACK");
+    } finally {
+      db.close();
+    }
+  });
 
 /**
- * Removes the lock of a dead process. Under a second lock, `.break`, it checks again that the
- * same dead owner holds it, so two processes never both break one lock and remove a live
- * one. A dead process's `.break` goes the same way, without a third lock: it is held for a
- * moment only.
- */
-const breakDead = Effect.fn(function* (lock: string, token: string) {
-  const seen = yield* deadOwner(lock);
-  if (seen === undefined) return;
-  const guard = `${lock}.break`;
-  const took = yield* takeLock(guard, token).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  );
-  if (!took) {
-    if ((yield* deadOwner(guard)) !== undefined) yield* dropLock(guard, undefined);
-    return;
-  }
-  yield* Effect.gen(function* () {
-    const still = yield* deadOwner(lock);
-    if (still !== undefined && still === seen) yield* dropLock(lock, undefined);
-  }).pipe(Effect.ensuring(dropLock(guard, token).pipe(Effect.ignore)));
-});
-
-/**
- * Runs `use` while this process holds the file's lock, a folder beside it that names its
- * owner. A lock goes only when its owner's process is dead (`breakDead`), so a slow
- * operation keeps its lock, and it gives up only its own lock.
+ * Runs `use` while this process holds the file's lock: a write transaction on a SQLite
+ * database beside it. The system frees the lock when its process ends, also when it is
+ * killed, so no lock is ever left behind and no process has to break one. A slow holder keeps
+ * its lock. In one process, the fibers queue for it first, so they do not spin on it.
+ * Taking the lock and giving it up cannot be interrupted between them.
  */
 export const withLock = <A, E, R>(file: string, use: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -154,13 +105,11 @@ export const withLock = <A, E, R>(file: string, use: Effect.Effect<A, E, R>) =>
     const lock = `${file}.lock`;
     // The folder the file goes in, as `.blueline/` before the first note.
     yield* fs.makeDirectory((yield* Path.Path).dirname(file), { recursive: true });
-    const token = `${String(process.pid)} ${(yield* Random.nextIntBetween(0, Number.MAX_SAFE_INTEGER)).toString(36)}`;
-    const take = takeLock(lock, token).pipe(
-      Effect.tapError(() => breakDead(lock, token).pipe(Effect.ignore)),
+    // About 10 s, then it fails and says so: a live process holds it that long only if stuck.
+    const take = openLock(lock).pipe(
+      Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 400 }),
     );
-    // About 10 s, then it fails and says so: a live owner holds it that long only if stuck.
-    yield* take.pipe(Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 400 }));
-    return yield* use.pipe(Effect.ensuring(dropLock(lock, token).pipe(Effect.ignore)));
+    return yield* queueOf(lock).withPermit(Effect.acquireUseRelease(take, () => use, closeLock));
   });
 
 const ClaimsFile = Schema.fromJsonString(ClaimsSchema, { space: 1 });

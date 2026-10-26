@@ -85,5 +85,8 @@
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3"
   },
+  "engines": {
+    "node": ">=22.13"
+  },
   "packageManager": "pnpm@12.15.0"
 }

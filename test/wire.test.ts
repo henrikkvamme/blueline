@@ -1,9 +1,9 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { claimedBy, cursorAtByte, freshFor, NO_CLAIMS } from "../bin/claims";
 import { takeLines, type Line } from "../bin/lines";
@@ -127,18 +127,18 @@ describe("the files at once", () => {
     expect(Object.keys(written).sort()).toEqual([...notes].sort());
   });
 
-  /** A lock folder as another process left it, with its owner file. */
-  const lockOf = (file: string, pid: number) => {
-    mkdirSync(`${file}.lock`, { recursive: true });
-    writeFileSync(path.join(`${file}.lock`, "owner"), `${String(pid)} other`);
-  };
-  /** A process ID that no process has: a process that ran and ended. */
-  const deadPid = () => spawnSync("true").pid ?? 0;
+  const script = path.join(import.meta.dirname, "fixtures", "hold-lock.ts");
+  /** Whether this process gets the lock within the time. */
+  const gets = (file: string, ms: number) =>
+    run(
+      withLock(file, Effect.succeed(true)).pipe(
+        Effect.timeoutOrElse({ duration: ms, orElse: () => Effect.succeed(false) }),
+      ),
+    );
 
-  it("breaks a dead process's lock once, with many waiting at once", async () => {
+  it("lets one fiber at a time hold it", async () => {
     dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
     const file = path.join(dir, "status.json");
-    lockOf(file, deadPid());
     let holding = 0;
     let most = 0;
     const use = Effect.gen(function* () {
@@ -155,12 +155,10 @@ describe("the files at once", () => {
     expect(most).toBe(1);
   });
 
-  it("lets one process at a time hold it, also when they break a dead lock at once", async () => {
+  it("lets one process at a time hold it", async () => {
     dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
     const file = path.join(dir, "status.json");
     const log = path.join(dir, "log");
-    lockOf(file, deadPid());
-    const script = path.join(import.meta.dirname, "fixtures", "hold-lock.ts");
     await Promise.all(
       Array.from(
         { length: 6 },
@@ -180,17 +178,33 @@ describe("the files at once", () => {
     });
   }, 30_000);
 
-  it("keeps a live process's lock, however long it holds it", async () => {
+  it("keeps a live process's lock, and frees it when that process is killed", async () => {
     dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
     const file = path.join(dir, "status.json");
-    // The test runner's parent runs as long as the test does.
-    lockOf(file, process.ppid);
-    const got = await run(
-      withLock(file, Effect.succeed("took it")).pipe(
-        Effect.timeoutOrElse({ duration: "300 millis", orElse: () => Effect.succeed("waits") }),
+    const holder = spawn(process.execPath, [script, file, "hold"]);
+    await new Promise<void>((done) => holder.stdout.once("data", () => done()));
+    expect(await gets(file, 300)).toBe(false);
+    holder.kill("SIGKILL");
+    await new Promise((done) => holder.once("exit", done));
+    expect(await gets(file, 2_000)).toBe(true);
+  }, 15_000);
+
+  it("leaves no lock behind when a fiber is stopped while it takes or holds it", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const file = path.join(dir, "status.json");
+    // Stopped after 0 to 11 turns of the scheduler: at each step of taking the lock.
+    await run(
+      Effect.forEach(
+        Array.from({ length: 48 }, (_, i) => i % 12),
+        (turns) =>
+          Effect.gen(function* () {
+            const fiber = yield* Effect.forkChild(withLock(file, Effect.sleep("2 millis")));
+            for (let t = 0; t < turns; t += 1) yield* Effect.yieldNow;
+            yield* Fiber.interrupt(fiber);
+          }),
       ),
     );
-    expect(got).toBe("waits");
+    expect(await gets(file, 500)).toBe(true);
   });
 
   it("starts at a read mark from before the claims, and at the top when the mark is past the end", async () => {
