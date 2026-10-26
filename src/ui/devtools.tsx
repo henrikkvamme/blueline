@@ -219,7 +219,8 @@ export function DevTools<C>({
   }, [adapter, storageKey]);
   // The app went to another page, or names it another way.
   useEffect(() => session?.moved());
-  if (session === undefined) return <>{children}</>;
+  // The app's dev parts may use the tools (useReviewControl), so they wait for the session.
+  if (session === undefined) return null;
   return (
     <Running session={session} anchors={anchors} goTo={goTo} shift={shift}>
       {children}
