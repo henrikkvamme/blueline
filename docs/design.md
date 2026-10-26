@@ -628,7 +628,9 @@ rows.dispose();
 
 Each framework can start a view in a given element: Elm's `init({ node })`, Vue's `mount`,
 Svelte's `mount`, Solid's `render`, Lit's `render`, React's `createRoot`. So `show` is the
-contract for the lift's copies. Copies that an app draws inside its own one tree would need
+contract for the lift's copies. Its cleanup stops what the view started, as its
+subscriptions: Elm has no call that stops a program, so an Elm app's `show` keeps a way to
+stop its copy. Copies that an app draws inside its own one tree would need
 a host the app gives; that waits until an app needs it (To verify).
 
 1. **The core part.** `src/part/part.ts`, with no React. `part` declares the part's
@@ -670,14 +672,17 @@ a host the app gives; that waits until an app needs it (To verify).
 
 3. **React on the same store.** `variants()` keeps drawing its copies with portals, so
    each copy keeps the app's props and React context. Its element is registered by its
-   layout effect before the observer runs, so the observer skips it.
+   layout effect before the observer runs, so the observer skips it. The store itself
+   takes no instance whose element is in a Blueline host, so a part nested in a lifted
+   part's copy is not one, whichever way it registers.
 4. **Tests.** Browser tests on a page with no React and no Tailwind:
    - a code part with two instances of different content: `v` lifts one, and each slot's
      copy shows that instance's content in its variant and state, also after moves on both
      lines; Enter puts the variant on the page through `subscribe`;
    - a markup part: its base content, a named state, and a missing combination, on the
      page and in the lift; going back to the base puts the page's content back;
-   - a marked part inside a copy, and in a Blueline host, is not an instance; an element
+   - a marked part inside a copy, and in a Blueline host, is not an instance, and lifting a
+     React part with a nested `variants()` part adds no instance; an element
      moved in the page keeps its instance; one removed ends it and its copies;
    - a part declared by one copy of the module and found by the other's observer;
    - `dispose`, landing and an owner change clean up every copy.
