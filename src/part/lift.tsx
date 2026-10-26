@@ -19,7 +19,9 @@ import {
   type ReactNode,
   type TouchEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "../ui/cx";
+import { openHost, type Host } from "../ui/host";
 import { lineShift, liftRoom } from "../ui/geometry";
 import { Menu, type MenuEntry } from "../ui/menu";
 import { menuTakes } from "../ui/menu-keys";
@@ -62,6 +64,11 @@ const MS = 320;
 const GAP = 40;
 /** In the column, the gap also holds the name under each option. */
 const COLUMN_GAP = 80;
+
+/** The slot of one option's copy of the part: a variant's by its label, which stays as other
+ *  variants go, and a state's by its place. */
+const slotOf = (way: Axis, i: number, variants: readonly string[]) =>
+  way === "variant" ? `variant:${variants[i] ?? ""}` : `state:${String(i)}`;
 
 const same = (a: readonly number[], b: readonly number[]) =>
   a.length === b.length && a.every((x, i) => x === b[i]);
@@ -116,6 +123,16 @@ export function Lift({
   readonly docked?: number | undefined;
 }) {
   const [at, setAt] = useState(start);
+  // The lift's own place on the page (host.ts), while it is up.
+  const [host, setHost] = useState<Host>();
+  useLayoutEffect(() => {
+    const opened = openHost({ tag: "blueline-lift", inherits: true });
+    setHost(opened);
+    return () => {
+      setHost(undefined);
+      opened.dispose();
+    };
+  }, []);
   // Where the variant shown stands in the row: a deleted one's place, until another shows.
   const place = useRef(0);
   const found = variants.indexOf(at.variant);
@@ -422,10 +439,14 @@ export function Lift({
     onDrop(label);
   };
 
+  /** What one option on one way's line shows. */
+  const occurrence = (way: Axis, i: number): At =>
+    way === "variant" ? { ...at, variant: variants[i] ?? "" } : { ...at, state: i };
+
   /** One option on one way's line. */
   const option = (way: Axis, i: number) => {
     const label = variants[i] ?? "";
-    const o: At = way === "variant" ? { ...at, variant: label } : { ...at, state: i };
+    const o = occurrence(way, i);
     const middle = i === (way === "variant" ? index : at.state);
     const used = way === axis;
     // The part in the middle shows on the way in use; on the other way it waits unseen.
@@ -464,14 +485,16 @@ export function Lift({
               aria-hidden
               className="absolute -inset-3 rounded-[14px] bg-white shadow-[0_24px_60px_-18px_rgb(0_0_0/0.6)]"
             />
-            <div className="relative">{render(o)}</div>
+            <div className="relative">
+              <slot name={slotOf(way, i, variants)} />
+            </div>
           </div>
         </div>
         {/* The name stands under the option, out of the line's spacing, so options of
             any size stand evenly apart; the faint way shows no names. */}
         <div
           className={cx(
-            "absolute top-full left-1/2 mt-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-dt-panel px-2.5 py-1 text-[12px] whitespace-nowrap shadow-dt-float",
+            "blueline absolute top-full left-1/2 mt-3 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-dt-panel px-2.5 py-1 text-[12px] whitespace-nowrap shadow-dt-float [pointer-events:inherit]",
             middle ? "text-dt-text" : "text-dt-muted",
             !used && "invisible",
           )}
@@ -496,9 +519,23 @@ export function Lift({
     );
   };
 
-  return (
+  if (host === undefined) return null;
+  // The stage and its bar in the lift's shadow root; each option's copy of the part on the
+  // page, as a light child of the host that the option's slot shows, so the page's CSS and
+  // the part's context draw it.
+  const previews = (["variant", "state"] as const).flatMap((way) =>
+    (way === "variant" ? variants : states).map((_, i) => {
+      const name = slotOf(way, i, variants);
+      return (
+        <div key={name} slot={name} style={{ display: "contents" }}>
+          {render(occurrence(way, i))}
+        </div>
+      );
+    }),
+  );
+  const chrome = (
     <div
-      className={cx("blueline fixed inset-0 z-[2147483005]", leaving && "pointer-events-none")}
+      className={cx("fixed inset-0 z-[2147483005]", leaving && "pointer-events-none")}
       role="dialog"
       aria-label={`Variants and states of ${title}`}
     >
@@ -552,7 +589,7 @@ export function Lift({
         </div>
         <div
           className={cx(
-            "pointer-events-auto absolute bottom-6 left-1/2 z-20 flex w-max -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel p-1.5 text-[12px] whitespace-nowrap text-dt-muted shadow-dt-float transition-[opacity,translate] duration-200 fade-in slide-in-from-bottom-2 motion-reduce:transition-none",
+            "blueline pointer-events-auto absolute bottom-6 left-1/2 z-20 flex w-max -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel p-1.5 text-[12px] whitespace-nowrap text-dt-muted shadow-dt-float transition-[opacity,translate] duration-200 fade-in slide-in-from-bottom-2 motion-reduce:transition-none",
             "max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+8px)] max-sm:w-auto max-sm:translate-x-0 max-sm:flex-wrap max-sm:rounded-dt-panel max-sm:p-1 max-sm:text-[14px]",
             leaving && "translate-y-2 opacity-0",
           )}
@@ -610,7 +647,7 @@ export function Lift({
           />
         </div>
         {note !== undefined && note !== null && (
-          <div className="pointer-events-auto absolute bottom-20 left-1/2 z-30 -translate-x-1/2 max-sm:top-[calc(env(safe-area-inset-top)+8px)] max-sm:bottom-auto">
+          <div className="blueline pointer-events-auto absolute bottom-20 left-1/2 z-30 -translate-x-1/2 max-sm:top-[calc(env(safe-area-inset-top)+8px)] max-sm:bottom-auto">
             {note}
           </div>
         )}
@@ -623,6 +660,12 @@ export function Lift({
         )}
       </div>
     </div>
+  );
+  return (
+    <>
+      {createPortal(chrome, host.container)}
+      {createPortal(previews, host.element)}
+    </>
   );
 }
 
@@ -637,7 +680,7 @@ function Confirm({
   readonly onCancel: () => void;
 }) {
   return (
-    <div className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center">
+    <div className="blueline pointer-events-auto absolute inset-0 z-30 flex items-center justify-center">
       <div
         role="alertdialog"
         aria-label={`Delete ${label}`}

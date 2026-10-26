@@ -9,7 +9,6 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import { merge, type Patch } from "./merge";
 import { hugs, NO_VERDICTS, parts, rectOf, variantOf } from "./store";
 
@@ -83,46 +82,43 @@ export function variants<P extends object>(
         >
           {draw(props, variant, state)}
         </span>
-        {lifting !== undefined &&
-          rose !== undefined &&
-          createPortal(
-            <Suspense fallback={null}>
-              <Lift
-                title={name}
-                variants={labels.filter((l) => !verdicts.dropped.includes(l))}
-                states={[AS_IT_IS, ...names]}
-                render={(at) =>
-                  draw(props, at.variant, at.state === 0 ? undefined : names[at.state - 1])
-                }
-                start={{ variant, state: state === undefined ? 0 : names.indexOf(state) + 1 }}
-                from={rose.from}
-                hug={rose.hug}
-                onDrop={lifting.judge.drop}
-                onUndo={lifting.judge.undo}
-                onNote={
-                  lifting.judge.note === undefined
-                    ? undefined
-                    : (at) =>
-                        lifting.judge.note?.({
-                          variant: at.variant,
-                          state: at.state === 0 ? undefined : names[at.state - 1],
-                        })
-                }
-                note={isValidElement(lifting.judge.panel) ? lifting.judge.panel : undefined}
-                noted={now.noted[name] ?? []}
-                onPut={(at) =>
-                  parts.show(name, {
-                    variant: at.variant,
-                    state: at.state === 0 ? undefined : names[at.state - 1],
-                  })
-                }
-                where={() => (node.current === null ? undefined : rectOf(node.current))}
-                onDone={parts.land}
-                docked={lifting.judge.docked}
-              />
-            </Suspense>,
-            document.body,
-          )}
+        {lifting !== undefined && rose !== undefined && (
+          <Suspense fallback={null}>
+            <Lift
+              title={name}
+              variants={labels.filter((l) => !verdicts.dropped.includes(l))}
+              states={[AS_IT_IS, ...names]}
+              render={(at) =>
+                draw(props, at.variant, at.state === 0 ? undefined : names[at.state - 1])
+              }
+              start={{ variant, state: state === undefined ? 0 : names.indexOf(state) + 1 }}
+              from={rose.from}
+              hug={rose.hug}
+              onDrop={lifting.judge.drop}
+              onUndo={lifting.judge.undo}
+              onNote={
+                lifting.judge.note === undefined
+                  ? undefined
+                  : (at) =>
+                      lifting.judge.note?.({
+                        variant: at.variant,
+                        state: at.state === 0 ? undefined : names[at.state - 1],
+                      })
+              }
+              note={isValidElement(lifting.judge.panel) ? lifting.judge.panel : undefined}
+              noted={now.noted[name] ?? []}
+              onPut={(at) =>
+                parts.show(name, {
+                  variant: at.variant,
+                  state: at.state === 0 ? undefined : names[at.state - 1],
+                })
+              }
+              where={() => (node.current === null ? undefined : rectOf(node.current))}
+              onDone={parts.land}
+              docked={lifting.judge.docked}
+            />
+          </Suspense>
+        )}
       </>
     );
   }

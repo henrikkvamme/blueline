@@ -5,11 +5,9 @@ and annotations to the agent, and parts with variants. A build holds none of it.
 
 ## Set up in an app
 
-The app needs React 19.3 or later, Tailwind 4.3 or later and effect 4.0.6, the
-package's peers. Four places use it:
+The app needs React 19.3 or later and effect 4.0.6, the package's peers. It needs no CSS for
+Blueline: the tools and the lift stand in shadow roots with their own CSS. Three places use it:
 
-- The styles, after Tailwind: `@import "@henrikkvamme/blueline/styles.css";`. Tailwind finds the
-  tools' classes from there.
 - The dev server's channel to the agent, in `vite.config.ts`:
   `devtoolsChannel({ feedback, status })` from `@henrikkvamme/blueline/vite`.
 - `mount({ adapter, storageKey: "<app>.review" })`, in a module that the app loads in
