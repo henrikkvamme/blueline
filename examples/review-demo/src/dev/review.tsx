@@ -39,7 +39,7 @@ const JOURNEY: DevJourney<void> = {
       target: ["[data-review=request-header]"],
       part: "Request header",
       look: "The header names the request, who asked, and where it is.",
-      try: "Press v to lift the header. Enter shows the variant on the page.",
+      try: "Lift the header to see its variants side by side, then pick one in the panel.",
     },
     {
       id: "request-history",
