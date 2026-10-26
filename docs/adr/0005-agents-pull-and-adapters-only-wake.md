@@ -27,11 +27,14 @@ wakes an agent that is idle or absent.
   session that another process holds, because two writers interleave one transcript.
 
 An agent registers when its hook runs or when it calls `wait_for_feedback`, by its session
-ID, in `.blueline/agents.json`. Its state is `busy` while hooks run in a turn, `waiting`
-during a call, `idle` after its `Stop` hook lets the turn end, and gone after `SessionEnd`
-or when a wake finds no session. A line goes to one agent: the reader that takes it moves
-its cursor and records itself in `status.json` (slice W0), so a wake never sends a line
-that an agent already pulled.
+ID, in `.blueline/agents.json`. Each registration is a lease that ends 2 minutes after the agent was last heard from; each
+hook run and each poll renews it. A `PreToolUse` hook holds the lease for the harness's
+longest tool call, 10 minutes for Claude Code's Bash, until `PostToolUse` ends the call. Its state is
+`busy` while hooks run in a turn, `waiting` during a call, `idle` after its `Stop` hook lets
+the turn end, and gone after `SessionEnd`, when its lease ends, or when a wake finds no
+session. An agent that died in a turn is gone once its lease ends, and its lines go to a
+wake. A line goes to one agent: the claim is atomic under the feedback file's lock (slice
+W0), so a pull and a wake never both take a line.
 
 `blueline setup <harness>` adds the MCP server and the hooks for one harness. That is an
 install, which ADR 0002 ruled out. ADR 0002 named the case that would change it: a session
