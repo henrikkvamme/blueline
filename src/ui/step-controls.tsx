@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronUp, Layers } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { NO_VERDICTS, partOn, parts, variantRows, varietyOf } from "../part/store";
 import { cx } from "./cx";
@@ -56,7 +56,7 @@ export function useVariantPlace():
 }
 
 /** A click on a step control leaves the focus where it was, as on the page, so the walk's
- * keys go on there: Enter settles, and h and l show the variants. Tab still reaches it. */
+ * keys go on there: Enter settles, and j and k show the variants. Tab still reaches it. */
 export const KEEP_FOCUS = { onMouseDown: (e: MouseEvent) => e.preventDefault() };
 
 /** A square button for an icon: 44 px on a phone, for a finger. */
@@ -67,14 +67,15 @@ export const ICON =
 const FOOT_ARROW =
   "grid size-10 shrink-0 place-items-center rounded-dt-control bg-dt-raised text-dt-muted hover:bg-dt-line hover:text-dt-text disabled:opacity-40 disabled:hover:bg-dt-raised max-sm:size-11";
 
-/** Goes to the step before or after, settled too, as k and j do: up and down, as the steps
- * stand in the tree, while the variants go across. In the panel's foot it is a raised square. */
+/** Goes to the step before or after, settled too, as h and l do: left and right of Settle,
+ * across the panel's foot, while the variants go down the panel. In the panel's foot it is a
+ * raised square. */
 export function StepArrow({ by, foot = false }: { readonly by: -1 | 1; readonly foot?: boolean }) {
   const { actor } = useTools();
   const { journey, at } = useStep();
   const last = Math.max((journey?.steps.length ?? 0) - 1, 0);
   const to = Math.min(Math.max(at + by, 0), last);
-  const Icon = by < 0 ? ChevronUp : ChevronDown;
+  const Icon = by < 0 ? ChevronLeft : ChevronRight;
   return (
     <button
       type="button"
@@ -137,8 +138,8 @@ export function SettleButton({
 /**
  * The step's variants, under its words: a quiet Lift at the right, and a row for each variant
  * that is left, as radios. The row of the variant shown is raised. A click shows that variant
- * on the page, as h and l do. A part with one variant and some states has no rows: its states
- * show in the lift only.
+ * on the page, as j and k, or its number, do. A part with one variant and some states has no
+ * rows: its states show in the lift only.
  */
 export function StepVariants() {
   const { perform } = useTools();

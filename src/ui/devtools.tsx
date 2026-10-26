@@ -10,8 +10,10 @@ import {
   dispatch,
   ownerOf,
   firstAction,
+  nameOf,
   zoneOf,
   type Action,
+  type Key,
   type View,
 } from "../keys/keymap";
 import { isKept } from "../notes/note";
@@ -49,6 +51,7 @@ import { Panel } from "./panel";
 import { foldTree, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
 import { release, settleGate, SETTLE_MS, TURN_MS, TURN_WAIT } from "./settle";
+import { holdToggle } from "../keys/hold";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
@@ -452,6 +455,23 @@ export function DevTools<C>({
         if (active && row === undefined) settle(cursor);
         return;
       }
+      // A variant by its number in the panel's list: of the step's part, else the step's own.
+      if (action.kind === "variantAt") {
+        const { context } = actor.getSnapshot();
+        const step = stepIn(actor.getSnapshot(), info);
+        const part = partOn(step, journeyIn(actor.getSnapshot(), info));
+        const left = part?.labels.filter((l) => !parts.verdicts(part.name).dropped.includes(l));
+        if (part === undefined || left === undefined || left.length < 2) {
+          const own = step?.variants?.length ?? 0;
+          const shown = step === undefined ? 0 : (context.variants[step.id] ?? 0);
+          if (action.at < own) actor.send({ type: "variant", by: action.at - shown });
+          return;
+        }
+        const next = left[action.at];
+        if (next !== undefined)
+          parts.show(part.name, { variant: next, state: parts.shown(part.name).state });
+        return;
+      }
       // The variant beside the one the page shows: of the step's part, else the step's own.
       if (action.kind === "variant") {
         const step = stepIn(actor.getSnapshot(), info);
@@ -644,7 +664,7 @@ function isLoose(at: Element | null): boolean {
 
 /** While the tree shows, it has the focus when no field has it, so j and k work at once. The
  * preview and the lift take the keys from it. Folded, as on a step, it gives them back to the
- * page, so j and k walk the steps. */
+ * page, so h and l walk the steps. */
 function TreeFocus() {
   const { actor } = useTools();
   useEffect(() => {
@@ -684,17 +704,25 @@ function Keys() {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
       const commands = [...(adapter.commands ?? []), ...registry.current().commands];
+      const key = keyOf(e);
       const action = dispatch(
         [...BINDINGS, ...commandBindings(commands)],
         viewOf(actor.getSnapshot(), adapter),
         zoneOf(document.activeElement),
-        { key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey, repeat: e.repeat },
+        key,
       );
       if (action === undefined) return;
       e.preventDefault();
       // Enter finishes only once it was let go after the finish showed.
       if (action.kind === "event" && action.event.type === "finish" && !enter.free()) return;
       perform(action);
+      // p held shows the page only while it is down: its release shows the tools again.
+      if (action.kind === "event" && action.event.type === "preview" && nameOf(key) === "p")
+        peek.down(performance.now());
+    };
+    const peek = holdToggle();
+    const peeked = () => {
+      if (peek.up(performance.now())) perform({ kind: "event", event: { type: "preview" } });
     };
     const enter = release();
     const down = (e: KeyboardEvent) => {
@@ -702,8 +730,12 @@ function Keys() {
     };
     const up = (e: KeyboardEvent) => {
       if (e.key === "Enter") enter.up();
+      if (e.key === "p" || e.key === "P") peeked();
     };
-    const away = () => enter.up();
+    const away = () => {
+      enter.up();
+      peeked();
+    };
     let finishing = actor.getSnapshot().context.finish !== null;
     const watch = actor.subscribe((s) => {
       const now = s.context.finish !== null;
@@ -715,7 +747,7 @@ function Keys() {
       if (e.isComposing) return;
       const action = firstAction(
         viewOf(actor.getSnapshot(), adapter),
-        { key: e.key, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey },
+        keyOf(e),
         ownerOf(document.activeElement),
       );
       if (action === undefined) {
@@ -747,6 +779,16 @@ function Keys() {
   }, [actor, adapter, perform]);
   return null;
 }
+
+/** A key press as the keymap reads it. */
+const keyOf = (e: KeyboardEvent): Key => ({
+  key: e.key,
+  ctrl: e.ctrlKey,
+  meta: e.metaKey,
+  alt: e.altKey,
+  shift: e.shiftKey,
+  repeat: e.repeat,
+});
 
 /** Where the mouse is, so pointing starts on what is under it. */
 function usePointerAt() {
@@ -824,7 +866,7 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
   const openedNote = pins.find((n) => n.id === opened);
   // A note on a variant shows in the lift while it is up, and beside the part when it is down.
   const lifted = useSyncExternalStore(parts.subscribe, () => parts.current().lifting) !== undefined;
-  // A swipe across the part shows its next or previous variant, as h and l do.
+  // A swipe across the part shows its next or previous variant, as j and k do.
   useSwipe(
     box,
     active && ready && view.variants > 1 && view.layer === "none" && !lifted && !pointing,

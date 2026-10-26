@@ -114,7 +114,6 @@ function Help({ view }: { readonly view: View }) {
       b.does !== undefined &&
       !(b.group === "Tools" && (b.keys.includes("?") || b.keys.includes("g"))),
   );
-  // A binding with two ways, as h and l, has a row for each way, so a tap does either.
   const rows = helpRows(keyed);
   const items: Item[] = [
     ...rows.map((row, i) => ({

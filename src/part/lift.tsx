@@ -16,7 +16,7 @@ import { swipeOf, swipeStarts, type Point } from "../ui/swipe";
  * behind it. The part's variants stand in a row, and h and l slide through them; its states
  * stand in a column, and j and k slide through them. The row and the column cross at the
  * part, so a move from one to the other leaves the part where it is; the one not in use
- * stays faint. Enter puts the one shown on the page, and Escape or v puts the part back as
+ * stays faint. Enter puts the one shown on the page, and Escape, v or Space puts the part back as
  * it was; either way the part goes down to where the page now shows it. Settling the step
  * keeps the variant the page shows.
  * d deletes a variant the reviewer does not want, once they confirm it, and u or Cmd+Z
@@ -318,8 +318,9 @@ export function Lift({
         ArrowUp: () => move("state", -1),
         j: () => move("state", 1),
         ArrowDown: () => move("state", 1),
-        // v, which opened the lift, closes it.
+        // v or Space, which opened the lift, closes it.
         v: () => finish(undefined),
+        " ": () => finish(undefined),
         Enter: () => finish(at),
         Escape: () => finish(undefined),
         d: ask,

@@ -5,14 +5,20 @@ import type { Event, Layer } from "../session/machine";
  * `?` menu reads it to show the keys that work now, so the menu never shows a key that does
  * nothing or hides one that does something.
  *
+ * The keys move the way things stand on the screen, and each arrow does what its vim key
+ * does. On a step the panel's foot goes across, the step before, Settle and the step after,
+ * so h and l, or the left and right arrows, go to the step before and after. The variants
+ * stand in a list down the panel, so j and k, or the down and up arrows, go down and up it.
  * What a key does depends on where the focus is, its zone, read from the page when the key
- * comes: on the page j and k go down and up the steps and h and l across the variants, and in
- * the panel's tree they move the selection.
- * g opens the g menu, as LazyVim's which-key: the key after it, as m in g m, does the thing.
+ * comes; in the panel's tree, j and k move the selection.
+ * g opens the g menu, as LazyVim's which-key: the key after it, as j in g j, does the thing.
+ *
+ * No key needs AltGr or Option on a Norwegian Mac, so no [ ] { } \ | @ $ ~ or backtick.
  */
 
 /** Where the focus is. A field and an open list (a picker, the menu) keep their keys. A
- * control of the app's, as a button or a link, has the page's keys but Enter, its own. */
+ * control of the app's, as a button, a link or a slider, has the page's keys but Enter,
+ * Space and the arrows, its own. */
 export type Zone = "page" | "control" | "panel" | "field" | "list";
 
 /** What the keys need to know of the session. */
@@ -27,7 +33,7 @@ export interface View {
   readonly people: boolean;
   /** Whether the tools hide, so the reviewer sees the page as a user does. */
   readonly preview: boolean;
-  /** Whether the reviewer points at an element for a note, from the pin button. */
+  /** Whether the reviewer points at an element for a note, from m or the pin button. */
   readonly aiming?: boolean | undefined;
   /** Whether every step is settled and the panel asks the reviewer to finish the review. */
   readonly finishing?: boolean | undefined;
@@ -46,6 +52,8 @@ export type Action =
   | { readonly kind: "reply" }
   /** Shows the variant `by` on: of the step's part, else of the step's own. */
   | { readonly kind: "variant"; readonly by: number }
+  /** Shows the variant at `at`, from 0, in the panel's list; past its end it does nothing. */
+  | { readonly kind: "variantAt"; readonly at: number }
   /** Lifts the step's part, to see its variants and states; or lists the step's variants. */
   | { readonly kind: "lift" }
   /** Starts or stops pointing at an element for a note, as Alt held does. */
@@ -66,14 +74,12 @@ export type Action =
 export type Group = "Review" | "Notes" | "Panel" | "Tools";
 
 export interface Binding {
-  /** The keys, each one key. */
+  /** The keys, each as `nameOf` names a press: `h`, `ArrowLeft`, `Shift+ArrowLeft`, ` ` for
+   * Space, `Ctrl+r`, `Cmd+z`, and `Ctrl+Z` with Shift. Each does the same thing. */
   readonly keys: readonly string[];
-  /** Whether the key is pressed with Ctrl, as Ctrl+R. */
-  readonly ctrl?: boolean;
   readonly label: string;
-  /** For two keys that go two ways, as h and l: a label for each, so the `?` menu has a row
-   * for each way, and a tap does either. */
-  readonly each?: readonly [string, string];
+  /** How the `?` menu writes the keys, as `1-9`, when it does not list each one. */
+  readonly shows?: string;
   readonly group: Group;
   /** Whether a held key does it once: its repeats do nothing, so a held y never settles a
    * step the reviewer has not seen. */
@@ -91,60 +97,70 @@ const event = (e: Event): Action => ({ kind: "event", event: e });
 // u go back.
 const active = (v: View) => v.active && v.finishing !== true;
 const walking = (v: View) => active(v) && !v.preview;
+const varied = (v: View) => active(v) && v.variants > 1;
 
 export const BINDINGS: readonly Binding[] = [
-  // The review, on the page. One rule holds here, in the lift and in the tree: across is the
-  // variant, down is the step. The preview keeps the same keys.
+  // The review, on the page. The keys go as the panel stands: across its foot to the step
+  // before and after, and down its list of variants. The preview keeps the same keys.
   {
-    keys: ["j", "k"],
-    label: "Step after, before",
-    each: ["Step after", "Step before"],
+    keys: ["h", "ArrowLeft"],
+    label: "Step before",
     group: "Review",
     zone: "page",
     when: active,
-    does: (k) => event({ type: "go", by: k === "j" ? 1 : -1 }),
+    does: event({ type: "go", by: -1 }),
   },
   {
-    keys: ["h", "l"],
-    label: "Previous, next variant",
-    each: ["Previous variant", "Next variant"],
-    group: "Review",
-    zone: "page",
-    when: (v) => active(v) && v.variants > 1,
-    does: (k) => ({ kind: "variant", by: k === "l" ? 1 : -1 }),
-  },
-  {
-    keys: ["J", "K"],
-    label: "Open step after, before: not settled",
-    each: ["Open step after: not settled", "Open step before: not settled"],
+    keys: ["l", "ArrowRight"],
+    label: "Step after",
     group: "Review",
     zone: "page",
     when: active,
-    does: (k) => event({ type: "go", by: k === "J" ? 1 : -1, open: true }),
+    does: event({ type: "go", by: 1 }),
   },
-  // An app with its own h, j, k and l takes them first; it leaves these to the tools.
   {
-    keys: ["h", "l"],
-    ctrl: true,
-    label: "Previous, next variant",
-    each: ["Previous variant", "Next variant"],
+    keys: ["j", "ArrowDown"],
+    label: "Next variant",
     group: "Review",
     zone: "page",
-    when: (v) => active(v) && v.variants > 1,
-    does: (k) => ({ kind: "variant", by: k === "l" ? 1 : -1 }),
+    when: varied,
+    does: { kind: "variant", by: 1 },
   },
   {
-    keys: ["j", "k"],
-    ctrl: true,
-    label: "Step after, before",
-    each: ["Step after", "Step before"],
+    keys: ["k", "ArrowUp"],
+    label: "Previous variant",
+    group: "Review",
+    zone: "page",
+    when: varied,
+    does: { kind: "variant", by: -1 },
+  },
+  {
+    keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    shows: "1-9",
+    label: "Show the variant with that number",
+    group: "Review",
+    zone: "page",
+    when: varied,
+    does: (k) => ({ kind: "variantAt", at: Number(k) - 1 }),
+  },
+  {
+    keys: ["H", "Shift+ArrowLeft"],
+    label: "Open step before: not settled",
     group: "Review",
     zone: "page",
     when: active,
-    does: (k) => event({ type: "go", by: k === "j" ? 1 : -1 }),
+    does: event({ type: "go", by: -1, open: true }),
   },
   {
-    keys: ["v"],
+    keys: ["L", "Shift+ArrowRight"],
+    label: "Open step after: not settled",
+    group: "Review",
+    zone: "page",
+    when: active,
+    does: event({ type: "go", by: 1, open: true }),
+  },
+  {
+    keys: ["v", " "],
     label: "Lift the part: its variants and states",
     group: "Review",
     zone: "page",
@@ -205,6 +221,13 @@ export const BINDINGS: readonly Binding[] = [
     does: { kind: "focus", to: "note" },
   },
   {
+    keys: ["m"],
+    label: "Pin a note: then click the element it is about",
+    group: "Notes",
+    zone: "page",
+    does: { kind: "aim", on: true },
+  },
+  {
     keys: ["Tab"],
     label: "On a step, write to the page instead, or to the step again",
     group: "Notes",
@@ -221,26 +244,46 @@ export const BINDINGS: readonly Binding[] = [
   },
   // The panel's tree.
   {
-    keys: ["j", "k"],
-    label: "Select the row below, above: a note, a step or a journey",
+    keys: ["j"],
+    label: "Select the row below: a note, a step or a journey",
     group: "Panel",
     zone: "panel",
-    does: (k) => ({ kind: "row", by: k === "j" ? 1 : -1 }),
+    does: { kind: "row", by: 1 },
   },
   {
-    keys: ["h", "l"],
-    label: "Close the row or go up; open it or go down into it",
+    keys: ["k"],
+    label: "Select the row above",
     group: "Panel",
     zone: "panel",
-    does: (k) => ({ kind: "tree", open: k === "l" }),
+    does: { kind: "row", by: -1 },
   },
   {
-    keys: ["j", "k"],
-    ctrl: true,
-    label: "Select the next step below, above that is not settled",
+    keys: ["h"],
+    label: "Close the row, or go up",
     group: "Panel",
     zone: "panel",
-    does: (k) => event({ type: "cursorOpen", by: k === "j" ? 1 : -1 }),
+    does: { kind: "tree", open: false },
+  },
+  {
+    keys: ["l"],
+    label: "Open the row, or go down into it",
+    group: "Panel",
+    zone: "panel",
+    does: { kind: "tree", open: true },
+  },
+  {
+    keys: ["Ctrl+j"],
+    label: "Select the next step below that is not settled",
+    group: "Panel",
+    zone: "panel",
+    does: event({ type: "cursorOpen", by: 1 }),
+  },
+  {
+    keys: ["Ctrl+k"],
+    label: "Select the next step above that is not settled",
+    group: "Panel",
+    zone: "panel",
+    does: event({ type: "cursorOpen", by: -1 }),
   },
   {
     keys: ["y"],
@@ -272,18 +315,18 @@ export const BINDINGS: readonly Binding[] = [
     zone: "panel",
     does: { kind: "focus", to: "note" },
   },
-  // The tools, on the page and in the panel.
+  // The tools, on the page and in the panel. A tap of p hides the tools, and another shows
+  // them; p held shows the page only while it is down (holdToggle).
   {
     keys: ["p"],
-    ctrl: true,
-    label: "Hide the tools to see the page as a user does, or show them again",
+    label: "Preview: hide the tools but the eye, or show them again. Hold p to peek",
     group: "Tools",
     zone: "page",
+    once: true,
     does: event({ type: "preview" }),
   },
   {
-    keys: ["b"],
-    ctrl: true,
+    keys: ["Ctrl+b"],
     label: "Hide the panel, or show it again",
     group: "Tools",
     zone: "page",
@@ -330,9 +373,9 @@ export const BINDINGS: readonly Binding[] = [
     does: event({ type: "open", layer: "here" }),
   },
   // Undo takes back the tools' own actions, as a removed note. In a field, vim's u and
-  // Ctrl+R take back the text instead.
+  // Ctrl+R, and the field's own Cmd+Z, take back the text instead.
   {
-    keys: ["u"],
+    keys: ["u", "Ctrl+z", "Cmd+z"],
     label: "Undo",
     group: "Tools",
     zone: "page",
@@ -340,7 +383,7 @@ export const BINDINGS: readonly Binding[] = [
     does: event({ type: "undo" }),
   },
   {
-    keys: ["u"],
+    keys: ["u", "Ctrl+z", "Cmd+z"],
     label: "Back: open the last step again",
     group: "Review",
     zone: "page",
@@ -348,8 +391,7 @@ export const BINDINGS: readonly Binding[] = [
     does: event({ type: "back" }),
   },
   {
-    keys: ["r"],
-    ctrl: true,
+    keys: ["Ctrl+r", "Ctrl+Z", "Cmd+Z"],
     label: "Redo",
     group: "Tools",
     zone: "page",
@@ -390,7 +432,9 @@ export const commandBindings = (
         ],
   );
 
-const keyOf = (b: Binding, key: string) => (b.ctrl === true ? `Ctrl+${key}` : key);
+/** The keys a control of the app's keeps, as a button's Enter and Space, and a slider's or a
+ * list's arrows, so a press there does what the app says. */
+const ownKey = (key: string) => key === "Enter" || key === " " || key.includes("Arrow");
 
 /**
  * The bindings that work in this zone now; "go" gives the g menu's. The tree has the focus
@@ -401,23 +445,25 @@ export const bindingsFor = (
   view: View,
   zone: Zone | "go",
 ): readonly Binding[] => {
-  // A control of the app's keeps Enter, so a press on it does what the app says.
+  // A control of the app's keeps its own keys, so a press on it does what the app says.
   if (zone === "control")
     return bindingsFor(bindings, view, "page").flatMap((b) => {
-      const keys = b.keys.filter((k) => k !== "Enter");
+      const keys = b.keys.filter((k) => !ownKey(k));
       return keys.length === 0 ? [] : [keys.length === b.keys.length ? b : { ...b, keys }];
     });
   const usable = (b: Binding) => b.when === undefined || b.when(view);
   const own = bindings.filter((b) => b.zone === zone && usable(b));
   if (zone !== "panel") return own;
-  const taken = new Set(own.flatMap((b) => b.keys.map((k) => keyOf(b, k))));
+  const taken = new Set(own.flatMap((b) => b.keys));
   const page = bindings.filter(
     (b) =>
       b.zone === "page" &&
       usable(b) &&
       // A key that puts the keys in the tree, where they already are.
       !(typeof b.does !== "function" && b.does.kind === "focus" && b.does.to === "panel") &&
-      !b.keys.some((k) => taken.has(keyOf(b, k))),
+      // A binding the tree takes a key of, as h, goes whole, its arrow too: the tree's
+      // arrows scroll it, as in a list.
+      !b.keys.some((k) => taken.has(k)),
   );
   return [...own, ...page];
 };
@@ -434,31 +480,50 @@ export interface Key {
   readonly meta?: boolean;
   readonly ctrl?: boolean;
   readonly alt?: boolean;
+  readonly shift?: boolean;
   /** Whether the key is held, and this is its repeat. */
   readonly repeat?: boolean;
 }
 
+/**
+ * How the bindings name a press: the key as it types, as `H` with Shift; an arrow with Shift
+ * as `Shift+ArrowLeft`; and a letter with Ctrl or Cmd as `Ctrl+r` or `Cmd+z`, upper case with
+ * Shift, as `Ctrl+Z`. A press with Alt, or with Ctrl and Cmd both, has no name: no binding
+ * takes it. Shift on another key types its own character, as `?`, so it adds nothing.
+ */
+export function nameOf(key: Key): string | undefined {
+  const ctrl = key.ctrl === true;
+  const meta = key.meta === true;
+  if (key.alt === true || (ctrl && meta)) return undefined;
+  const shift = key.shift === true;
+  if (ctrl || meta) {
+    const mod = ctrl ? "Ctrl+" : "Cmd+";
+    if (!/^[a-z]$/i.test(key.key)) return `${mod}${key.key}`;
+    return `${mod}${shift ? key.key.toUpperCase() : key.key.toLowerCase()}`;
+  }
+  if (shift && key.key.startsWith("Arrow")) return `Shift+${key.key}`;
+  return key.key;
+}
+
 /** Whose element has the focus: the tools', as their fields and the panel's tree, or a field of
- * the page's; a picker of the tools' keeps every key, as Ctrl+P to move up. */
+ * the page's; a picker of the tools' keeps every key, as Ctrl+B. */
 export type Owner = "tools" | "page" | "picker";
 
 /**
- * What a key does before anything else on the page sees it: Ctrl+P hides the tools and shows
- * them again, and Ctrl+B hides the panel and shows it again, from a field too. While a step is
- * open they are the tools' alone, so the page's own Ctrl+B waits until the step closes; the
- * tools' own fields and the panel's tree have them always. With no step open, the page
- * has them first, and the page's bindings take them after. On a Mac, a field loses Ctrl+P and Ctrl+B for up a line
- * and back a letter.
+ * What a key does before anything else on the page sees it: Ctrl+B hides the panel and shows
+ * it again, from a field too. While a step is open it is the tools' alone, so the page's own
+ * Ctrl+B waits until the step closes; the tools' own fields and the panel's tree have it
+ * always. With no step open, the page has it first, and the page's bindings take it after.
+ * On a Mac, a field loses Ctrl+B for back a letter.
  */
 export function firstAction(view: View, key: Key, owner?: Owner): Action | undefined {
   // Escape stops pointing, wherever the keys are, a field and the palette too.
   if (view.aiming === true && key.key === "Escape" && !key.ctrl && !key.alt && !key.meta)
     return { kind: "aim", on: false };
-  if (key.alt === true || key.ctrl !== true || key.meta === true) return undefined;
+  if (nameOf(key) !== "Ctrl+b") return undefined;
   if (owner === "picker") return undefined;
   if (!view.active && owner !== "tools") return undefined;
-  if (key.key === "p") return event({ type: "preview" });
-  return key.key === "b" ? { kind: "panel" } : undefined;
+  return { kind: "panel" };
 }
 
 /**
@@ -473,26 +538,27 @@ export function dispatch(
 ): Action | undefined {
   const first = firstAction(view, key, zone === "panel" ? "tools" : undefined);
   if (first !== undefined) return first;
-  if (key.meta === true || key.alt === true) return undefined;
+  const name = nameOf(key);
+  if (name === undefined) return undefined;
   if (zone === "list") return undefined;
-  if (zone === "field")
-    return key.key === "Escape" && key.ctrl !== true ? { kind: "blur" } : undefined;
-  const ctrl = key.ctrl === true;
+  // Escape alone: with Shift too, but no Ctrl or Cmd.
+  const escape = name === "Escape";
+  if (zone === "field") return escape ? { kind: "blur" } : undefined;
+  const plain = !name.startsWith("Ctrl+") && !name.startsWith("Cmd+");
   // The g menu takes the key after g: one of its own does the thing, and any other closes it.
-  if (view.layer === "go" && !ctrl) {
-    const next = goBindings(bindings, view, zone).find((b) => b.keys.includes(key.key));
+  if (view.layer === "go" && plain) {
+    const next = goBindings(bindings, view, zone).find((b) => b.keys.includes(name));
     if (next === undefined) return event({ type: "escape" });
-    return typeof next.does === "function" ? next.does(key.key) : next.does;
+    return typeof next.does === "function" ? next.does(name) : next.does;
   }
   // Escape backs out one level: it closes what is open over the page, then leaves the step
   // for the page, then hides the tools, so they come back as they were, the panel and the
-  // note card too. In the preview it shows them again, as Ctrl+P does. Leaving moves the
-  // reviewer; only Ctrl+B and Ctrl+P hide.
-  if (key.key === "Escape" && view.preview && key.ctrl !== true) return event({ type: "preview" });
+  // note card too. In the preview it shows them again, as p does. Leaving moves the
+  // reviewer; only Ctrl+B and p hide.
+  if (escape && view.preview) return event({ type: "preview" });
   // Escape goes back from the finish, as Back and u do: the last step opens again.
-  if (key.key === "Escape" && key.ctrl !== true && view.finishing === true && view.layer === "none")
-    return event({ type: "back" });
-  if (key.key === "Escape" && key.ctrl !== true)
+  if (escape && view.finishing === true && view.layer === "none") return event({ type: "back" });
+  if (escape)
     return view.layer !== "none"
       ? event({ type: "escape" })
       : view.active
@@ -500,11 +566,31 @@ export function dispatch(
         : zone === "panel" || view.panel
           ? event({ type: "preview" })
           : undefined;
-  const usable = bindingsFor(bindings, view, zone).filter((b) => (b.ctrl === true) === ctrl);
-  const binding = usable.find((b) => b.keys.includes(key.key));
+  const binding = bindingsFor(bindings, view, zone).find((b) => b.keys.includes(name));
   if (binding === undefined || (binding.once === true && key.repeat === true)) return undefined;
-  return typeof binding.does === "function" ? binding.does(key.key) : binding.does;
+  return typeof binding.does === "function" ? binding.does(name) : binding.does;
 }
+
+/** What uses the arrows itself, as a slider, tabs or a grid: on the page, the arrows and Space
+ * there stay the app's. A list and a menu are their own zone. */
+const ARROWS = [
+  "slider",
+  "spinbutton",
+  "scrollbar",
+  "tablist",
+  "tab",
+  "radiogroup",
+  "radio",
+  "grid",
+  "treegrid",
+  "tree",
+  "toolbar",
+  "menubar",
+  "combobox",
+]
+  .map((role) => `[role=${role}]`)
+  .concat("audio", "video")
+  .join(",");
 
 /** The zone of the focused element: a field, a list, the panel's tree, or the page. */
 export function zoneOf(element: Element | null): Zone {
@@ -528,11 +614,14 @@ export function zoneOf(element: Element | null): Zone {
 const CONTROL =
   'button, a[href], area[href], input, select, textarea, summary, [contenteditable], [tabindex]:not([tabindex^="-"])';
 
-/** Whether the focused element is a control that Enter presses: any of the app's; of the
- * tools', one the keyboard went to, as Tab does, and not one a click left the focus on. */
+/** Whether the focused element is a control that Enter presses: any of the app's, and one
+ * in a part that uses the arrows; of the tools', one the keyboard went to, as Tab does, and
+ * not one a click left the focus on. */
 function isControl(element: Element): boolean {
+  const own = element.closest(".blueline, .blueline-portal") !== null;
+  if (!own && element.closest(ARROWS) !== null) return true;
   if (!element.matches(CONTROL)) return false;
-  if (element.closest(".blueline, .blueline-portal") === null) return true;
+  if (!own) return true;
   return element.matches(":focus-visible");
 }
 
@@ -547,23 +636,33 @@ export function ownerOf(element: Element | null): Owner | undefined {
   return element.closest(".blueline, .blueline-portal") === null ? "page" : "tools";
 }
 
-/** How the `?` menu names a binding's keys, as `Ctrl+R` or `g g`. */
-export const keyName = (b: Binding, keys: readonly string[] = b.keys) =>
-  keys
-    .map((k) =>
-      b.ctrl === true
-        ? `Ctrl+${k.toUpperCase()}`
-        : k === "Enter"
-          ? "↵"
-          : k === "Escape"
-            ? "Esc"
-            : k,
-    )
-    .map((k) => (b.zone === "go" ? `g ${k}` : k))
-    .join(" ");
+const GLYPHS: Readonly<Record<string, string>> = {
+  Enter: "↵",
+  Escape: "Esc",
+  " ": "Space",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+};
 
-/** A row of the `?` menu: a binding, or one way of a binding with two, and the key a tap on
- * it presses. */
+/** How the `?` menu writes one key, as `Ctrl+R`, `Cmd+Shift+Z`, `Shift+←` or `Space`. */
+const written = (key: string): string => {
+  const plus = key.lastIndexOf("+");
+  if (plus <= 0) return GLYPHS[key] ?? key;
+  const mod = key.slice(0, plus);
+  const k = key.slice(plus + 1);
+  if (mod === "Shift") return `Shift+${GLYPHS[k] ?? k}`;
+  // A capital after Ctrl or Cmd is the letter with Shift.
+  const shifted = /^[A-Z]$/.test(k);
+  return `${mod}+${shifted ? "Shift+" : ""}${k.toUpperCase()}`;
+};
+
+/** How the `?` menu names a binding's keys, as `h ←`, `Ctrl+R` or `g g`. */
+export const keyName = (b: Binding) =>
+  b.shows ?? b.keys.map((k) => (b.zone === "go" ? `g ${written(k)}` : written(k))).join(" ");
+
+/** A row of the `?` menu: a binding, and the key a tap on it presses. */
 export interface HelpRow {
   readonly label: string;
   readonly key: string;
@@ -571,18 +670,13 @@ export interface HelpRow {
   readonly press: string;
 }
 
-/** The `?` menu's rows for the bindings: one for each, and one for each way of two. */
+/** The `?` menu's rows for the bindings: one for each. */
 export const helpRows = (bindings: readonly Binding[]): readonly HelpRow[] =>
   bindings.flatMap((b): HelpRow[] => {
-    if (b.each !== undefined)
-      return b.each.flatMap((label, i) => {
-        const press = b.keys[i];
-        return press === undefined ? [] : [{ label, key: keyName(b, [press]), binding: b, press }];
-      });
     const press = b.keys[0];
     return press === undefined ? [] : [{ label: b.label, key: keyName(b), binding: b, press }];
   });
 
-/** What a tap on a row of the `?` menu does: what its key does. */
+/** What a tap on a row of the `?` menu does: what its first key does. */
 export const rowAction = (row: HelpRow): Action =>
   typeof row.binding.does === "function" ? row.binding.does(row.press) : row.binding.does;

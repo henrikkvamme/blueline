@@ -45,9 +45,9 @@ const PARTS: readonly Term[] = [
   {
     id: "lift",
     name: "Lift",
-    what: "v: the part over a dimmed page, with its variants side by side.",
+    what: "v or Space: the part over a dimmed page, with its variants side by side.",
   },
-  { id: "preview", name: "Preview", what: "Ctrl+P: the tools hide, the small bar stays." },
+  { id: "preview", name: "Preview", what: "p: the tools hide, and only the eye stays." },
 ];
 
 /** The words the tools use for what the reviewer does and makes. */
@@ -65,7 +65,7 @@ const WORDS: readonly Term[] = [
   },
   { id: "group", name: "Group", what: "Steps that belong together; the headings in the tree." },
   { id: "step", name: "Step", what: "One thing to look at in a journey." },
-  { id: "openStep", name: "Open step", what: "A step not settled yet. J and K go to these." },
+  { id: "openStep", name: "Open step", what: "A step not settled yet. H and L go to these." },
   {
     id: "settle",
     name: "Settle",

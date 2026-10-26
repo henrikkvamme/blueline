@@ -122,7 +122,7 @@ export type Event =
        * again, for another pass. */
       readonly again?: boolean | undefined;
     }
-  /** `by` steps on; with `open`, only the steps not settled count, as J and K go. */
+  /** `by` steps on; with `open`, only the steps not settled count, as H and L go. */
   | { readonly type: "go"; readonly by: number; readonly open?: boolean | undefined }
   | { readonly type: "jump"; readonly at: number }
   /** Opens the step's page and setup again, and scrolls its part to the middle. */
@@ -1040,8 +1040,8 @@ export const sessionMachine = setup({
               ],
             },
             go: {
-              // j and k go to every step, settled too, so the reviewer can go back to one
-              // just settled; J and K pass over the settled ones.
+              // h and l go to every step, settled too, so the reviewer can go back to one
+              // just settled; H and L pass over the settled ones.
               guard: ({ context, event }) => goTo(context, event) !== context.at,
               target: ".entering",
               reenter: true,
@@ -1198,7 +1198,7 @@ export const sessionMachine = setup({
                 row: undefined,
               }),
             },
-            // As J and K on the page, past the settled steps.
+            // As H and L on the page, past the settled steps.
             cursorOpen: {
               actions: assign({
                 cursor: ({ context, event }) => openStepBy(context, event.by, context.cursor),

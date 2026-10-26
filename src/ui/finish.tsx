@@ -1,4 +1,4 @@
-import { ChevronUp, Send } from "lucide-react";
+import { ChevronLeft, Send } from "lucide-react";
 import type { Note } from "../notes/note";
 import { useNotes, useSession, useStep, useTools } from "./session";
 import { Foot, KEEP_FOCUS } from "./step-controls";
@@ -73,7 +73,7 @@ export function FinishView() {
           onClick={() => perform({ kind: "event", event: { type: "back" } })}
           className="grid size-10 shrink-0 place-items-center rounded-dt-control bg-dt-raised text-dt-muted hover:bg-dt-line hover:text-dt-text max-sm:size-11"
         >
-          <ChevronUp className="size-4" aria-hidden />
+          <ChevronLeft className="size-4" aria-hidden />
         </button>
         <button
           type="button"

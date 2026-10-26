@@ -41,7 +41,7 @@ export function openedAgain(f: Feedback): Feedback {
 }
 
 /**
- * The step J and K go to: `by` steps on, passing over the settled ones, as the review is
+ * The step H and L go to: `by` steps on, passing over the settled ones, as the review is
  * done with them; the panel's tree still opens them. With no open step that way, it stays.
  */
 export function stepBy(
