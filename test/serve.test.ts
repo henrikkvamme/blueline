@@ -442,6 +442,28 @@ describe("blueline serve for pages", () => {
     expect(again.status).toBe(404);
   });
 
+  it("keeps an origin whose removal it could not save", async () => {
+    const root = repository("unremoved");
+    const kept = await fetch(`${url}/blueline/register`, {
+      method: "POST",
+      body: JSON.stringify({ root, origin: page, keep: true }),
+    });
+    const app = (await kept.json()) as Registered;
+    const remove = () =>
+      fetch(`${url}/blueline/remove`, {
+        method: "POST",
+        body: JSON.stringify({ root, origin: page }),
+      });
+    rmSync(state, { recursive: true, force: true });
+    writeFileSync(state, "");
+    expect((await remove()).status).toBe(500);
+    expect(await preflight(app.base, page)).toBe(204);
+    rmSync(state);
+    mkdirSync(state);
+    expect((await remove()).status).toBe(200);
+    expect(await preflight(app.base, page)).toBe(403);
+  });
+
   it("stops when a tool asks, and not when a page does", async () => {
     const stopped = vi.fn();
     await served?.close();

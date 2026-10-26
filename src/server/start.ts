@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, openSync } from "node:fs";
+import { closeSync, mkdirSync, openSync } from "node:fs";
 import { request } from "node:http";
 import path from "node:path";
 import type { GivenFiles } from "./apps.ts";
@@ -36,20 +36,28 @@ export function placeOf(env: Readonly<Record<string, string | undefined>>): Plac
  * The running server's health. When none runs, starts one as a process of its own, which
  * outlives this one, with its output in `serve.log`, and waits for it.
  */
-export async function ensureServer(place: Place): Promise<Health> {
+export async function ensureServer({ port, state: given }: Place): Promise<Health> {
+  // The server runs in its state folder, so a folder from here must be whole first.
+  const place = { port, state: path.resolve(given) };
   const found = await probe(place.port);
   if (found.kind === "blueline") return found.health;
   if (found.kind === "other") throw new Error(found.reason);
   mkdirSync(place.state, { recursive: true });
   const log = path.join(place.state, "serve.log");
   const out = openSync(log, "a");
-  const child = spawn(process.execPath, [commandFile(), "serve"], {
-    detached: true,
-    // The server does not hang on to the folder it was started from.
-    cwd: place.state,
-    stdio: ["ignore", out, out],
-    env: { ...process.env, BLUELINE_PORT: String(place.port), BLUELINE_STATE: place.state },
-  });
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(process.execPath, [commandFile(), "serve"], {
+      detached: true,
+      // The server does not hang on to the folder it was started from.
+      cwd: place.state,
+      stdio: ["ignore", out, out],
+      env: { ...process.env, BLUELINE_PORT: String(place.port), BLUELINE_STATE: place.state },
+    });
+  } finally {
+    // The child has its own copy; this process keeps none for each start.
+    closeSync(out);
+  }
   const failed = new Promise<string>((done) => {
     child.once("error", (error) => done(error.message));
     child.once("exit", (code) => done(`it exited with code ${String(code)}`));

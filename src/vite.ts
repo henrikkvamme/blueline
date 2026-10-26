@@ -106,6 +106,10 @@ function forward(port: number, target: string, request: IncomingMessage, respons
     (answer) => {
       response.writeHead(answer.statusCode ?? 502, answer.headers);
       answer.pipe(response);
+      // An answer cut short ends the page's answer too, so the page does not wait on it.
+      answer.once("close", () => {
+        if (!answer.complete) response.destroy();
+      });
     },
   );
   sent.on("error", () => {

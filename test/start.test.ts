@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
@@ -44,6 +44,23 @@ describe("starting blueline serve", () => {
     expect(health.pid).not.toBe(process.pid);
     expect(await ensureServer(at)).toEqual(health);
     expect(readFileSync(path.join(at.state, "serve.log"), "utf8")).toContain("serves every app");
+  });
+
+  it("keeps a state folder given from here in that folder", async () => {
+    const at = await place();
+    await ensureServer({ port: at.port, state: path.relative(process.cwd(), at.state) });
+    expect(readdirSync(at.state).sort()).toEqual(["apps.json", "serve.log"]);
+  });
+
+  it("keeps no file open in this process for each start", async () => {
+    const at = await place();
+    mkdirSync(at.state, { recursive: true });
+    writeFileSync(path.join(at.state, "apps.json"), "{nope");
+    const log = path.join(at.state, "serve.log");
+    // The files this process has open, by name.
+    const open = async () => (await run("lsof", ["-p", String(process.pid), "-Fn"])).stdout;
+    for (const _ of [1, 2, 3]) await expect(ensureServer(at)).rejects.toThrow(log);
+    expect(await open()).not.toContain(log);
   });
 
   it("starts one when two ask at once", async () => {

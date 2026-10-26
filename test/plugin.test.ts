@@ -237,6 +237,38 @@ describe("the Vite plugin", () => {
     });
   });
 
+  it("ends the page's answer when the server's answer is cut short", async () => {
+    // A server that registers the app, then cuts its answers off after the first bytes.
+    const cut = createHttpServer((request, response) => {
+      if (request.url === "/blueline/health")
+        return void response.end(
+          JSON.stringify({ blueline: true, protocol: 2, version: "0", pid: 1 }),
+        );
+      response.writeHead(200, { "content-length": "1000" });
+      if (request.url === "/blueline/register")
+        return void response.write(
+          `${JSON.stringify({ protocol: 2, name: "cut", base: "/blueline/cut/", files: {} })}\n`,
+        );
+      response.write("partial");
+      setTimeout(() => response.socket?.destroy(), 20);
+    });
+    await new Promise<void>((done) => cut.listen(0, "127.0.0.1", done));
+    const address = cut.address();
+    if (typeof address !== "object" || address === null) throw new Error("No port");
+    const { server, url } = await startVite(folder("cut"), {
+      port: address.port,
+      state: serve.state,
+    });
+    try {
+      await registered(url);
+      await expect((await fetch(`${url}${OVERLAY}`)).text()).rejects.toThrow();
+    } finally {
+      await server.close();
+      cut.closeAllConnections();
+      cut.close();
+    }
+  });
+
   it("works on a dev server over HTTPS", async () => {
     const keys = folder("tls");
     const key = path.join(keys, "key.pem");

@@ -205,7 +205,13 @@ async function remove(
   const app = typeof root === "string" ? apps.rooted(root) : undefined;
   if (app === undefined || !apps.keep(app.name, given.origin, false))
     return end(response, 404, { error: `${given.origin} is not kept for ${given.root}.` });
-  await saved();
+  try {
+    await saved();
+  } catch (error) {
+    // Kept as the file still has it, so a removal after the folder is back finds it.
+    apps.keep(app.name, given.origin, true);
+    return end(response, 500, { error: String(error) });
+  }
   end(response, 200, registeredOf(app));
 }
 
