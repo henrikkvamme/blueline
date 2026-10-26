@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { merge } from "../src/part/merge";
-import { dropped, keptOn, NO_VERDICTS, variantOf, varietyOf } from "../src/part/store";
+import { dropped, keptOn, NO_VERDICTS, variantOf, variantRows, varietyOf } from "../src/part/store";
 
 describe("a state's patch over a part's props", () => {
   const props = {
@@ -71,5 +71,37 @@ describe("what a part has to lift", () => {
   it("has nothing to lift with one variant left and no states", () => {
     expect(varietyOf(part(["A"]), NO_VERDICTS)).toBeUndefined();
     expect(varietyOf(part(["A", "B"]), { kept: [], dropped: ["B"] })).toBeUndefined();
+  });
+});
+
+describe("the variant rows in the panel", () => {
+  const part = { labels: ["Title first", "Status first", "Compact row"] };
+  const none = { labels: [], at: 0 };
+
+  it("lists the part's variants, with the one the page shows", () => {
+    const shown = { variant: "Status first", state: undefined };
+    expect(variantRows(part, shown, NO_VERDICTS, none)).toEqual({
+      labels: ["Title first", "Status first", "Compact row"],
+      at: 1,
+    });
+  });
+
+  it("leaves out a deleted variant, and shows the first one left when it was shown", () => {
+    const shown = { variant: "Title first", state: undefined };
+    const verdicts = dropped(NO_VERDICTS, "Title first");
+    expect(variantRows(part, shown, verdicts, none)).toEqual({
+      labels: ["Status first", "Compact row"],
+      at: 0,
+    });
+  });
+
+  it("lists the step's own variants when its part has one left, and none when the step has one", () => {
+    const one = { variant: undefined, state: undefined };
+    const left = dropped(dropped(NO_VERDICTS, "Title first"), "Status first");
+    const own = { labels: ["Empty", "Full"], at: 1 };
+    expect(variantRows(part, one, left, own)).toEqual(own);
+    expect(variantRows(undefined, one, NO_VERDICTS, own)).toEqual(own);
+    expect(variantRows(undefined, one, NO_VERDICTS, { labels: ["Only"], at: 0 })).toBeUndefined();
+    expect(variantRows(part, one, left, none)).toBeUndefined();
   });
 });

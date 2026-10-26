@@ -88,6 +88,23 @@ export function variantOf(labels: readonly string[], shown: Shown, verdicts: Ver
   return wanted !== undefined && left.includes(wanted) ? wanted : (left[0] ?? labels[0] ?? "");
 }
 
+/**
+ * The variants the panel lists for a step, and the one the page shows: the part's variants
+ * that the reviewer did not delete, else the step's own. None when fewer than two are left, as
+ * there is nothing to choose.
+ */
+export function variantRows(
+  part: { readonly labels: readonly string[] } | undefined,
+  shown: Shown,
+  verdicts: Verdicts,
+  own: { readonly labels: readonly string[]; readonly at: number },
+): { readonly labels: readonly string[]; readonly at: number } | undefined {
+  const left = part?.labels.filter((l) => !verdicts.dropped.includes(l)) ?? [];
+  if (part !== undefined && left.length > 1)
+    return { labels: left, at: left.indexOf(variantOf(part.labels, shown, verdicts)) };
+  return own.labels.length > 1 ? own : undefined;
+}
+
 /** The verdicts after the reviewer deletes a variant. */
 export function dropped(was: Verdicts, variant: string): Verdicts {
   const without = (list: readonly string[]) => list.filter((v) => v !== variant);
