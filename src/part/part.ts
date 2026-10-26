@@ -65,7 +65,7 @@ interface Copy {
 interface Found {
   readonly id: string;
   readonly name: string;
-  readonly kind: Kind;
+  kind: Kind;
   /** Whether `part` gave the code, and not the element's templates. */
   readonly code: boolean;
   readonly remove: () => void;
@@ -84,6 +84,10 @@ interface Shared {
   readonly elements: Map<Element, Found>;
   observer: MutationObserver | undefined;
   next: number;
+  /** Whether Blueline is finding or drawing the parts now, and what to do again after: a
+   * part's `show` can declare a part, and finding one adds it to the store. */
+  busy: boolean;
+  again: "find" | "draw" | undefined;
 }
 
 /** The declared parts and the observer, shared by every copy of Blueline on the page. */
@@ -92,6 +96,8 @@ const found = shared("found", (): Shared => ({
   elements: new Map(),
   observer: undefined,
   next: 0,
+  busy: false,
+  again: undefined,
 }));
 
 /** What the page shows of a part of this name, with its labels and states. */
@@ -249,7 +255,7 @@ function clearCopies(entry: Found) {
 // ---- Finding the marked elements.
 
 /** Matches the store's instances to the marked elements on the page now. */
-function sync() {
+function find() {
   const now = new Set<Element>();
   // The elements a part already holds, as a React part's (variants.tsx).
   const held = new Set(parts.current().instances.flatMap((i) => i.node() ?? []));
@@ -259,6 +265,10 @@ function sync() {
     const declared = found.kinds.get(name);
     const had = found.elements.get(element);
     if (had !== undefined) {
+      // A part declared again with the same variants and states keeps its instances and
+      // its copies, and takes the new code.
+      if (had.code && had.name === name && declared !== undefined && alike(had.kind, declared))
+        had.kind = declared;
       const same = had.name === name && (had.code ? had.kind === declared : declared === undefined);
       if (same) {
         now.add(element);
@@ -290,7 +300,39 @@ function sync() {
     });
   }
   for (const [element, entry] of found.elements) if (!now.has(element)) end(element, entry);
-  draw();
+}
+
+const alike = (a: Kind, b: Kind) =>
+  a.labels.join("\n") === b.labels.join("\n") && a.states.join("\n") === b.states.join("\n");
+
+/** How many times Blueline finds and draws the parts again for one change, at most. */
+const PASSES = 20;
+
+/** Finds the parts, or only draws them, once at a time: a call while Blueline is at it
+ * says to do it again after, so a part's `show` that declares a part does not draw inside
+ * itself, and the parts found at once are drawn once. */
+function run(work: "find" | "draw") {
+  if (found.busy) {
+    found.again = found.again === "find" || work === "find" ? "find" : "draw";
+    return;
+  }
+  found.busy = true;
+  try {
+    let next: "find" | "draw" | undefined = work;
+    for (let pass = 0; next !== undefined; pass += 1) {
+      if (pass === PASSES) {
+        console.error("Blueline's parts kept changing as it drew them: it stopped.");
+        break;
+      }
+      found.again = undefined;
+      if (next === "find") find();
+      draw();
+      next = found.again;
+    }
+  } finally {
+    found.busy = false;
+    found.again = undefined;
+  }
 }
 
 /** Ends a marked element's instance and its copies. */
@@ -313,15 +355,15 @@ function draw() {
 /** Starts finding the marked elements on the page, once for every copy of Blueline. */
 export function watchParts() {
   if (found.observer !== undefined) return;
-  found.observer = new MutationObserver(sync);
+  found.observer = new MutationObserver(() => run("find"));
   found.observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: [MARK],
   });
-  parts.subscribe(draw);
-  sync();
+  parts.subscribe(() => run("draw"));
+  run("find");
 }
 
 /** A part of the page, drawn by the app's code: see the top of this file. */
@@ -335,7 +377,7 @@ export function part(name: string, options: PartOptions): Part {
   found.kinds.set(name, kind);
   parts.declare(name, kind.labels);
   watchParts();
-  sync();
+  run("find");
   const shown = () => shownOf(name, kind.labels, kind.states);
   return {
     shown,

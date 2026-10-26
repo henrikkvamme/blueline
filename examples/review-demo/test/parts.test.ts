@@ -168,4 +168,59 @@ describe("parts without React", () => {
     other.dispose();
     expect(instances("Other")).toHaveLength(0);
   });
+
+  it("draws a copy once when its show declares a part of its own", async () => {
+    let shows = 0;
+    const nested = part("Nested", {
+      variants: ["One", "Two"],
+      show: (into) => {
+        shows += 1;
+        // A copy's code may declare the parts it holds, as the page's does.
+        part("Nested", { variants: ["One", "Two"], show: () => undefined });
+        const inner = document.createElement("span");
+        inner.setAttribute("data-blueline-part", "Nested");
+        into.append(inner);
+      },
+    });
+    const element = document.createElement("div");
+    element.id = "nested";
+    element.setAttribute("data-blueline-part", "Nested");
+    page.append(element);
+    await expect.poll(() => instances("Nested")).toHaveLength(1);
+    const { id } = instances("Nested")[0] ?? { id: "" };
+    const host = document.createElement("div");
+    host.setAttribute("data-blueline-host", "");
+    document.body.append(host);
+    parts.stage({
+      id,
+      host,
+      options: [
+        { slot: "variant:One", variant: "One", state: 0 },
+        { slot: "variant:Two", variant: "Two", state: 0 },
+      ],
+    });
+    expect(shows).toBe(2);
+    expect(host.children).toHaveLength(2);
+    parts.land();
+    expect(host.children).toHaveLength(0);
+    host.remove();
+    nested.dispose();
+  });
+
+  it("finds many marked parts in time that grows with their number", async () => {
+    const many = document.createElement("section");
+    const count = 400;
+    many.innerHTML = Array.from(
+      { length: count },
+      (_, i) =>
+        `<div data-blueline-part="Many${String(i % 4)}" data-blueline-variant="A">a<template data-blueline-variant="B">b</template></div>`,
+    ).join("");
+    const reads = vi.spyOn(Storage.prototype, "getItem");
+    page.append(many);
+    await expect.poll(() => instances("Many0")).toHaveLength(count / 4);
+    // Each part's page is drawn a few times at most, not once for each part found after it.
+    expect(reads.mock.calls.length).toBeLessThan(count * 10);
+    reads.mockRestore();
+    many.remove();
+  });
 });
