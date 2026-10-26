@@ -101,6 +101,7 @@ export function Palette({
       >
         <input
           ref={field}
+          name="blueline-search"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);

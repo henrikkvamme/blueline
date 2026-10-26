@@ -174,6 +174,7 @@ export function Compare({ block }: Of<"compare">) {
           After
         </span>
         <input
+          name="blueline-before-after"
           type="range"
           min={0}
           max={100}

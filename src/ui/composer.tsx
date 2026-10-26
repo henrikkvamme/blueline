@@ -602,6 +602,7 @@ export function Composer({
         </div>
         <input
           ref={picker}
+          name="blueline-screenshots"
           type="file"
           accept="image/*"
           multiple
@@ -633,6 +634,7 @@ export function Composer({
             ref={field}
             value={draft}
             rows={1}
+            name={sends ? "blueline-message" : "blueline-annotation"}
             data-dt-composer={sends ? "step" : "pinned"}
             onChange={(e) => {
               setChosen(0);

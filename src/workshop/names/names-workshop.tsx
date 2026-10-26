@@ -372,6 +372,7 @@ function List({
             )}
           >
             <input
+              name={`blueline-name-${t.id}`}
               value={name}
               onChange={(e) => rename(t.id, e.target.value)}
               onFocus={() => map.setHover(t.id)}

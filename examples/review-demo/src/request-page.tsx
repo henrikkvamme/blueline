@@ -62,6 +62,7 @@ export function RequestPage({ id }: { readonly id: string }) {
       <section data-review="request-decision" className="flex flex-col gap-3">
         <h2 className="text-sm font-medium text-slate-500">Decision</h2>
         <textarea
+          name="reply"
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           rows={3}

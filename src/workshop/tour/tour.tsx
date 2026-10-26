@@ -273,6 +273,7 @@ function RequestPage() {
       <label data-tour="amount" className="flex flex-col gap-1.5 text-[13px]">
         <span className="font-medium">Amount</span>
         <input
+          name="amount"
           defaultValue="NOK 40 000"
           className="rounded-md border border-[#dcdce3] px-3 py-2 text-[14px]"
         />

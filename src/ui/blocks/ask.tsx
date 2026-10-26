@@ -112,6 +112,7 @@ function Question({ block, note, after }: Props<"question">) {
           }}
         >
           <input
+            name="blueline-answer"
             value={words}
             onChange={(e) => setWords(e.currentTarget.value)}
             placeholder={multiple ? "Add your own words" : "Or write your own answer"}
