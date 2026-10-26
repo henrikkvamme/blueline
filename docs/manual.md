@@ -170,9 +170,9 @@ over the page, then leaves the step for the page, then hides the tools.
 
 The tree is as Neovim's: this page and the pages with notes, in the order of
 their paths, and the journeys. A page's row is its chat: it shows the chat's last words, and
-opens the chat. A page opens on its notes not sent, and this page on its parts too; a
-journey opens on its steps, and a step on its notes not sent. This page and the journey
-walked start open, and the tree keeps what you open and close. A sent note leaves the tree;
+opens the chat. A page opens on its notes not sent, a journey on its steps, and a step on
+its notes not sent. The journeys start with **This page**, the page's own review, and the
+settled journeys come last. This page and the journey walked start open, and the tree keeps what you open and close. A sent note leaves the tree;
 its message in the chat has it.
 
 - `j` and `k` go over every row. The pointer selects the row it is on.
@@ -317,10 +317,11 @@ goes to a path, so the tree's pages go there.
 
 ## Review a page
 
-A page with `variants` parts needs no journey. The tree's row for this page lists a step for
-each part the page shows, and an app with no journeys starts there from the tree. A step
-opens nothing: it lights its part, `v` lifts it, and `y` keeps the variant shown and goes on
-to the next open step, from the page or the tree. The agent reads the journey `page`; a
+A page with `variants` parts needs no journey. The tree lists the journey **This page** first,
+with a step for each part that the page shows. It is a journey as any other. A step opens
+nothing: it lights its part, `v` lifts it, and `y` keeps the variant shown and goes on to the
+next open step, from the page or the tree. After the last step, Finish hands the review off to
+the agent. The agent reads the journey `page`; a
 step's id is `page:<part>`, and its group is the page's path. Write a journey only for a
 flow across people or pages.
 

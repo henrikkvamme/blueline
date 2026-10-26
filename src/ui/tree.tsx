@@ -2,7 +2,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Circle,
   CircleCheck,
   Clock,
   Layers,
@@ -18,7 +17,7 @@ import {
   type PointerEvent,
 } from "react";
 import { isKept, type Note } from "../notes/note";
-import { PAGE_JOURNEY, placePath } from "../part/page";
+import { listedJourneys, PAGE_JOURNEY, placePath } from "../part/page";
 import { parts as partsStore, variantsOn } from "../part/store";
 import { stepNoteId } from "../session/machine";
 import { hasNews, newsOn } from "../session/replies";
@@ -77,9 +76,9 @@ export function TreeZone({
 
 function Tree({ heading }: { readonly heading: boolean }) {
   const journey = useJourney();
-  // The journey walked stands open in the list; the page's parts show under it.
-  // Off a step too, so the reviewer comes back to where the walk stopped.
-  const current = journey?.id !== PAGE_JOURNEY ? journey?.id : undefined;
+  // The journey walked stands open in the list, this page's review too. Off a step too, so
+  // the reviewer comes back to where the walk stopped.
+  const current = journey?.id;
   return (
     <div className="flex flex-1 flex-col">
       <Pages heading={heading} />
@@ -244,17 +243,15 @@ function NoteCount({ notes }: { readonly notes: readonly Note[] }) {
 /**
  * This page and the pages with notes, in the order of their paths, so a row keeps its place
  * as the reviewer goes from page to page. A page's row is its chat: it says the chat's last
- * words, and opens it. Under it are its pointed notes not sent, and this page's parts with
- * variants. A row on another page goes there.
+ * words, and opens it. Under it are its pointed notes not sent. A row on another page goes
+ * there. This page's parts with variants are its review, a journey (useJourneys).
  */
 function Pages({ heading }: { readonly heading: boolean }) {
   const { actor, navigate } = useTools();
-  const { place, at, feedback, chat, pins, parts, here, openChat, openPin, openPart } =
-    useThisPage();
+  const { place, chat, pins, openChat, openPin } = useThisPage();
   const notes = useNotes();
   const folds = useSession((s) => s.context.folds);
   const selected = useSession((s) => s.context.row);
-  const cursor = useSession((s) => s.context.cursor);
   // The page is where the reviewer writes: off a step, or with the panel on its chat.
   const writing = useSession((s) => !s.context.active || s.context.chat === "page");
   const pages = [
@@ -275,8 +272,7 @@ function Pages({ heading }: { readonly heading: boolean }) {
       {pages.map((p) => {
         const id = `page:${p.place}`;
         const isHere = p.place === place;
-        const children = p.pins.length + (isHere ? parts.length : 0);
-        const open = children === 0 ? undefined : (folds[id] ?? isHere);
+        const open = p.pins.length === 0 ? undefined : (folds[id] ?? isHere);
         const last = p.chat?.thread.at(-1);
         return (
           <div key={p.place} className="contents">
@@ -315,31 +311,6 @@ function Pages({ heading }: { readonly heading: boolean }) {
                 }
               />
             )}
-            {open === true &&
-              isHere &&
-              parts.map((step, i) => (
-                // In the page's review, its parts are the steps, so the step cursor selects them.
-                <TreeRow
-                  key={step.id}
-                  id={`part:${String(i)}`}
-                  parent={id}
-                  depth={1}
-                  step={here ? i : undefined}
-                  selected={
-                    here ? i === cursor && selected === undefined : selected === `part:${String(i)}`
-                  }
-                  onOpen={() => openPart(i)}
-                  className={here && i === at && "text-dt-text"}
-                >
-                  {feedback[step.id]?.settled === true ? (
-                    <Check className="size-3 shrink-0 text-dt-good" aria-label="Settled" />
-                  ) : (
-                    <Circle className="size-3 shrink-0 text-dt-faint" aria-label="Open" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{step.title}</span>
-                  <VariantCount count={variantsOn(step, undefined)} />
-                </TreeRow>
-              ))}
           </div>
         );
       })}
@@ -407,7 +378,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
         const news = newsOn(notes, step.id);
         return (
           <li key={step.id} className="contents">
-            {step.group.id !== journey.steps[i - 1]?.group.id && (
+            {journey.id !== PAGE_JOURNEY && step.group.id !== journey.steps[i - 1]?.group.id && (
               <span className={cx(DEPTH[1], "pt-3 pb-1 text-[12px] text-dt-faint")}>
                 {step.group.title}
               </span>
@@ -575,14 +546,15 @@ export function useThisPage() {
   };
 }
 
-/** The journeys but this page's, with how many steps each has settled, and what starts one:
+/** The journeys, this page's review first when the page shows parts with variants, with how
+ * many steps each has settled, and what starts one:
  * the journey walked goes on where the walk stopped, another opens where its work is left, its
  * first step not settled, and a journey with every step settled opens them all again, for
  * another pass. */
 export function useJourneys() {
   const { actor, adapter } = useTools();
   const feedback = useSession((s) => s.context.feedback);
-  const journeys = adapter.journeys.filter((j) => j.id !== PAGE_JOURNEY && j.steps.length > 0);
+  const journeys = listedJourneys(adapter.journeys);
   const settledIn = (j: JourneyInfo) =>
     j.steps.filter((st) => feedback[st.id]?.settled === true).length;
   const start = (j: JourneyInfo) => {
@@ -635,7 +607,8 @@ function Journeys({
       {shown.map((j) => {
         const id = `journey:${j.id}`;
         const walked = j.id === current;
-        const open = folds[id] ?? (walked && !done);
+        // This page's review starts open, as its parts are on the page.
+        const open = folds[id] ?? ((walked || j.id === PAGE_JOURNEY) && !done);
         // A finished journey's hand-off, while the agent has it or its answer is not read: the
         // row marks it and opens it, so a look does not start another pass under the agent.
         const handed = handoffOf(notes, j.id);

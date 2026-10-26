@@ -1,11 +1,12 @@
 import { Effect, Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createActor, waitFor } from "xstate";
-import { PAGE_JOURNEY, pageJourney, pageParts } from "../src/part/page";
+import { createActor, type EventFrom, initialTransition, transition, waitFor } from "xstate";
+import { handoffId } from "../src/notes/handoff";
+import { listedJourneys, PAGE_JOURNEY, pageJourney, pageParts } from "../src/part/page";
 import { parts } from "../src/part/store";
 import { liveMachine, shapesOf } from "../src/session/actors";
 import { postedLine } from "../src/session/lines";
-import { stepNoteId } from "../src/session/machine";
+import { sessionMachine, stepNoteId } from "../src/session/machine";
 import { START } from "../src/session/state";
 import type { DevAdapter, DevJourney, DevStep } from "../src/types";
 
@@ -147,6 +148,33 @@ describe("the page's own review", () => {
         expect(log).toEqual([]);
       }),
     ));
+
+  it("is listed first among the journeys, as This page, and only when the page shows a part", () => {
+    const page = pageJourney<string>(["Suggestion"], "/pursuits");
+    const own = journey([]);
+    const empty = { ...own, id: "empty", steps: [] };
+    expect(listedJourneys([own, empty, page]).map((j) => j.id)).toEqual([PAGE_JOURNEY, "prep"]);
+    expect(listedJourneys([own, pageJourney<string>([], "/")]).map((j) => j.id)).toEqual(["prep"]);
+    expect(page.title).toBe("This page");
+    // Its words name no key: the panel shows none.
+    for (const step of page.steps) expect(`${step.look} ${step.try ?? ""}`).not.toMatch(/\b[yv]\b/);
+  });
+
+  it("finishes as a journey: the last settle waits for Finish, and Finish hands the review off", () => {
+    const page = pageJourney<string>(["Suggestion"], "/pursuits");
+    const [first] = initialTransition(sessionMachine, {
+      kept: { ...START, journey: PAGE_JOURNEY, active: true },
+      journeys: shapesOf([page]),
+      now: 0,
+    });
+    const step = (s: typeof first, e: EventFrom<typeof sessionMachine>) =>
+      transition(sessionMachine, s, e)[0];
+    const held = step(step(first, { type: "entered" }), { type: "settle" });
+    expect(held.context.finish).toEqual({ step: "page:Suggestion", ids: [] });
+    const done = step(held, { type: "finish", at: 3 });
+    expect(done.context.handoff).toBe(handoffId(PAGE_JOURNEY, 3));
+    expect(done.context.feedback["page:Suggestion"]?.settled).toBe(true);
+  });
 
   it("names the part a step lights, once for every part of its name", () => {
     const journey = pageJourney(["Suggestion", 'Say "hi"']);

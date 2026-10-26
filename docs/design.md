@@ -316,6 +316,12 @@ settled step, undo, redo, another pass over a settled journey, and a message on 
 step. Each line counts the steps left after it. So the agent never keeps a settle that the
 page took back. Only the last settle waits, for Finish, and has no line until then.
 
+The page review is one more journey, **This page**, with a step for each part that the page
+shows. It is first under the journeys, and it starts open. It walks its parts with the same
+panel, Settle, Finish and hand-off as any journey, so the reviewer learns one model. The page's
+row keeps only its chat and its notes. The feedback lines do not change: the journey is
+`page`, a step's id is `page:<part>`, and its group is the page's path.
+
 The tree keeps the open journeys on top. The settled ones stand folded at its foot, under a
 quiet **Settled** heading; a finished journey moves there with a short motion, and back up
 the same way for another pass. The hand-off replaces the "Review done" line that the tree's

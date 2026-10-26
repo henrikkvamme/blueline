@@ -22,7 +22,8 @@ One thing in a journey to look at, with what to look for and what to try.
 _Avoid_: Stop, item
 
 **Page review**:
-The review of one page with no journey: one step for each part that the page shows.
+The page's own journey, named This page: one step for each part that the page shows. The
+tree lists it first under the journeys.
 _Avoid_: Ad-hoc review
 
 **Open step**:
@@ -92,8 +93,8 @@ it is a sheet at the bottom.
 _Avoid_: Sidebar, step card, page card, drawer
 
 **Tree**:
-The pages, journeys and steps in the panel. On a step it folds to one line. The settled
-journeys stand at its foot, under **Settled**.
+The pages, journeys and steps in the panel. On a step it folds to one line. This page comes
+first in the journeys, and the settled journeys stand at its foot, under **Settled**.
 
 **Bar**:
 The panel's folded form, at the bottom centre of the page. It shows only while the panel
