@@ -220,6 +220,24 @@ describe("a config by a tag by hand", { timeout: 30_000 }, () => {
     await page.goto(`${origin}/`);
     await start(page, "b");
     await expect.poll(() => onStep(page)).toBe("2 Step b");
+    // A window of 650 px shows the bar's title in full: the bar does not fit in its right half.
+    await page.setViewportSize({ width: 650, height: 600 });
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const title = document
+            .querySelector("blueline-tools")
+            ?.shadowRoot?.querySelector(
+              '[role="toolbar"][aria-label="Review"] [aria-hidden="false"]',
+            );
+          return (
+            title instanceof HTMLElement &&
+            title.clientWidth > 0 &&
+            title.scrollWidth <= title.clientWidth
+          );
+        }),
+      )
+      .toBe(true);
     await mark(page);
     writeFileSync(
       path.join(root, "blueline.config.ts"),

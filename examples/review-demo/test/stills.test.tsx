@@ -117,6 +117,13 @@ describe("the lift of a step's own variants", () => {
     expect(colors).toEqual(new Set(Object.values(LOOKS)));
     // The page's queries do not find the copies.
     expect(document.querySelectorAll(".card, #target")).toHaveLength(1);
+    // The lift's bar takes the walk bar's place.
+    const bar = '[role="toolbar"][aria-label="Review"]';
+    const tools = document.querySelector("blueline-tools")?.shadowRoot;
+    expect(tools?.querySelector(bar)).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    await down();
+    await vi.waitFor(() => expect(tools?.querySelector(bar)).not.toBeNull());
   });
 
   it("puts the chosen variant on the page with Use, and the settle keeps it", async () => {

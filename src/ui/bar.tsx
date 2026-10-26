@@ -83,7 +83,9 @@ export function Bar() {
       role="toolbar"
       aria-label="Review"
       className={cx(
-        "fixed bottom-3 left-1/2 z-[2147483002] flex -translate-x-1/2 items-center gap-0.5 rounded-dt-panel bg-dt-panel p-1 text-dt-text shadow-dt-float max-sm:inset-x-2 max-sm:bottom-(--dt-base) max-sm:translate-x-0",
+        // At left: 50% the bar would fit in the window's right half and squeeze the title
+        // out: it takes its content's width, up to the window's.
+        "fixed bottom-3 left-1/2 z-[2147483002] flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-0.5 rounded-dt-panel bg-dt-panel p-1 text-dt-text shadow-dt-float max-sm:inset-x-2 max-sm:bottom-(--dt-base) max-sm:w-auto max-sm:max-w-none max-sm:translate-x-0",
         ARRIVE,
       )}
     >

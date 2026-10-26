@@ -940,7 +940,8 @@ function Review({ shift }: { readonly shift: DevShift | undefined }) {
       {active && ready && preview && box !== undefined && flash && (
         <Flash key={opening} box={box} place={place} />
       )}
-      <Bar />
+      {/* The lift has its own bar, in the walk bar's place. */}
+      {!lifted && <Bar />}
       <Layer view={view} />
       {shift !== undefined && <Shift shift={shift} />}
       {pointing && <Pointer at={pointerAt.current} onPick={point} />}
