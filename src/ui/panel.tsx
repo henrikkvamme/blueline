@@ -6,6 +6,7 @@ import { focusToWrite } from "../vim";
 import { Chips, Composer, NoteState, Thread } from "./composer";
 import { cx } from "./cx";
 import { FinishView } from "./finish";
+import { progressOf } from "./progress";
 import { DOCK, FOCUSED, PANEL } from "./geometry";
 import { MoreMenu } from "./more";
 import { hasNews } from "../session/replies";
@@ -181,17 +182,44 @@ function TreeLine({ unfolded }: { readonly unfolded: boolean }) {
 }
 
 /** The journey's progress, a dot for each step: green once settled, grey while open, and the
- * step shown a wider pill, blue while open. At the finish every dot is green and none is wider. */
+ * step shown a wider pill, blue while open. At the finish every dot is green and none is wider.
+ * A journey with more steps than the dots fit shows a thin bar and the step's number instead,
+ * in the same room (progress.ts). */
 function Progress({ finishing }: { readonly finishing: boolean }) {
   const { journey, at } = useStep();
   const feedback = useSession((s) => s.context.feedback);
   const steps = journey?.steps ?? [];
   const settled = steps.filter((s) => feedback[s.id]?.settled === true).length;
   if (steps.length < 2) return null;
+  const label = `${String(settled)} of ${String(steps.length)} steps settled`;
+  const shape = progressOf(steps.length, settled, at, finishing);
+  if (shape.look === "bar")
+    return (
+      <span role="img" aria-label={label} className="flex shrink-0 items-center gap-2 px-1.5">
+        <span className="relative h-1 w-20 overflow-hidden rounded-full bg-dt-faint/35">
+          <i
+            className="absolute inset-y-0 left-0 rounded-full bg-dt-good transition-[width] duration-200 ease-out motion-reduce:transition-none"
+            style={{ width: `${String(shape.settled * 100)}%` }}
+          />
+          {shape.place !== undefined && (
+            <i
+              className="absolute inset-y-0 min-w-1 rounded-full bg-dt-accent transition-[left] duration-200 ease-out motion-reduce:transition-none"
+              style={{
+                left: `${String(shape.place.from * 100)}%`,
+                width: `${String(shape.place.width * 100)}%`,
+              }}
+            />
+          )}
+        </span>
+        <span className="w-[8ch] text-right text-[12px] text-dt-faint tabular-nums">
+          {shape.label}
+        </span>
+      </span>
+    );
   return (
     <span
       role="img"
-      aria-label={`${String(settled)} of ${String(steps.length)} steps settled`}
+      aria-label={label}
       className="flex min-w-0 shrink items-center gap-[5px] overflow-hidden px-1.5"
     >
       {steps.map((s, i) => {

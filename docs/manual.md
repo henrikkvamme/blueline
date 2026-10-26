@@ -51,7 +51,9 @@ too. The walk stays where it was, so the journey's row opens it again on the sam
 The panel stands at the right, and the page narrows by its width, so the panel covers
 nothing. Its top line holds the journey's title, the journey's progress, **More** and the
 button that hides the panel. The title unfolds the tree. The progress has a dot for each
-step: green when settled, grey when open, and a wider blue pill for the step shown. More holds
+step: green when settled, grey when open, and a wider blue pill for the step shown. A journey of
+more than 10 steps has a thin bar in place of the dots: the settled share is green, the step's
+place is blue, and the step's number stands beside it, as "3 of 14". More holds
 Reset the step, Next reply, Hide the tools, Undo and the keys (`?`). Next reply is grey when
 no reply is new.
 

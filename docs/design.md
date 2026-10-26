@@ -162,7 +162,9 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   tints, few text sizes, and no key labels. The keys are in the `?` menu.
 - **Its top line.** The journey's title, in muted text, is a button that unfolds the tree.
   After it come the journey's progress as dots, one for each step: green when settled, grey
-  when open, and the step shown as a wider blue pill. Then **More** and **Hide**. More holds
+  when open, and the step shown as a wider blue pill. A journey of more than 10 steps shows a
+  thin bar in the same room: the settled share in green, the step's place in blue, and the
+  step's number, as "3 of 14". Then **More** and **Hide**. More holds
   Reset the step, Next reply, Hide the tools (the preview), Undo and the `?` keys. Next reply
   is grey when no reply is new. Hide stays visible, beside Ctrl+B.
 - **The step fills the panel.** A faint line gives the step's number and group. Under it are
