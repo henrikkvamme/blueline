@@ -6,7 +6,7 @@ import {
   Path,
   PlatformError,
   Random,
-  Schedule,
+  Option,
   Schema,
   Semaphore,
 } from "effect";
@@ -66,25 +66,23 @@ const queueOf = (lock: string) => {
 
 /**
  * Opens the lock's database and starts a write transaction on it, which SQLite lets only one
- * connection hold. Fails at once while another process holds it.
+ * connection hold; undefined at once while another holds it. It does not wait.
  */
 const openLock = (lock: string) =>
-  Effect.try({
-    try: () => {
-      const db = new DatabaseSync(lock, { timeout: 0 });
-      try {
-        db.exec("BEGIN IMMEDIATE");
-        return db;
-      } catch (error) {
-        db.close();
-        throw error;
-      }
-    },
-    catch: () => `${lock} is held`,
+  Effect.sync(() => {
+    const db = new DatabaseSync(lock, { timeout: 0 });
+    try {
+      db.exec("BEGIN IMMEDIATE");
+      return db;
+    } catch {
+      db.close();
+      return undefined;
+    }
   });
 
-const closeLock = (db: DatabaseSync) =>
+const closeLock = (db: DatabaseSync | undefined) =>
   Effect.sync(() => {
+    if (db === undefined) return;
     try {
       db.exec("ROLLBACK");
     } finally {
@@ -92,12 +90,17 @@ const closeLock = (db: DatabaseSync) =>
     }
   });
 
+/** How long to wait between tries, and how many: about 10 s, then it fails and says so. A live
+ * process holds the lock that long only if it is stuck. */
+const RETRY = { every: "25 millis", times: 400 } as const;
+
 /**
  * Runs `use` while this process holds the file's lock: a write transaction on a SQLite
  * database beside it. The system frees the lock when its process ends, also when it is
  * killed, so no lock is ever left behind and no process has to break one. A slow holder keeps
  * its lock. In one process, the fibers queue for it first, so they do not spin on it.
- * Taking the lock and giving it up cannot be interrupted between them.
+ * Each try takes the lock and sets up its release in one step that an interrupt cannot
+ * split; the waits between tries can be interrupted.
  */
 export const withLock = <A, E, R>(file: string, use: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
@@ -105,11 +108,21 @@ export const withLock = <A, E, R>(file: string, use: Effect.Effect<A, E, R>) =>
     const lock = `${file}.lock`;
     // The folder the file goes in, as `.blueline/` before the first note.
     yield* fs.makeDirectory((yield* Path.Path).dirname(file), { recursive: true });
-    // About 10 s, then it fails and says so: a live process holds it that long only if stuck.
-    const take = openLock(lock).pipe(
-      Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 400 }),
+    const once = Effect.acquireUseRelease(
+      openLock(lock),
+      (db) => (db === undefined ? Effect.succeedNone : Effect.asSome(use)),
+      closeLock,
     );
-    return yield* queueOf(lock).withPermit(Effect.acquireUseRelease(take, () => use, closeLock));
+    return yield* queueOf(lock).withPermit(
+      Effect.gen(function* () {
+        for (let tries = 0; ; tries += 1) {
+          const done = yield* once;
+          if (Option.isSome(done)) return done.value;
+          if (tries >= RETRY.times) return yield* Effect.fail(`${lock} is held`);
+          yield* Effect.sleep(RETRY.every);
+        }
+      }),
+    );
   });
 
 const ClaimsFile = Schema.fromJsonString(ClaimsSchema, { space: 1 });

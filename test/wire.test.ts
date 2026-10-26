@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber } from "effect";
@@ -204,6 +205,22 @@ describe("the files at once", () => {
           }),
       ),
     );
+    expect(await gets(file, 500)).toBe(true);
+  });
+
+  it("stops waiting at once when it is stopped while another holds the lock", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const file = path.join(dir, "status.json");
+    const other = new DatabaseSync(`${file}.lock`);
+    other.exec("BEGIN IMMEDIATE");
+    try {
+      const started = performance.now();
+      expect(await gets(file, 100)).toBe(false);
+      expect(performance.now() - started).toBeLessThan(1_000);
+    } finally {
+      other.exec("ROLLBACK");
+      other.close();
+    }
     expect(await gets(file, 500)).toBe(true);
   });
 
