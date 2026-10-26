@@ -136,7 +136,9 @@ export function liveMachine<C>(live: Live<C>) {
           : yield* fromResult((signal) =>
               adapter.enter(step, {
                 fresh: input.fresh,
+                // A step the walk left shows nothing more over the next one.
                 show: (shift) => {
+                  if (signal.aborted) return;
                   shown ||= shift !== undefined;
                   live.shift(shift);
                 },

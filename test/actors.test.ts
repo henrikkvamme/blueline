@@ -81,6 +81,8 @@ describe("the walk on a page", () => {
 function promised() {
   const log: string[] = [];
   const held = new Map<string, { readonly end: () => void; readonly signal: AbortSignal }>();
+  const shifts: (string | undefined)[] = [];
+  const shows = new Map<string, (title: string) => void>();
   const hold = (what: string, signal: AbortSignal) =>
     new Promise<void>((end) => {
       log.push(what);
@@ -100,9 +102,12 @@ function promised() {
   const adapter: DevAdapter<string> = {
     journeys: [{ id: "prep", title: "Prep", steps: [step("a"), step("b")] }],
     context: () => "page",
-    enter: (s, { signal }) => hold(`enter ${s.id}`, signal).then(() => "world"),
+    enter: (s, { signal, show }) => {
+      shows.set(s.id, (title) => show({ title, busy: true }));
+      return hold(`enter ${s.id}`, signal).then(() => "world");
+    },
   };
-  const actor = createActor(liveMachine({ adapter, shift: () => undefined }), {
+  const actor = createActor(liveMachine({ adapter, shift: (s) => shifts.push(s?.title) }), {
     input: { kept: { ...START, journey: "prep" }, journeys: shapesOf(adapter.journeys), now: 0 },
   });
   /** Lets the held Promise end, once the walk holds it. */
@@ -113,7 +118,7 @@ function promised() {
       it?.end();
       return it?.signal;
     });
-  return { actor, log, end };
+  return { actor, log, end, shifts, shows };
 }
 
 const readyAt = (actor: ReturnType<typeof promised>["actor"], at: number) =>
@@ -139,6 +144,23 @@ describe("an app that gives Promises", () => {
         actor.stop();
         expect(late?.aborted).toBe(true);
         expect(log).toEqual(["enter a", "enter b", "setup b", "set b", "apply b"]);
+      }),
+    ));
+
+  it("shows nothing more of a step the walk left", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const { actor, log, shifts, shows } = promised();
+        actor.start();
+        actor.send({ type: "choose" });
+        yield* Effect.promise(() => vi.waitFor(() => expect(log).toContain("enter a")));
+        actor.send({ type: "go", by: 1 });
+        yield* Effect.promise(() => vi.waitFor(() => expect(log).toContain("enter b")));
+        shows.get("b")?.("b");
+        shows.get("a")?.("late a");
+        actor.stop();
+        expect(shifts).not.toContain("late a");
+        expect(shifts.filter((s) => s !== undefined).at(-1)).toBe("b");
       }),
     ));
 
