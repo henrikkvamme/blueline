@@ -573,16 +573,23 @@ dashboard. Browser checks start with step 2.
    both halves, through two portals. The app stops importing `styles.css`.
 4. **The bundle.** Two entries, and one store between them:
    - The part store and the registry are small modules with no Effect and no React. Each
-     keeps its state on a global key (`Symbol.for`), so every copy of the module, from
-     source or from any bundle, shares one store and one registry. A test loads two copies
-     and checks that they share.
+     keeps its state on a global key (`Symbol.for`) that names its protocol version, so
+     every copy of the module, from source or from any bundle, shares one store and one
+     registry. A copy that finds another version there warns once and keeps its own state.
+     Tests load two copies: one notifies and unsubscribes the other's listeners, and one
+     replaces the other while a lift is up.
+   - One overlay owns the page. `mount` and `DevTools` claim it through a global key; the
+     newest claim disposes the one before, whichever entry made it. Tests mount in both
+     orders.
    - `@henrikkvamme/blueline` is the overlay for an app of any framework: `mount`, the
      types and the routes. It bundles its own React, React DOM, Effect, XState and lucide,
      and needs no peer.
    - `@henrikkvamme/blueline/react` is for a React app: `DevTools`, `useReviewControl`,
      `useDevTools`, `useRegistry` and `variants()`. It runs the overlay on the app's React,
      so the app's hooks and the tools' share one dispatcher; `react` and `react-dom` are its
-     peers. `./choices` and `./variants` stay as parts of it. `variants()` imports only the
+     peers. From source, Blueline's Vite plugin dedupes `react`, `react-dom` and the JSX
+     runtimes, so Blueline's own install of React does not load beside the app's; a test
+     checks it with two installs. `./choices` and `./variants` stay as parts of it. `variants()` imports only the
      store, so an app's build, which shows the first variant, holds none of the overlay.
      The lift's data goes through the store: the part puts its labels, states, place and
      callbacks there when it rises; the overlay draws the lift's chrome from them and puts the
