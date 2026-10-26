@@ -21,6 +21,7 @@ import {
   type Image,
   type Pin,
 } from "../notes/note";
+import { newHandoff } from "../notes/handoff";
 import { dropped, keptOn } from "../part/store";
 import {
   openedAgain,
@@ -191,8 +192,11 @@ export type Event =
   | { readonly type: "entered" }
   | { readonly type: "switched" }
   | { readonly type: "undo" }
-  /** Ends the review once every step is settled: the last settle goes, held until now. */
-  | { readonly type: "finish" }
+  /** Ends the review once every step is settled: the last settle goes, held until now, and
+   * the panel shows the hand-off. `at`, in ms, names the hand-off. */
+  | { readonly type: "finish"; readonly at?: number | undefined }
+  /** Shows a hand-off in the panel, by its note's ID, or with null leaves it for the tree. */
+  | { readonly type: "handoff"; readonly id: string | null }
   /** Goes back from the finish: the last step opens again, and its settle does not go. */
   | { readonly type: "back" }
   | { readonly type: "redo" }
@@ -245,6 +249,8 @@ export interface Post {
   readonly session: Context;
   /** A post sent once this one is, in its order, with the posts after it. */
   readonly next?: Post | undefined;
+  /** For the settle that Finish sends: the hand-off's ID, which the agent answers. */
+  readonly handoff?: string | undefined;
 }
 
 export interface EnterInput {
@@ -552,6 +558,7 @@ export const sessionMachine = setup({
       preview: false,
       cursor: ({ context }) => context.at,
       row: undefined,
+      handoff: null,
     }),
     // The page view: the panel shows the page's chat.
     deactivate: assign({
@@ -914,15 +921,18 @@ export const sessionMachine = setup({
       ],
     },
     // Finish ends the review: the last settle goes, with the notes held with it, and the
-    // tools go back to the page. The walk stays on its step, so the journey opened again goes
-    // on there.
+    // panel shows the hand-off, where the agent's answer comes in. The settle line names the
+    // hand-off, so the agent answers the review there. The walk stays on its step, so the
+    // journey opened again goes on there.
     finish: {
       guard: ({ context }) => context.finish !== null,
-      actions: enqueueActions(({ context, enqueue }) => {
+      actions: enqueueActions(({ context, event, enqueue }) => {
         const held = context.finish;
         if (held === null) return;
-        enqueue.assign({ finish: null, posts: context.posts + 1 });
-        const session = { ...context, finish: null };
+        const handoff = newHandoff(context.journey, event.at ?? 0);
+        const notes = [...context.notes.filter((n) => n.id !== handoff.id), handoff];
+        enqueue.assign({ finish: null, posts: context.posts + 1, notes });
+        const session = { ...context, finish: null, notes };
         enqueue.spawnChild("post", {
           id: `post-${context.posts}`,
           input: {
@@ -930,11 +940,27 @@ export const sessionMachine = setup({
             ids: [],
             step: held.step,
             session,
+            handoff: handoff.id,
             next: held.ids.length === 0 ? undefined : { kind: "note", ids: held.ids, session },
           },
         });
         enqueue.raise({ type: "leave" });
+        enqueue.assign({ handoff: handoff.id });
         enqueue.emit({ type: "done", journey: context.journey });
+      }),
+    },
+    // The hand-off shows, or leaves for the tree. An answer read there is done with: its note
+    // settles, so it counts as news no more.
+    handoff: {
+      actions: assign(({ context, event }) => {
+        const was = context.notes.find((n) => n.id === context.handoff);
+        const read =
+          event.id === null && was?.state === "replied"
+            ? withNote(context, was.id, (n) =>
+                n === undefined ? n : noteAfter(n, { type: "settle" }),
+              )
+            : context.notes;
+        return { handoff: event.id, notes: read };
       }),
     },
     // Back from the finish takes the last settle back, as u does. With no undo to take, as
@@ -1040,6 +1066,7 @@ export const sessionMachine = setup({
                   fresh: ({ event }) => event.fresh,
                   preview: false,
                   chat: "step" as const,
+                  handoff: null,
                 }),
                 "nextRun",
               ],

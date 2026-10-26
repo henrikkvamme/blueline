@@ -37,6 +37,8 @@ export interface View {
   readonly aiming?: boolean | undefined;
   /** Whether every step is settled and the panel asks the reviewer to finish the review. */
   readonly finishing?: boolean | undefined;
+  /** Whether the panel shows the hand-off: the review went to the agent. */
+  readonly handoff?: boolean | undefined;
 }
 
 /** What a key does: a session event, or something on the page. */
@@ -558,6 +560,9 @@ export function dispatch(
   if (escape && view.preview) return event({ type: "preview" });
   // Escape goes back from the finish, as Back and u do: the last step opens again.
   if (escape && view.finishing === true && view.layer === "none") return event({ type: "back" });
+  // Escape leaves the hand-off for the tree, as Done does.
+  if (escape && view.handoff === true && view.panel && view.layer === "none")
+    return event({ type: "handoff", id: null });
   if (escape)
     return view.layer !== "none"
       ? event({ type: "escape" })

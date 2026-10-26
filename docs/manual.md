@@ -79,14 +79,14 @@ before and after, and Settle; off a step it is small. The bar and the panel neve
 once, and a reload keeps the panel shown or hidden. An element that the app pins to the
 right edge can still sit under the panel.
 
-| Action                       | The walk                          | Light                       | Panel                                                  |
-| ---------------------------- | --------------------------------- | --------------------------- | ------------------------------------------------------ |
-| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                         |
-| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                          |
-| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                                  |
-| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step; the step's row gets its check     |
-| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                       |
-| Finish review                | ends: the journey is done         | off                         | shows the page's chat; the journey goes to **Settled** |
+| Action                       | The walk                          | Light                       | Panel                                               |
+| ---------------------------- | --------------------------------- | --------------------------- | --------------------------------------------------- |
+| Ctrl+B or the panel's button | stays on the step                 | stays                       | hides or shows                                      |
+| `p`, or Hide the tools       | stays on the step                 | hides                       | hides, and only the eye shows                       |
+| Esc, with no field focused   | leaves the step for the page view | off                         | shows the page's chat                               |
+| A settle                     | goes on to the next open step     | turns green, then glides on | shows the next step; the step's row gets its check  |
+| The last settle              | waits on the step                 | turns green, and stays      | shows the finish                                    |
+| Finish review                | ends: the journey is done         | off                         | shows the hand-off; the journey goes to **Settled** |
 
 ## Settle
 
@@ -107,13 +107,21 @@ nothing, so a held or quick key never settles a step you have not seen.
 
 When the last open step settles, the review does not end at once. The panel shows the
 finish in place of the step: how many steps are settled, the variant kept of each part, and
-how many notes went to the agent. **Finish review**, or Enter, ends the review: the tools go
-back to the page, a short message says the journey is done, and the journey goes down to
-**Settled**. The back chevron, where the step before was, Escape or `u` opens the last step
+how many notes went to the agent. **Finish review**, or Enter, ends the review: the light goes
+off, the journey goes down to **Settled**, and the panel shows the **hand-off** in place of the
+finish. The back chevron, where the step before was, Escape or `u` opens the last step
 again. The Enter that settled the
 last step does not also finish: Finish takes only an Enter pressed after the finish shows.
 A reload keeps the finish. Each change of a step's settled state, undo and redo too, writes
 the step's settle line, so the agent always knows which steps are settled.
+
+The hand-off says "Sent to the agent" over the same rows as the finish. Under them you see
+what the agent does with the review, in place: a pulsing dot while it waits for the agent,
+then "The agent is working" with the agent's plan, then the agent's reply. **Done**, Escape
+or the journey's title at the top goes to the tree. A reload keeps the hand-off. While the
+agent works on it, or its reply is new, the settled journey's row has a mark, and a click on
+the row opens the hand-off again. A reply that comes while the hand-off is not in view shows
+a short message that opens it, and **Next reply** in More goes there too.
 
 After Finish, `u` takes the last settle back and opens its step again. The tree keeps the
 open journeys on top, and the journeys with every step settled at its foot, folded, under
@@ -346,3 +354,19 @@ with the next note, so the agent reads where the review is without a turn of its
 last settle, which leaves no step open, wakes the agent: the review is done, and the agent
 applies the kept variants. The tools send that settle only when the reviewer finishes the
 review, so the agent wakes once, at the end. A listener that starts again still has the settles it held.
+
+### Answer the review
+
+The last settle, the one that Finish sends, has an `id` and a `reply` hint. The `id` is the
+review's **hand-off**, `finish-<journey>-<time>`, and the panel shows the agent's answer to it
+in place of the finish. Answer the review on that ID, not on a step's chat:
+
+```sh
+blueline reply <status.json> <hand-off id> working --blocks <plan.json>
+blueline reply <status.json> <hand-off id> replied "<what you did>"
+```
+
+Write `working` as soon as you start, and again each time the plan changes. End with
+`replied`, which says what you did. Answer a message or a pointed note on its own chat's `id`,
+as before: that answer shows in its step's chat, not in the hand-off. Each Finish has its own
+hand-off ID, so an answer to an earlier pass never shows on a new one.

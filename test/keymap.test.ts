@@ -410,6 +410,18 @@ describe("the keys", () => {
     }
   });
 
+  it("leave the hand-off for the tree with Escape, off a step", () => {
+    const done = { kind: "event", event: { type: "handoff", id: null } };
+    for (const view of VIEWS.filter(
+      (v) => !v.active && v.panel && v.layer === "none" && !v.preview,
+    )) {
+      for (const zone of ["page", "panel"] as const)
+        expect(press({ ...view, handoff: true }, zone, "Escape")).toEqual(done);
+      // With no hand-off, Escape off a step hides the tools, as before.
+      expect(press(view, "panel", "Escape")).not.toEqual(done);
+    }
+  });
+
   it("settle once for a held key: the key's repeats do nothing", () => {
     for (const view of ON_STEP) {
       for (const zone of ["page", "control", "panel"] as const)

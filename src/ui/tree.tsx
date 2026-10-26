@@ -17,21 +17,22 @@ import {
   useSyncExternalStore,
   type PointerEvent,
 } from "react";
-import { isKept, isWithAgent, type Note } from "../notes/note";
+import { isKept, type Note } from "../notes/note";
 import { PAGE_JOURNEY, placePath } from "../part/page";
 import { parts as partsStore, variantsOn } from "../part/store";
 import { stepNoteId } from "../session/machine";
 import { hasNews, newsOn } from "../session/replies";
-import { firstOpen, openPlace } from "../session/state";
+import { firstOpen } from "../session/state";
 import { cx } from "./cx";
-import { foldTree, openReply } from "./replies";
+import { handoffOf, isLive } from "../notes/handoff";
+import { foldTree, openHandoff } from "./replies";
 import { journeyOf, useNotes, useSession, useTools } from "./session";
 import type { JourneyInfo } from "../types";
 
 /*
  * Where the reviewer is, in the panel, as a tree: the pages, each with its chat, and this one
  * with its parts, then the journeys, with the one walked open on its steps, and at the foot
- * the done ones and the review's end. What the reviewer opens is where they are: a step
+ * the settled ones; a settled one marks its hand-off while the agent has it. What the reviewer opens is where they are: a step
  * opens it, and a page leaves the step for the page. A step with a new reply has a blue
  * count. While the tree shows it has the keys when no field has them: j and k select a row,
  * l and h open and close it, Enter opens what it names, Escape leaves a step for the page and
@@ -75,45 +76,17 @@ export function TreeZone({
 }
 
 function Tree({ heading }: { readonly heading: boolean }) {
-  const { actor } = useTools();
   const journey = useJourney();
-  const at = useSession((s) => s.context.at);
-  const feedback = useSession((s) => s.context.feedback);
-  const notes = useNotes();
-  const steps = journey?.steps ?? [];
-  // The journey walked is done once every step is settled, also after the review ended.
-  const done =
-    steps.length > 0 &&
-    openPlace(
-      steps.map((s) => s.id),
-      feedback,
-      at,
-    ).open === 0;
   // The journey walked stands open in the list; the page's parts show under it.
   // Off a step too, so the reviewer comes back to where the walk stopped.
   const current = journey?.id !== PAGE_JOURNEY ? journey?.id : undefined;
   return (
-    <>
-      <div className="flex flex-1 flex-col">
-        <Pages heading={heading} />
-        <Journeys current={current} done={false} />
-        <span className="flex-1" />
-        <Journeys current={current} done />
-      </div>
-      {done && (
-        <Done
-          waiting={notes.filter(isWithAgent)}
-          news={notes.filter(hasNews).length}
-          onReply={() => {
-            const next = notes.find(hasNews);
-            const i = steps.findIndex((s) => s.id === next?.step);
-            if (next === undefined || i < 0) return;
-            openReply(actor, i);
-            foldTree(actor);
-          }}
-        />
-      )}
-    </>
+    <div className="flex flex-1 flex-col">
+      <Pages heading={heading} />
+      <Journeys current={current} done={false} />
+      <span className="flex-1" />
+      <Journeys current={current} done />
+    </div>
   );
 }
 
@@ -650,7 +623,9 @@ function Journeys({
   readonly current: string | undefined;
   readonly done: boolean;
 }) {
+  const { actor } = useTools();
   const { journeys, settledIn, start } = useJourneys();
+  const notes = useNotes();
   const selected = useSession((s) => s.context.row);
   const folds = useSession((s) => s.context.folds);
   const active = useSession((s) => s.context.active);
@@ -667,6 +642,10 @@ function Journeys({
         const id = `journey:${j.id}`;
         const walked = j.id === current;
         const open = folds[id] ?? (walked && !done);
+        // A finished journey's hand-off, while the agent has it or its answer is not read: the
+        // row marks it and opens it, so a look does not start another pass under the agent.
+        const handed = handoffOf(notes, j.id);
+        const live = handed !== undefined && isLive(handed) ? handed : undefined;
         return (
           <Journey key={j.id} id={j.id} settled={done}>
             <TreeRow
@@ -675,10 +654,11 @@ function Journeys({
               open={open}
               depth={0}
               selected={selected === id}
-              onOpen={() => start(j)}
+              onOpen={() => (live === undefined ? start(j) : openHandoff(actor, live.id))}
               className={walked && active && "font-medium text-dt-text"}
             >
               <span className="min-w-0 flex-1 truncate">{j.title}</span>
+              {live !== undefined && <NoteMark notes={[live]} />}
               {settledIn(j) === j.steps.length && (
                 <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Settled" />
               )}
@@ -727,47 +707,5 @@ function Journey({
     >
       {children}
     </div>
-  );
-}
-
-/**
- * The review's end, at the tree's foot: every step is settled. The agent's notes still
- * open, and the new replies to read.
- */
-function Done({
-  waiting,
-  news,
-  onReply,
-}: {
-  /** The notes the agent has not answered yet. */
-  readonly waiting: readonly Note[];
-  readonly news: number;
-  readonly onReply: () => void;
-}) {
-  return (
-    <section aria-label="Review done" className="flex flex-col gap-2.5 px-4 py-3">
-      <span className="flex items-center gap-1.5 text-[13px] font-medium text-dt-good">
-        <CircleCheck className="size-4" aria-hidden />
-        <span className="flex-1">Review done</span>
-        {waiting.length > 0 && (
-          <span
-            className="flex items-center gap-1 text-[12px] font-normal text-dt-faint tabular-nums"
-            title={`The agent has not answered ${waiting.length === 1 ? "1 note" : `${String(waiting.length)} notes`}`}
-          >
-            <AgentMark notes={waiting} />
-            {waiting.length}
-          </span>
-        )}
-      </span>
-      {news > 0 && (
-        <button
-          type="button"
-          onClick={onReply}
-          className="self-start rounded-dt-control bg-dt-accent px-2.5 py-1 text-[12px] text-white hover:bg-dt-accent/85 max-sm:min-h-11 max-sm:px-4 max-sm:text-[14px]"
-        >
-          {news === 1 ? "Read the reply" : `Read ${String(news)} replies`}
-        </button>
-      )}
-    </section>
   );
 }

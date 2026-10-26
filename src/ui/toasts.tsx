@@ -3,12 +3,13 @@ import { toast, Toaster } from "sonner";
 import { STORED } from "../io/stored";
 import { UI } from "./geometry";
 import { placePath } from "../part/page";
-import { openPlaceReply, openReply } from "./replies";
+import { isHandoff } from "../notes/handoff";
+import { openHandoff, openPlaceReply, openReply } from "./replies";
 import { useTools } from "./session";
 
 /*
- * Short messages at the top of the screen: the agent answered, an undo, the preview, a
- * journey done, or a send that failed. Sonner stacks them and lets each go. The dev tools have their own
+ * Short messages at the top of the screen: the agent answered, an undo, the preview, or a
+ * send that failed. A finished journey has none: the panel shows its hand-off. Sonner stacks them and lets each go. The dev tools have their own
  * toaster, by its ID, so the app's toasts and theirs stay apart.
  */
 
@@ -17,7 +18,7 @@ const ID = "blueline";
 const PREVIEW_TOLD = `${STORED}:preview-told`;
 
 export function Toasts() {
-  const { actor, adapter } = useTools();
+  const { actor } = useTools();
   useEffect(() => {
     const show = (text: string, open?: () => void) =>
       toast(text, {
@@ -25,7 +26,17 @@ export function Toasts() {
         ...(open === undefined ? {} : { action: { label: "Open", onClick: open } }),
       });
     const subs = [
-      actor.on("replied", (e) =>
+      actor.on("replied", (e) => {
+        // A hand-off that shows has its answer in view already.
+        const { context } = actor.getSnapshot();
+        if (isHandoff(e.note)) {
+          if (context.handoff === e.note.id && !context.active && context.panel && !context.preview)
+            return;
+          show(`The agent answered the review: ${e.note.thread.at(-1)?.text ?? ""}`, () =>
+            openHandoff(actor, e.note.id),
+          );
+          return;
+        }
         show(
           e.settled
             ? "The agent settled a note, as you said"
@@ -41,8 +52,8 @@ export function Toasts() {
             const at = journey?.steps.findIndex((s) => s.id === e.note.step) ?? -1;
             if (at >= 0) openReply(actor, at);
           },
-        ),
-      ),
+        );
+      }),
       actor.on("undone", (e) => show(e.redo ? `Did again: ${e.label}` : `Undid: ${e.label}`)),
       actor.on("previewing", () => {
         if (localStorage.getItem(PREVIEW_TOLD) !== null) return;
@@ -51,10 +62,6 @@ export function Toasts() {
       }),
       actor.on("nothing", (e) => show(e.redo ? "Nothing to redo" : "Nothing to undo")),
       actor.on("unvaried", () => show("This step has no variants or states")),
-      actor.on("done", (e) => {
-        const title = adapter.journeys.find((j) => j.id === e.journey)?.title ?? "The journey";
-        show(`${title} is done: every step is settled`);
-      }),
       actor.on("failed", () =>
         show("The dev server did not take it. Your words are back in their field."),
       ),
@@ -62,7 +69,7 @@ export function Toasts() {
     return () => {
       for (const s of subs) s.unsubscribe();
     };
-  }, [actor, adapter]);
+  }, [actor]);
   return (
     <div {...UI}>
       <Toaster

@@ -252,6 +252,27 @@ describe("the lines the agent reads", () => {
     ).toMatchObject({ left: 0 });
   });
 
+  it("names the hand-off on the settle that Finish sends, so the agent answers the review there", () => {
+    const all = {
+      ...session,
+      feedback: Object.fromEntries(steps.steps.map((s) => [s.id, { settled: true }])),
+    };
+    const line = postedLine(
+      [steps],
+      { kind: "settle", ids: [], step: "b", session: all, handoff: "finish-prep-5" },
+      "now",
+    );
+    expect(line).toMatchObject({
+      kind: "settle",
+      left: 0,
+      id: "finish-prep-5",
+      reply: expect.stringContaining("blueline reply <status.json> finish-prep-5 working"),
+    });
+    expect(
+      postedLine([steps], { kind: "settle", ids: [], step: "b", session: all }, "now"),
+    ).not.toHaveProperty("id");
+  });
+
   it("says on a settle which of the step's own variants the reviewer kept", () => {
     const kept = { ...session, feedback: { b: { settled: true, variant: "Two" } } };
     expect(

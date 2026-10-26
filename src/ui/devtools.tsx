@@ -48,7 +48,7 @@ import {
   type Tools,
 } from "./session";
 import { Panel } from "./panel";
-import { foldTree, openNextReply } from "./replies";
+import { foldTree, openHandoffNews, openNextReply } from "./replies";
 import { useVariantPlace } from "./step-controls";
 import { release, settleGate, TURN_MS, TURN_WAIT } from "./settle";
 import { holdToggle } from "../keys/hold";
@@ -158,6 +158,7 @@ const viewOf = (s: Snapshot, adapter: DevInfo): View => {
     preview: s.context.preview,
     aiming: aim.current(),
     finishing: s.context.finish !== null,
+    handoff: !s.context.active && s.context.handoff !== null,
   };
 };
 
@@ -404,6 +405,8 @@ export function DevTools<C>({
           }
         }
         if (action.event.type === "settle") return settle(actor.getSnapshot().context.at);
+        // The hand-off that Finish opens is named by its time.
+        if (action.event.type === "finish") return actor.send({ type: "finish", at: now() });
         return actor.send(action.event);
       }
       // Pointing from a button shows the tools first, so the note's card can open.
@@ -499,7 +502,10 @@ export function DevTools<C>({
       // R goes to what needs the reviewer: the next reply, else the notes on the page. With
       // no review on, the panel has the page's replies.
       if (action.kind === "reply") {
-        if (!actor.getSnapshot().context.active) return actor.send({ type: "panel", shown: true });
+        if (!actor.getSnapshot().context.active) {
+          if (!openHandoffNews(actor)) actor.send({ type: "panel", shown: true });
+          return;
+        }
         if (!openNextReply(actor)) actor.send({ type: "open", layer: "notes" });
         foldTree(actor);
         return;
@@ -963,7 +969,8 @@ const sameView = (a: View, b: View) =>
   a.people === b.people &&
   a.preview === b.preview &&
   a.aiming === b.aiming &&
-  a.finishing === b.finishing;
+  a.finishing === b.finishing &&
+  a.handoff === b.handoff;
 
 /** Starts the review from the app's own dev parts, as a link or another tool asks. */
 export function useReviewControl() {

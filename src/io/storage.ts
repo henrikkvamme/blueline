@@ -77,6 +77,7 @@ export function loadKept(key: string): Kept {
       chat: field(fields.chat, raw["chat"], START.chat),
       folds: field(fields.folds, raw["folds"], START.folds),
       finish: field(fields.finish, raw["finish"], START.finish),
+      handoff: field(fields.handoff, raw["handoff"], START.handoff),
     };
   } catch {
     return START;
@@ -100,4 +101,5 @@ export const keptOf = (context: Kept): Kept => ({
   chat: context.chat,
   folds: context.folds,
   finish: context.finish,
+  handoff: context.handoff,
 });

@@ -23,6 +23,13 @@ describe("the review kept in the browser", () => {
     ...more,
   });
 
+  it("keeps the hand-off that the panel shows, and has none from an older version", () => {
+    stored({ handoff: "finish-prep-5" });
+    expect(loadKept("kept").handoff).toBe("finish-prep-5");
+    stored({ journey: "prep" });
+    expect(loadKept("kept").handoff).toBeNull();
+  });
+
   it("keeps a pointed note not sent, and lets a sent one go, as its chat has it", () => {
     stored({
       notes: [

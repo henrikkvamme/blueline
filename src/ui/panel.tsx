@@ -5,7 +5,9 @@ import { stepNoteId, treeShown } from "../session/machine";
 import { focusToWrite } from "../vim";
 import { Chips, Composer, NoteState, Thread } from "./composer";
 import { cx } from "./cx";
-import { FinishView } from "./finish";
+import { handoffJourney } from "../notes/handoff";
+import type { JourneyInfo } from "../types";
+import { FinishView, HandoffView } from "./finish";
 import { EMPTY_HINT, hintShows } from "./hint";
 import { progressOf } from "./progress";
 import { DOCK, FOCUSED, PANEL } from "./geometry";
@@ -76,11 +78,16 @@ function useDock(on: boolean) {
 }
 
 export function Panel() {
-  const { perform } = useTools();
+  const { adapter, perform } = useTools();
   const shown = useSession((s) => s.context.panel && !s.context.preview);
   const active = useSession((s) => s.context.active);
   const tree = useSession((s) => s.context.tree);
   const finishing = useSession((s) => s.context.finish !== null);
+  // After Finish, the hand-off shows in the panel's place off a step, until Done.
+  const handoff = useSession((s) =>
+    s.context.active ? undefined : s.context.notes.find((n) => n.id === s.context.handoff),
+  );
+  const handed = adapter.journeys.find((j) => j.id === handoffJourney(handoff?.step ?? ""));
   const phone = usePhone();
   const present = usePresent(shown);
   useDock(shown && !phone);
@@ -106,7 +113,9 @@ export function Panel() {
       style={phone ? undefined : { width: PANEL }}
     >
       <div className="flex h-11 shrink-0 items-center gap-1 pr-1.5 pl-2 max-sm:h-14">
-        {active || phone ? (
+        {handoff !== undefined ? (
+          <HandoffLine title={handed?.title ?? ""} />
+        ) : active || phone ? (
           <TreeLine unfolded={unfolded} />
         ) : (
           <span className="min-w-0 flex-1 truncate px-2 text-[13px] text-dt-muted">
@@ -114,6 +123,7 @@ export function Panel() {
           </span>
         )}
         {active && <Progress finishing={finishing} />}
+        {handoff !== undefined && handed !== undefined && <Progress journey={handed} finishing />}
         <MoreMenu />
         <button
           type="button"
@@ -136,6 +146,8 @@ export function Panel() {
           >
             {finishing ? <FinishView /> : <StepView />}
           </div>
+        ) : handoff !== undefined ? (
+          <HandoffView note={handoff} />
         ) : (
           <>
             {unfolded && (
@@ -182,12 +194,39 @@ function TreeLine({ unfolded }: { readonly unfolded: boolean }) {
   );
 }
 
+/** The journey's title at the panel's top while the hand-off shows: a click leaves the
+ * hand-off for the tree, as Done does. */
+function HandoffLine({ title }: { readonly title: string }) {
+  const { actor } = useTools();
+  return (
+    <button
+      type="button"
+      data-dt-zone="panel"
+      aria-label="Pages and journeys"
+      onClick={() => actor.send({ type: "handoff", id: null })}
+      className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-dt-control px-2 text-left text-[13px] text-dt-muted outline-none hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:text-[15px]"
+    >
+      <span className="min-w-0 truncate">{title}</span>
+      <ChevronRight className="size-3 shrink-0 text-dt-faint" aria-hidden />
+    </button>
+  );
+}
+
 /** The journey's progress, a dot for each step: green once settled, grey while open, and the
  * step shown a wider pill, blue while open. At the finish every dot is green and none is wider.
  * A journey with more steps than the dots fit shows a thin bar and the step's number instead,
  * in the same room (progress.ts). */
-function Progress({ finishing }: { readonly finishing: boolean }) {
-  const { journey, at } = useStep();
+function Progress({
+  journey: given,
+  finishing,
+}: {
+  /** The journey, when it is not the one the review walks, as the hand-off's. */
+  readonly journey?: JourneyInfo | undefined;
+  readonly finishing: boolean;
+}) {
+  const walked = useStep();
+  const journey = given ?? walked.journey;
+  const at = given === undefined ? walked.at : 0;
   const feedback = useSession((s) => s.context.feedback);
   const steps = journey?.steps ?? [];
   const settled = steps.filter((s) => feedback[s.id]?.settled === true).length;

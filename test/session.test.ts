@@ -15,6 +15,7 @@ import {
   type Post,
 } from "../src/session/machine";
 import { keptOf } from "../src/io/storage";
+import { handoffId, handoffStep } from "../src/notes/handoff";
 import { START, type Shape } from "../src/session/state";
 
 const JOURNEYS: readonly Shape[] = [
@@ -648,6 +649,122 @@ describe("the review's end", () => {
     actor.send({ type: "finish" });
     expect(done).toEqual(["prep"]);
     actor.stop();
+  });
+
+  it("shows the hand-off on finish: a note to the agent, named by the time of the Finish", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const held = after(s, { type: "entered" }, { type: "settle" });
+    const done = after(held, { type: "finish", at: 77 });
+    const id = handoffId("prep", 77);
+    expect(done.context).toMatchObject({ active: false, panel: true, handoff: id });
+    expect(done.context.notes.find((n) => n.id === id)).toMatchObject({
+      step: handoffStep("prep"),
+      state: "waiting",
+      thread: [],
+    });
+    // The page reads the agent's answer while the hand-off waits for it.
+    expect(done.matches({ agent: "polling" })).toBe(true);
+    expect(keptOf(done.context).handoff).toBe(id);
+  });
+
+  it("names the hand-off in the settle that Finish sends, and in no other line", () => {
+    const sent: Post[] = [];
+    const machine = sessionMachine.provide({
+      actors: {
+        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+          for (let post: Post | undefined = input; post !== undefined; post = post.next)
+            sent.push(post);
+          sendBack({ type: "posted", child: self.id });
+        }),
+      },
+    });
+    const actor = createActor(machine, {
+      input: {
+        kept: {
+          ...START,
+          journey: "prep",
+          active: true,
+          at: 1,
+          feedback: { a: { settled: true } },
+        },
+        journeys: JOURNEYS,
+        now: 0,
+      },
+    }).start();
+    actor.send({ type: "entered" });
+    actor.send({ type: "settle" });
+    actor.send({ type: "entered" });
+    actor.send({ type: "settle" });
+    actor.send({ type: "finish", at: 5 });
+    expect(sent.map((p) => [p.step, p.handoff])).toEqual([
+      ["b", undefined],
+      ["c", handoffId("prep", 5)],
+    ]);
+    actor.stop();
+  });
+
+  it("shows the agent's plan and then its reply on the hand-off", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish", at: 1 });
+    const id = handoffId("prep", 1);
+    const plan = [
+      {
+        kind: "plan" as const,
+        items: [{ text: "Apply the kept variants", state: "doing" as const }],
+      },
+    ];
+    const working = after(done, {
+      type: "replies",
+      replies: { [id]: { state: "working", progress: plan } },
+    });
+    expect(working.context.notes.find((n) => n.id === id)).toMatchObject({
+      state: "working",
+      progress: plan,
+    });
+    const replied = after(working, {
+      type: "replies",
+      replies: { [id]: { state: "replied", replies: [{ text: "Applied both parts." }] } },
+    });
+    const note = replied.context.notes.find((n) => n.id === id);
+    expect(note).toMatchObject({ state: "replied", unread: true, progress: undefined });
+    expect(note?.thread.map((m) => [m.by, m.text])).toEqual([["agent", "Applied both parts."]]);
+    // Done leaves the hand-off for the tree, and the answer read there is done with.
+    const left = after(replied, { type: "handoff", id: null });
+    expect(left.context.handoff).toBeNull();
+    expect(left.context.notes.find((n) => n.id === id)?.state).toBe("settled");
+  });
+
+  it("keeps a hand-off that the agent still works on when Done leaves it", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish", at: 1 });
+    const left = after(done, { type: "handoff", id: null });
+    expect(left.context.handoff).toBeNull();
+    expect(left.context.notes.find((n) => n.id === handoffId("prep", 1))?.state).toBe("waiting");
+    // It shows again on request, as the tree's row or a reply's toast asks.
+    expect(after(left, { type: "handoff", id: handoffId("prep", 1) }).context.handoff).toBe(
+      handoffId("prep", 1),
+    );
+  });
+
+  it("keeps the hand-off through a reload, and leaves it when a journey starts", () => {
+    const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
+    const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish", at: 1 });
+    const reloaded = initialTransition(sessionMachine, {
+      kept: keptOf(done.context),
+      journeys: JOURNEYS,
+      now: 0,
+    })[0];
+    expect(reloaded.context).toMatchObject({ active: false, handoff: handoffId("prep", 1) });
+    const again = after(reloaded, {
+      type: "start",
+      journey: "prep",
+      at: 0,
+      fresh: false,
+      again: true,
+    });
+    expect(again.context.handoff).toBeNull();
+    // u after Finish opens the last step again, off the hand-off.
+    expect(after(done, { type: "undo" }).context).toMatchObject({ active: true, handoff: null });
   });
 
   it("goes back to the step from the page when u takes the last settle back", () => {

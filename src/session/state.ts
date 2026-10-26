@@ -82,6 +82,9 @@ export const KeptSchema = Schema.Struct({
    * step, and the chats whose notes went with it. Only Finish sends it, so the agent wakes
    * once. Null while nothing waits. */
   finish: Schema.NullOr(Schema.Struct({ step: Schema.String, ids: Schema.Array(Schema.String) })),
+  /** The hand-off the panel shows after Finish (notes/handoff.ts), by its note's ID: what the
+   * agent does with the review. Null while the panel shows the tree or a step. */
+  handoff: Schema.NullOr(Schema.String),
 });
 export type Kept = typeof KeptSchema.Type;
 
@@ -97,6 +100,7 @@ export const START: Kept = {
   chat: "step",
   folds: {},
   finish: null,
+  handoff: null,
 };
 
 /** A journey as the machine needs it: its steps' IDs, groups and variant counts. */

@@ -8,7 +8,8 @@ import { openPlace } from "./state";
  * What the agent reads in the feedback file, as it happens: a chat's message with the step
  * or the page it is on, and the pointed notes sent in it, a step the reviewer settled or
  * opened again, or a variant kept. The agent answers the message and its pointed notes in
- * the chat, by the line's `id`. A note and a settle carry the variants the reviewer kept and deleted in the
+ * the chat, by the line's `id`. The settle that Finish sends has an `id` too: the hand-off,
+ * where the agent answers the review as a whole. A note and a settle carry the variants the reviewer kept and deleted in the
  * step's parts, so the agent reads them with the reasons. A settled step is right: the
  * agent stops work on it.
  */
@@ -95,5 +96,16 @@ export function postedLine<C>(journeys: readonly DevJourney<C>[], post: Post, se
     left: openPlace(journey?.steps.map((s) => s.id) ?? [], session.feedback, index).open,
     ...partsOf(session, id),
     ...keptVariantOf(session, id),
+    ...handoffOf(post),
+  };
+}
+
+/** The settle that Finish sends names the hand-off (notes/handoff.ts): the panel shows the
+ * agent's answer on that ID, as its plan while it works and then its reply. */
+function handoffOf(post: Post) {
+  if (post.handoff === undefined) return {};
+  return {
+    id: post.handoff,
+    reply: `The review is done. Answer it on this id: blueline reply <status.json> ${post.handoff} working --blocks <plan.json> while you work, then blueline reply <status.json> ${post.handoff} replied <text>.`,
   };
 }
