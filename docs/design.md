@@ -571,23 +571,27 @@ dashboard. Browser checks start with step 2.
    one of the tools' roots while the lift is up, so a query finds its note's composer, and
    the focus comes back to that composer. One React still renders
    both halves, through two portals. The app stops importing `styles.css`.
-4. **The bundle.** Two entries with a fixed boundary:
-   - `@henrikkvamme/blueline` is the overlay. It bundles its own React, React DOM, Effect,
-     XState and lucide, and exports `mount`, the types, the part store and the registry.
-     It needs no peer.
-   - `@henrikkvamme/blueline/react` is the facade on the app's React: `DevTools` (a thin
-     wrapper round `mount`), `useReviewControl` (through the handle), `useDevTools`,
-     `useRegistry` and `variants()`. It imports the part store and the registry only from
-     the main entry, which its build keeps external, so the app and the overlay share one
-     of each. `react` and `react-dom` are its peers.
-     The lift's chrome renders in the overlay from the part store's `lifting`; `variants()`
-     renders only the slotted previews. `effect` and `tailwindcss` stop being peers. An
-     adapter may still return an Effect of the same effect version; any other version gives
-     a Promise. A test checks that the packed `/react` and the main entry share one store
-     and one registry. The dashboard moves in the same step: it imports `DevTools` from
-     `/react`, its Vite alias covers `/react`, and its key guard (`entry.ts`) knows
-     `[data-blueline-host]`. Step 4 is done when the dashboard works on
-     it.
+4. **The bundle.** Two entries, and one store between them:
+   - The part store and the registry are small modules with no Effect and no React. Each
+     keeps its state on a global key (`Symbol.for`), so every copy of the module, from
+     source or from any bundle, shares one store and one registry. A test loads two copies
+     and checks that they share.
+   - `@henrikkvamme/blueline` is the overlay for an app of any framework: `mount`, the
+     types and the routes. It bundles its own React, React DOM, Effect, XState and lucide,
+     and needs no peer.
+   - `@henrikkvamme/blueline/react` is for a React app: `DevTools`, `useReviewControl`,
+     `useDevTools`, `useRegistry` and `variants()`. It runs the overlay on the app's React,
+     so the app's hooks and the tools' share one dispatcher; `react` and `react-dom` are its
+     peers. `./choices` and `./variants` stay as parts of it. `variants()` imports only the
+     store, so an app's build, which shows the first variant, holds none of the overlay.
+     The lift's data goes through the store: the part puts its labels, states, place and
+     callbacks there when it rises; the overlay draws the lift's chrome from them and puts the
+     options it shows, and the lift's host, back; `variants()` draws only the slotted copies.
+     `effect` and `tailwindcss` stop being peers. An adapter may still return an Effect of the
+     same effect version; any other version gives a Promise. The dashboard moves in the same
+     step: it imports `DevTools` from `/react`, its Vite alias covers `/react`, and its key
+     guard (`entry.ts`) knows `[data-blueline-host]`. Step 4 is done when the dashboard works
+     on it.
 5. **Browser tests.** Vitest browser mode with Playwright's Chromium runs the demo's
    adapter in a real shadow root, both from source and from the packed package. The tests
    type in the composer, walk the tree with keys, open and choose in a menu, and lift a
