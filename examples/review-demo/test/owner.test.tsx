@@ -1,7 +1,11 @@
 import { DevTools, useReviewControl, type DevAdapter } from "@henrikkvamme/blueline/react";
+import { variants } from "@henrikkvamme/blueline/variants";
 import { StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { startReview } from "../../../src/core/owner";
+import { parts } from "../../../src/part/store";
 
 /*
  * `<DevTools>` from the React entry, as a React app puts it on the page: one overlay has the
@@ -13,7 +17,17 @@ const adapter: DevAdapter<void> = {
     {
       id: "check",
       title: "Check",
-      steps: [{ id: "first", title: "The first step", group: { id: "g", title: "G" }, look: "" }],
+      steps: [
+        { id: "first", title: "The first step", group: { id: "g", title: "G" }, look: "" },
+        {
+          id: "outer",
+          title: "The outer part",
+          group: { id: "g", title: "G" },
+          look: "",
+          target: ["#outer"],
+          part: "Outer",
+        },
+      ],
     },
   ],
   context: () => undefined,
@@ -69,5 +83,41 @@ describe("<DevTools> on a React page", () => {
       </DevTools>,
     );
     await expect.poll(words).toContain("The first step");
+  });
+
+  it("adds no instance for a part nested in a lifted part's copy", async () => {
+    const Inner = variants("Inner", { Plain: () => <i>inner</i>, Bold: () => <b>inner</b> });
+    const Outer = variants("Outer", {
+      Narrow: () => (
+        <p>
+          narrow <Inner />
+        </p>
+      ),
+      Wide: () => (
+        <p>
+          wide <Inner />
+        </p>
+      ),
+    });
+    const inner = () => parts.current().instances.filter((i) => i.name === "Inner").length;
+    render(
+      <DevTools adapter={adapter} storageKey="owner.review">
+        <div id="outer">
+          <Outer />
+        </div>
+      </DevTools>,
+    );
+    await expect.poll(inner).toBe(1);
+    await expect.poll(hosts).toBe(1);
+    const host = () => document.querySelector("blueline-lift");
+    // The review starts on the outer part's step, and v lifts it.
+    startReview("check", 1, false);
+    await expect.poll(words).toContain("The outer part");
+    await userEvent.keyboard("v");
+    // Two variants on the row, and the column's part as it is.
+    await expect.poll(() => host()?.querySelectorAll(":scope > [slot]").length ?? 0).toBe(3);
+    expect(inner()).toBe(1);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(host).toBeNull();
   });
 });

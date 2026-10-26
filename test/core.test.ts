@@ -10,7 +10,13 @@ const SRC = path.join(import.meta.dirname, "..", "src");
 
 /** The core: the session and what it runs, with no view. */
 const CORE = ["core", "session", "keys", "io", "notes"];
-const CORE_FILES = ["part/store.ts", "part/page.ts", "part/merge.ts", "part/lift-actions.ts"];
+const CORE_FILES = [
+  "part/store.ts",
+  "part/part.ts",
+  "part/page.ts",
+  "part/merge.ts",
+  "part/lift-actions.ts",
+];
 
 const filesIn = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>

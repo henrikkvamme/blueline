@@ -43,6 +43,7 @@ import { holdToggle } from "../keys/hold";
 import { openHost, type Host } from "./host";
 import { claim, startReview } from "../core/owner";
 import { LiftLayer } from "../part/lift-layer";
+import { watchParts } from "../part/part";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
@@ -266,6 +267,8 @@ export function Running({
   readonly into?: Element | undefined;
 }) {
   const { actor } = session;
+  // The parts marked in the page's own markup, or by an app's `part` (part/part.ts).
+  useEffect(watchParts, []);
   const info = useSyncExternalStore(session.subscribe, session.info);
   const shift = useSyncExternalStore(session.subscribe, session.shift);
   // Undo and redo turn a step's light from the look it had, so the settle runs backwards.

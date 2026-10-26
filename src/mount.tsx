@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { claim } from "./core/owner";
+import { part } from "./part/part";
 import { startSession } from "./core/session";
 import type { DevAdapter } from "./types";
 import { Running } from "./ui/devtools";
@@ -34,6 +35,8 @@ export interface Blueline {
   readonly moved: () => void;
   /** Takes the tools off the page. */
   readonly dispose: () => void;
+  /** Declares a part of the page drawn by the app's own code (part/part.ts). */
+  readonly part: typeof part;
 }
 
 declare global {
@@ -73,6 +76,7 @@ export function mount<C>({
   const handle: Blueline = {
     start: session.start,
     moved,
+    part,
     // A newer overlay and the app can both take these tools off.
     dispose: () => {
       if (disposed) return;

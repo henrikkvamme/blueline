@@ -6,6 +6,7 @@
  */
 export { mount, type Blueline, type MountOptions } from "./mount";
 export { registry, type DevChoice } from "./core/registry";
+export { part, type Part, type PartOptions, type PartShown } from "./part/part";
 export { ROUTES } from "./io/routes";
 export type { Walk as DevWalk } from "./keys/keymap";
 export type {

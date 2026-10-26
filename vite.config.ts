@@ -31,7 +31,7 @@ function browser(from: keyof typeof ENTRIES) {
     },
     test: {
       name: `browser-${from}`,
-      include: ["examples/review-demo/test/**/*.test.tsx"],
+      include: ["examples/review-demo/test/**/*.test.{ts,tsx}"],
       browser: {
         enabled: true,
         provider: playwright(),

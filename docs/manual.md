@@ -363,6 +363,49 @@ them the step's states. A settle keeps the one shown too: the settle line names 
 Off the lift, the keys mean the same: `i` writes a message on the step, and `R` opens the
 next reply, or goes through the annotations on the page when no reply is new.
 
+### A part without React
+
+In an app of another framework, mark the part's place with `data-blueline-part="<name>"`,
+and give the code that draws it to `part`, from `@henrikkvamme/blueline` or as
+`window.blueline.part`:
+
+```ts
+import { part } from "@henrikkvamme/blueline";
+
+const rows = part("Request rows", {
+  variants: ["Table", "Cards"],
+  states: ["Empty"],
+  show: (into, { variant, state, source }) => mountRows(into, rowsOf(source), variant, state),
+});
+rows.subscribe(() => render(rows.shown()));
+```
+
+- The marked element holds the part. The app draws it on the page from `rows.shown()`, and
+  draws it again when `subscribe` calls; Blueline does not change it.
+- `show` draws a copy for the lift into `into`: the variant, in a state or the page's own
+  (`undefined`), of the part whose element on the page is `source`. It returns what takes
+  the copy out again, and that also stops what the copy started, as its subscriptions.
+- `rows.dispose()` takes the part away.
+
+A part in plain HTML needs no code. Its templates are its variants and its states, and
+Blueline draws the element. The element's `data-blueline-variant` names its own content,
+the first variant:
+
+```html
+<div data-blueline-part="Request rows" data-blueline-variant="Table">
+  <table>
+    …
+  </table>
+  <template data-blueline-state="Empty">…</template>
+  <template data-blueline-variant="Cards">…</template>
+</div>
+```
+
+A template with no `data-blueline-variant` is the first variant's. A variant with no
+template for a state shows that variant as it is. Blueline puts the element's own content
+aside while another variant or a state shows, and back after, so the app must not change
+it.
+
 ## Annotations on a page
 
 Off a step, the panel is a chat with the agent on the page. `i` goes to its message field,

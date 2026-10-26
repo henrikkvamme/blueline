@@ -81,6 +81,8 @@ export interface Parts {
 export const AS_IT_IS = "As it is";
 
 const KEY = `${STORED}.part.`;
+/** Blueline's own hosts on the page (ui/host.ts). */
+const HOST = "[data-blueline-host]";
 export const NO_VERDICTS: Verdicts = { kept: [], dropped: [] };
 const NOTHING: Shown = { variant: undefined, state: undefined };
 
@@ -208,7 +210,11 @@ export const parts = {
   },
   judge: (verdicts: Readonly<Record<string, Verdicts>>) => set({ verdicts }),
   mark: (noted: Readonly<Record<string, readonly string[]>>) => set({ noted }),
+  /** Adds a part on the page. A part inside one of Blueline's hosts, as one nested in a
+   * lifted part's copy, is the lift's and not the page's, so it is not added. */
   add: (instance: Instance) => {
+    const node = instance.node();
+    if (node !== null && node.closest(HOST) !== null) return () => {};
     const same = state.now.instances.find((i) => i.name === instance.name);
     if (same !== undefined && same.labels.join("\n") !== instance.labels.join("\n"))
       console.error(

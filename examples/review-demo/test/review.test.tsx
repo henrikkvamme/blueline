@@ -115,10 +115,17 @@ describe("a review of the demo", () => {
       [...(lift()?.querySelectorAll("button[aria-label^='Use ']") ?? [])].map((b) =>
         b.getAttribute("aria-label"),
       );
+    /** The copy in a slot of the lift. */
+    const copy = (slot: string) => host?.querySelector(`:scope > [slot="${slot}"]`) ?? null;
     await userEvent.keyboard("l");
     await expect.poll(middles).toContain("Use Cards");
+    // The column shows Cards now, and the row each variant as it is.
+    await expect.poll(() => copy("state:0")?.querySelector("ul") ?? null).not.toBeNull();
+    expect(copy("variant:Table")?.querySelector("table")).not.toBeNull();
     await userEvent.keyboard("j");
     await expect.poll(middles).toContain("Use Empty");
+    // The row shows each variant in the Empty state now.
+    await expect.poll(() => copy("variant:Table")?.textContent).toContain("No requests here.");
     await userEvent.keyboard("k");
     await expect.poll(middles).toContain("Use As it is");
     await userEvent.keyboard("{Enter}");
