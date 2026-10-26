@@ -62,20 +62,22 @@ _Avoid_: Mode, case
 The variants that the reviewer kept and deleted for one part.
 _Avoid_: Decision, choice
 
-## Notes and chat
+## Annotations and chat
 
-**Note**:
+**Annotation**:
 Words that the reviewer writes on a pin. Enter sends it at once, as a message with its pin.
 Cmd+Enter, or Later, keeps it on its pin for the next message. While the chat's message
-field holds words, the note joins them and goes with that message.
-_Avoid_: Comment, annotation
+field holds words, the annotation joins them and goes with that message. **Annotate**, the
+pin beside send, starts one. The wire format still says note: a line's `kind: "note"`, its
+`pins`, and the chat IDs `note-<step>`.
+_Avoid_: Note, comment
 
 **Pin**:
-A numbered mark on an element of the page, which a note is about.
+A numbered mark on an element of the page, which an annotation is about.
 _Avoid_: Marker, anchor
 
 **Message**:
-Words or notes that the reviewer sends to the agent in a chat. A message shows at once, and
+Words or annotations that the reviewer sends to the agent in a chat. A message shows at once, and
 goes to the agent after five seconds. Until then, Undo takes it back.
 _Avoid_: Post
 
@@ -103,8 +105,9 @@ first in the journeys, and the settled journeys stand at its foot, under **Settl
 The panel's folded form, at the bottom centre of the page. It shows only while the panel
 is hidden.
 
-**Note card**:
-The card beside a pin, where the reviewer writes the pin's note.
+**Annotation card**:
+The card beside a pin, where the reviewer writes the pin's annotation.
+_Avoid_: Note card
 
 **Light**:
 The frame around the part that a step is about.
@@ -120,15 +123,15 @@ The page with every Blueline control hidden except one eye.
 ## Agents
 
 **Server**:
-The one Blueline process on a machine. It keeps the notes and delivers them to agents.
+The one Blueline process on a machine. It keeps the feedback lines and delivers them to agents.
 _Avoid_: Dispatcher, daemon, channel
 
 **Delivery**:
-Getting a note to an agent.
+Getting a feedback line to an agent.
 _Avoid_: Dispatch, push
 
 **Registered agent**:
-An agent that the server knows will read the notes of a repository.
+An agent that the server knows will read the feedback lines of a repository.
 _Avoid_: Listener
 
 **Level**:

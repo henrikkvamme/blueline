@@ -131,7 +131,7 @@ function SentPins({ pins }: { readonly pins: readonly SentPin[] }) {
               type="button"
               title={p.pin.what}
               aria-expanded={p.id === shown}
-              aria-label={`Pointed note ${i + 1}: ${p.text}`}
+              aria-label={`Annotation ${i + 1}: ${p.text}`}
               onClick={() => setShown(p.id === shown ? undefined : p.id)}
               className="flex max-w-56 items-center gap-1.5 rounded-full bg-dt-raised py-0.5 pr-2 pl-0.5 text-[12px] hover:bg-dt-line max-sm:min-h-11 max-sm:pl-2 max-sm:text-[14px]"
             >
@@ -146,7 +146,7 @@ function SentPins({ pins }: { readonly pins: readonly SentPin[] }) {
       {open !== undefined && (
         <div
           role="group"
-          aria-label={`Pointed note ${String(pins.indexOf(open) + 1)}`}
+          aria-label={`Annotation ${String(pins.indexOf(open) + 1)}`}
           className="flex flex-col items-end gap-1 rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5"
         >
           <span className="text-[11px] text-dt-muted">{open.pin.what}</span>
@@ -245,7 +245,7 @@ export function Chips({ pins }: { readonly pins: readonly Note[] }) {
           </button>
           <button
             type="button"
-            aria-label={`Remove note ${i + 1}`}
+            aria-label={`Remove annotation ${i + 1}`}
             onClick={() => actor.send({ type: "remove", id: n.id })}
             className="grid size-5 place-items-center rounded-full text-dt-faint hover:text-dt-text max-sm:size-11"
           >
@@ -599,17 +599,6 @@ export function Composer({
           >
             <Plus className="size-4" aria-hidden />
           </button>
-          {sends && (
-            <button
-              type="button"
-              aria-label="Point at an element for a note"
-              title="Point at an element for a note"
-              onClick={() => perform({ kind: "aim", on: true })}
-              className={TOOL}
-            >
-              <MapPin className="size-4" aria-hidden />
-            </button>
-          )}
         </div>
         <input
           ref={picker}
@@ -741,7 +730,9 @@ export function Composer({
             // Sends the note, or keeps it for the message in the chat's field, as Enter does.
             <button
               type="button"
-              aria-label={sendsNote ? "Send the note now" : "Keep the note for the message"}
+              aria-label={
+                sendsNote ? "Send the annotation now" : "Keep the annotation for the message"
+              }
               disabled={sendsNote && draft.trim() === "" && images.length === 0}
               onClick={() => leave("enter")}
               className={cx(
@@ -759,14 +750,26 @@ export function Composer({
             </button>
           )}
           {sends && (
+            // Annotates the page: Alt+click's pin, beside send, as the pin goes with the message.
+            <button
+              type="button"
+              aria-label="Annotate"
+              title="Annotate: point at an element"
+              onClick={() => perform({ kind: "aim", on: true })}
+              className={TOOL}
+            >
+              <MapPin className="size-4" aria-hidden />
+            </button>
+          )}
+          {sends && (
             <button
               type="button"
               aria-label={
                 draft.trim() !== "" || pointed === 0
                   ? "Send now"
                   : pointed === 1
-                    ? "Send the note now"
-                    : `Send ${String(pointed)} notes now`
+                    ? "Send the annotation now"
+                    : `Send ${String(pointed)} annotations now`
               }
               disabled={!canSend}
               onClick={() => {

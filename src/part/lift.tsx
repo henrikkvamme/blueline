@@ -478,7 +478,7 @@ export function Lift({
           {!middle && <span className="text-dt-faint tabular-nums">{i + 1}</span>}
           <span className="font-medium">{name}</span>
           {way === "variant" && noted.includes(label) && (
-            <MessageSquare className="size-3 text-dt-muted" aria-label="With a note" />
+            <MessageSquare className="size-3 text-dt-muted" aria-label="With an annotation" />
           )}
           {onPage(o) && <span className="text-dt-faint">· on the page</span>}
         </div>

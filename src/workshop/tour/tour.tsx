@@ -85,7 +85,7 @@ const APPROVERS: readonly Approver[] = [
 ];
 
 const walk = { id: "walk", title: "Walk a journey" };
-const notes = { id: "notes", title: "Notes to the agent" };
+const notes = { id: "notes", title: "Messages to the agent" };
 const end = { id: "end", title: "The end" };
 
 const TOUR: DevJourney<undefined> = {
@@ -119,9 +119,9 @@ const TOUR: DevJourney<undefined> = {
     },
     {
       id: "tour.draft",
-      title: "Notes wait, a message sends",
-      look: "Alt+click writes a note on an element. Enter keeps it, and nothing goes to the agent. A message in the panel sends its words with the notes in it, and the agent answers them all here.",
-      try: "Hold Alt, click an approver, write a note, and press Enter. Then press i, write a message, and press Enter.",
+      title: "An annotation goes now or later",
+      look: "Alt+click annotates an element. Enter sends the annotation. Cmd+Enter keeps it on its pin, and the next message in the panel sends it with its words. The agent answers them all here.",
+      try: "Hold Alt, click an approver, write an annotation, and press Cmd+Enter. Then press i, write a message, and press Enter.",
       group: notes,
       target: ["[data-tour=approvers]"],
     },
@@ -136,8 +136,8 @@ const TOUR: DevJourney<undefined> = {
     {
       id: "tour.settle",
       title: "A settle sends the rest",
-      look: "y settles the step and goes on to the next open step, also from the tree. A note not sent goes with it, so no note is lost.",
-      try: "Alt+click the button, write a note, and press Enter. Then press y.",
+      look: "y settles the step and goes on to the next open step, also from the tree. An annotation not sent goes with it, so none is lost.",
+      try: "Alt+click the button, write an annotation, and press Cmd+Enter. Then press y.",
       group: notes,
       target: ["[data-tour=submit]"],
     },

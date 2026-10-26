@@ -62,9 +62,9 @@ function Pointed() {
   }));
   return (
     <Palette
-      label="Notes on this step"
+      label="Annotations on this step"
       items={items}
-      empty="No notes yet. Point at an element to write one."
+      empty="No annotations yet. Point at an element to write one."
       onClose={() => actor.send(close)}
       onChoose={(item) => actor.send({ type: "pin", id: item.id })}
     />
@@ -126,12 +126,12 @@ function Help({ view }: { readonly view: View }) {
     })),
     {
       id: "point",
-      label: "Put a pin on an element, with a note",
+      label: "Put a pin on an element, with an annotation",
       key: "Alt+click",
-      group: "Notes",
+      group: "Chat",
     },
     // A pin's note card takes these keys in its field.
-    ...CARD_KEYS.map((k) => ({ id: `card-${k.id}`, label: k.label, key: k.key, group: "Notes" })),
+    ...CARD_KEYS.map((k) => ({ id: `card-${k.id}`, label: k.label, key: k.key, group: "Chat" })),
     ...commands
       .filter((c) => c.key === undefined)
       .map((c) => ({ id: `command-${c.id}`, label: c.title, group: c.group ?? "Commands" })),
@@ -167,7 +167,7 @@ function Help({ view }: { readonly view: View }) {
   );
 }
 
-const GROUPS: readonly string[] = ["Review", "Notes", "Panel", "Tools"];
+const GROUPS: readonly string[] = ["Review", "Chat", "Panel", "Tools"];
 /** The tools' own groups first, then the app's. */
 const rank = (group: string | undefined) => {
   const i = GROUPS.indexOf(group ?? "");
@@ -230,7 +230,7 @@ function Here() {
     <Palette
       label="This page"
       items={items}
-      empty="No notes on this page."
+      empty="No annotations on this page."
       onClose={() => actor.send(close)}
       onChoose={(item) => {
         actor.send(close);

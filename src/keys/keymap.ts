@@ -73,7 +73,7 @@ export type Action =
    * to the row it is under, or with none, to the row above. */
   | { readonly kind: "tree"; readonly open: boolean };
 
-export type Group = "Review" | "Notes" | "Panel" | "Tools";
+export type Group = "Review" | "Chat" | "Panel" | "Tools";
 
 export interface Binding {
   /** The keys, each as `nameOf` names a press: `h`, `ArrowLeft`, `Shift+ArrowLeft`, ` ` for
@@ -214,40 +214,40 @@ export const BINDINGS: readonly Binding[] = [
     when: active,
     does: { kind: "end", which: "last" },
   },
-  // Notes.
+  // Chat.
   {
     keys: ["i"],
     label: "Write a message in the panel's chat: the step's or the page's",
-    group: "Notes",
+    group: "Chat",
     zone: "page",
     does: { kind: "focus", to: "note" },
   },
   {
     keys: ["m"],
-    label: "Pin a note: then click the element it is about",
-    group: "Notes",
+    label: "Annotate: then click the element it is about",
+    group: "Chat",
     zone: "page",
     does: { kind: "aim", on: true },
   },
   {
     keys: ["Tab"],
     label: "On a step, write to the page instead, or to the step again",
-    group: "Notes",
+    group: "Chat",
     zone: "page",
     when: active,
     does: event({ type: "chat" }),
   },
   {
     keys: ["R"],
-    label: "Next reply; with none, the notes on the page",
-    group: "Notes",
+    label: "Next reply; with none, the annotations on the page",
+    group: "Chat",
     zone: "page",
     does: { kind: "reply" },
   },
   // The panel's tree.
   {
     keys: ["j"],
-    label: "Select the row below: a note, a step or a journey",
+    label: "Select the row below: an annotation, a step or a journey",
     group: "Panel",
     zone: "panel",
     does: { kind: "row", by: 1 },
@@ -369,8 +369,8 @@ export const BINDINGS: readonly Binding[] = [
   },
   {
     keys: ["p"],
-    label: "This page: its chat, notes and parts",
-    group: "Notes",
+    label: "This page: its chat, annotations and parts",
+    group: "Chat",
     zone: "go",
     does: event({ type: "open", layer: "here" }),
   },
@@ -666,8 +666,8 @@ const written = (key: string): string => {
 /** The keys of a pin's note card, which its field takes (ui/composer.tsx); the `?` menu
  * lists them. */
 export const CARD_KEYS = [
-  { id: "send", label: "In a pin's note: send it now", key: "↵" },
-  { id: "later", label: "In a pin's note: keep it for the next message", key: "Cmd+↵ Ctrl+↵" },
+  { id: "send", label: "In an annotation: send it now", key: "↵" },
+  { id: "later", label: "In an annotation: keep it for the next message", key: "Cmd+↵ Ctrl+↵" },
 ] as const;
 
 /** How the `?` menu names a binding's keys, as `h ←`, `Ctrl+R` or `g g`. */

@@ -69,7 +69,7 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
         {...DOCK}
         ref={card}
         role="dialog"
-        aria-label={`Note ${number}`}
+        aria-label={`Annotation ${number}`}
         data-dt-zone="list"
         // The fade's duration with no transition named would ease every change, a drag too.
         className={cx(
@@ -90,7 +90,7 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
           </span>
           <button
             type="button"
-            aria-label="Remove the note"
+            aria-label="Remove the annotation"
             onClick={() => actor.send({ type: "remove", id: note.id })}
             className="grid size-6 place-items-center rounded-dt-mark text-dt-faint hover:bg-dt-raised hover:text-dt-text max-sm:size-11"
           >

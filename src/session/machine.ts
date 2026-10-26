@@ -574,12 +574,12 @@ function changeOf(c: Context, event: Event): Change | undefined {
   };
   switch (event.type) {
     case "remove":
-      return note(event.id, "Removed a note");
+      return note(event.id, "Removed an annotation");
     case "noteEvent":
       return event.event.type === "settle"
-        ? note(event.id, "Settled a note")
+        ? note(event.id, "Settled an annotation")
         : event.event.type === "reopen"
-          ? note(event.id, "Reopened a note")
+          ? note(event.id, "Reopened an annotation")
           : undefined;
     case "settle":
     case "reopen": {

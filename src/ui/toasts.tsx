@@ -39,7 +39,7 @@ export function Toasts() {
         }
         show(
           e.settled
-            ? "The agent settled a note, as you said"
+            ? "The agent settled an annotation, as you said"
             : `The agent answered: ${e.note.thread.at(-1)?.text ?? ""}`,
           () => {
             if (placePath(e.note.step) !== undefined) {

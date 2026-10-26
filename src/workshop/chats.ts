@@ -57,8 +57,8 @@ export const WORKSHOP: JourneyInfo = {
   steps: [
     {
       id: "talk",
-      title: "Words, screenshots and notes",
-      look: "The reviewer's message with two screenshots, one named in the words, and two notes sent with it. The agent answers in words.",
+      title: "Words, screenshots and annotations",
+      look: "The reviewer's message with two screenshots, one named in the words, and two annotations sent with it. The agent answers in words.",
       group,
     },
     {
@@ -178,7 +178,7 @@ const NOTES: readonly Note[] = [
     }),
     agent(
       2,
-      "I put the due date first and the role after each name, and the button now says Send for approval. Both notes are done.",
+      "I put the due date first and the role after each name, and the button now says Send for approval. Both annotations are done.",
     ),
   ]),
   {
@@ -189,7 +189,7 @@ const NOTES: readonly Note[] = [
       {
         kind: "plan",
         items: [
-          { text: "Read the note and the step", state: "done" },
+          { text: "Read the annotations and the step", state: "done" },
           { text: "Group the approvers by role", state: "done" },
           { text: "Keep the due date above the list", state: "doing" },
           { text: "Take new screenshots", state: "todo" },

@@ -1,7 +1,7 @@
 import { ChevronLeft, Send } from "lucide-react";
 import { isListened } from "../io/listening";
 import { handoffJourney } from "../notes/handoff";
-import type { Note } from "../notes/note";
+import { sentCount, type Note } from "../notes/note";
 import { Blocks } from "./blocks";
 import { allSettled } from "./progress";
 import { Thread } from "./composer";
@@ -12,7 +12,7 @@ import { Foot, KEEP_FOCUS } from "./step-controls";
 
 /*
  * The finish, in the panel in place of the step, once every step of the journey is settled:
- * how many steps, the variant kept of each part, and how many notes went to the agent. The
+ * how many steps, the variant kept of each part, and how many messages and annotations went to the agent. The
  * review ends only when the reviewer finishes it; the last settle waits until then, so the
  * agent wakes once. The foot holds Back, which opens the last step again as Escape and u do,
  * in the place of the step before, and Finish review in the place of Settle. Once finished,
@@ -20,16 +20,7 @@ import { Foot, KEEP_FOCUS } from "./step-controls";
  * the first seconds it says "Sending to the agent", with Undo, which shows the finish again.
  */
 
-/** The notes the reviewer sent on these steps: each pointed note, and each message with
- * words alone. */
-const sentOn = (notes: readonly Note[], steps: ReadonlySet<string>) =>
-  notes
-    .filter((n) => steps.has(n.step))
-    .flatMap((n) => n.thread)
-    .filter((m) => m.by === "you")
-    .reduce((count, m) => count + Math.max(m.pins?.length ?? 0, m.text.trim() === "" ? 0 : 1), 0);
-
-/** What the review kept and sent, as rows: the variant kept of each part, and the notes sent.
+/** What the review kept and sent, as rows: the variant kept of each part, and what was sent.
  * The finish and the hand-off show the same rows in the same place. */
 function Summary({ steps }: { readonly steps: readonly { readonly id: string }[] }) {
   const feedback = useSession((s) => s.context.feedback);
@@ -41,7 +32,7 @@ function Summary({ steps }: { readonly steps: readonly { readonly id: string }[]
       const variant = verdicts.kept.at(-1);
       if (variant !== undefined) kept.set(part, variant);
     }
-  const sent = sentOn(notes, new Set(steps.map((s) => s.id)));
+  const sent = sentCount(notes, new Set(steps.map((s) => s.id)));
   const row =
     "flex items-baseline justify-between gap-3 border-t border-dt-line py-2.5 first:border-t-0";
   return (
@@ -53,7 +44,7 @@ function Summary({ steps }: { readonly steps: readonly { readonly id: string }[]
         </div>
       ))}
       <div className={row}>
-        <dt className="text-dt-muted">Notes sent</dt>
+        <dt className="text-dt-muted">Messages and annotations sent</dt>
         <dd className="font-medium tabular-nums">{sent}</dd>
       </div>
     </dl>

@@ -658,7 +658,7 @@ export function Pins({
           <button
             type="button"
             key={pin.id}
-            aria-label={`Note ${i + 1}: ${pin.thread.at(-1)?.text ?? (pin.draft || pin.pin?.what)}`}
+            aria-label={`Annotation ${i + 1}: ${pin.thread.at(-1)?.text ?? (pin.draft || pin.pin?.what)}`}
             // A note with words on its pin waits for the next message.
             title={isKept(pin) && open !== pin.id ? "Waits for the next message" : undefined}
             onClick={() => onOpen(pin.id)}
@@ -724,7 +724,7 @@ export function AimHint({ onCancel }: { readonly onCancel: () => void }) {
       role="status"
       className="fixed top-3 left-1/2 z-[2147483004] flex -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel py-0.5 pr-0.5 pl-3 text-[13px] whitespace-nowrap text-dt-text shadow-dt-float duration-150 fade-in"
     >
-      Point at what the note is about
+      Point at what the annotation is about
       <button
         type="button"
         aria-label="Stop pointing"

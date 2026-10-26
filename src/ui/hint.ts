@@ -4,7 +4,7 @@
  * empty chat says it, in one quiet line, until the chat has a message or a note.
  */
 
-export const EMPTY_HINT = "Alt+click anything to leave a note.";
+export const EMPTY_HINT = "Alt+click anything to annotate it.";
 
 /** Whether the page's chat shows the hint. */
 export const hintShows = (page: {

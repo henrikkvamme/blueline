@@ -35,7 +35,7 @@ function Opened() {
   return (
     <div
       role="dialog"
-      aria-label="Note on the variant"
+      aria-label="Annotation on the variant"
       data-dt-zone="list"
       className="flex w-[360px] max-w-[calc(100vw-16px)] animate-in flex-col gap-2 rounded-dt-panel bg-dt-panel p-3 text-dt-text shadow-dt-float duration-150 fade-in zoom-in-95"
     >
@@ -43,7 +43,7 @@ function Opened() {
         <span className="min-w-0 flex-1 truncate text-[12px] text-dt-muted">{note.pin?.what}</span>
         <button
           type="button"
-          aria-label="Remove the note"
+          aria-label="Remove the annotation"
           onClick={() => actor.send({ type: "remove", id })}
           className="grid size-6 place-items-center rounded-dt-mark text-dt-faint hover:bg-dt-raised hover:text-dt-text max-sm:size-11"
         >

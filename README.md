@@ -1,8 +1,8 @@
 # Blueline
 
 Blueline is a review tool for a web app in development. You walk the app in steps, compare
-the designs of a part, and write notes on the page. Your coding agent gets the notes,
-answers in the page, and applies the designs you keep.
+the designs of a part, and annotate the page. Your coding agent gets your messages and
+annotations, answers in the page, and applies the designs you keep.
 
 **Status: design.** No package is published yet. The code came here from the private
 repository where Blueline started. It builds, checks and tests here on Effect 4.0.6, XState

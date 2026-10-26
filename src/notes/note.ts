@@ -287,6 +287,15 @@ export const blankNote = (id: string, step: string, pin?: Pin, draft = ""): Note
 });
 
 /** Whether Send would send the note: it has words or screenshots not sent. */
+/** What the reviewer sent in these notes, on these steps, as the finish counts it: each
+ * message with words, and each annotation (a pin sent with a message). */
+export const sentCount = (notes: readonly Note[], steps: ReadonlySet<string>) =>
+  notes
+    .filter((n) => steps.has(n.step))
+    .flatMap((n) => n.thread)
+    .filter((m) => m.by === "you")
+    .reduce((count, m) => count + (m.pins?.length ?? 0) + (m.text.trim() === "" ? 0 : 1), 0);
+
 export const isKept = (n: Note) => n.draft.trim() !== "" || (n.images?.length ?? 0) > 0;
 
 /** Whether the note waits for the agent. */

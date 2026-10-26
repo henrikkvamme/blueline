@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { blankNote, isKept, noteAfter, type Note, type NoteEvent } from "../src/notes/note";
+import {
+  blankNote,
+  isKept,
+  noteAfter,
+  sentCount,
+  type Note,
+  type NoteEvent,
+} from "../src/notes/note";
 
 const PLAN = [
   {
@@ -182,5 +189,31 @@ describe("a pointed note", () => {
     const sent = noteAfter(blankNote("note-s", "s"), { type: "send", at: 10, text: "", pins });
     expect(sent.state).toBe("waiting");
     expect(sent.thread).toEqual([{ by: "you", text: "", at: 10, pins }]);
+  });
+});
+
+describe("what the finish counts as sent", () => {
+  const sent = (text: string, pins: number, by: "you" | "agent" = "you") => ({
+    by,
+    at: 1,
+    text,
+    pins: Array.from({ length: pins }, (_, i) => ({
+      id: `p${String(i)}`,
+      pin: { what: "a field", selector: "#f" },
+      text: "Bolder",
+    })),
+  });
+  const chat = (step: string, thread: Note["thread"]): Note => ({
+    ...blankNote(`note-${step}`, step),
+    thread,
+  });
+
+  it("counts each message with words and each annotation, on the steps given", () => {
+    const notes = [
+      chat("a", [sent("Shorter", 2), sent("", 1), sent("Done", 0, "agent")]),
+      chat("b", [sent("Not counted", 3)]),
+    ];
+    // "Shorter" and its two annotations, and the annotation sent with no words.
+    expect(sentCount(notes, new Set(["a"]))).toBe(4);
   });
 });

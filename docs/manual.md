@@ -1,7 +1,7 @@
 # Blueline
 
-`@henrikkvamme/blueline` is the review walk over an app in development: journeys of steps, notes to
-the agent, and parts with variants. A build holds none of it.
+`@henrikkvamme/blueline` is the review walk over an app in development: journeys of steps, messages
+and annotations to the agent, and parts with variants. A build holds none of it.
 
 ## Set up in an app
 
@@ -31,13 +31,13 @@ tab shows each part on a map of the screen.
 - Parts: the **panel** on the right, with the **tree** of pages and journeys, the step and
   the chat; the **message field** at the bottom of the panel; the **bar** at the bottom
   centre, the panel's folded form, full on a step and small at other times; the **light**
-  around the step's part; a **pin**, the numbered mark of `m` or Alt+click, and its **note
+  around the step's part; a **pin**, the numbered mark of `m` or Alt+click, and its **annotation
   card**; the **lift** (`v` or Space); the **preview** (`p`).
 - Words: a **review** walks a **journey** of **steps** in **groups**; an **open step** is
   not settled yet, and **settle** (`y` or Enter) says a step is right as it shows; **finish** ends the review once every step is settled. A **part** has
-  **variants**. Each step and each page has one **chat** with the agent. A **note** is
+  **variants**. Each step and each page has one **chat** with the agent. An **annotation** is
   written on a pin and sends with Enter; a **message** is written in a message field and
-  sends, with the notes that joined it. A sent note leaves the page; its message shows it with its number. The
+  sends, with the annotations that joined it. A sent annotation leaves the page; its message shows it with its number. The
   agent's answer is a **reply**, in the chat. `?` lists the **keys**.
 
 ## Where you are
@@ -119,7 +119,7 @@ again too.
 
 When the last open step settles, the review does not end at once. The panel shows the
 finish in place of the step: how many steps are settled, the variant kept of each part, and
-how many notes went to the agent. **Finish review**, or Enter, ends the review: the light goes
+how many messages and annotations went to the agent. **Finish review**, or Enter, ends the review: the light goes
 off, the journey goes down to **Settled**, and the panel shows the **hand-off** in place of the
 finish. The back chevron, where the step before was, Escape or `u` opens the last step
 again. The Enter that settled the
@@ -146,13 +146,13 @@ pass; a step's row opens that one step and keeps the journey settled.
 On a step, the chat is the step's. Once the page's chat has messages, a quiet button at the
 chat's top opens it, so you write on the page and keep your place in the journey; **Back to
 the step** returns. Tab in the message field switches too, also before the page's chat has
-messages. Alt+click writes its note in the chat that shows.
+messages. Alt+click writes its annotation in the chat that shows.
 
 ## The g menu
 
 `g` opens a small menu at the bottom centre, as LazyVim's which-key, from the page and the
 tree.
-The key after `g` does the thing, and any other key closes the menu: `g j` picks a journey, `g p` picks from this page's chat, notes and parts, and `g a`
+The key after `g` does the thing, and any other key closes the menu: `g j` picks a journey, `g p` picks from this page's chat, annotations and parts, and `g a`
 acts as someone. As in vim, `g g` and `G` go to the top and the bottom: on the page, the
 first and the last open step; in the tree, the top and the bottom row. `?` lists them
 with the other keys.
@@ -162,31 +162,31 @@ with the other keys.
 Each key has a button, and the `?` lists the keys and does each one with a tap. On a
 screen narrower than 640 px, the panel is a sheet at the bottom, above the page's own bottom
 bar, and its tree stays folded until you tap its line. Hidden, it folds to the bar, which
-takes the screen's width in the same place. The note card stands above the bar as a sheet.
+takes the screen's width in the same place. The annotation card stands above the bar as a sheet.
 A swipe to the left or the right across the lit part shows the next or the previous
 variant, as `j` and `k` do. The chevrons in the sheet and the bar go to the step before
 and after. Settle, between the chevrons in the sheet's foot and a check in the bar, settles: the light turns green above the sheet, as on a wide
 screen. When the sheet would cover the light's corner, the page scrolls the part up once.
 Every button there is at least 44 px. On the lift, a swipe across goes through the variants, and a swipe up or down goes
-through the states. The pin in the message field points at an element for a note, as
+through the states. **Annotate**, the pin beside send in the message field, points at an element, as
 Alt+click does. A tap in a field starts to write.
 
 ## Moving between the page, a field and the tree
 
-Enter in a message field sends, and in a note sends the note; then the keys are the page's,
+Enter in a message field sends, and in an annotation sends the annotation; then the keys are the page's,
 so `y` or `i` comes next. Escape in a field goes to vim's normal mode, and a second Escape
-goes to the tree and unfolds it, so you see where you are; in the lift's note it leaves the
+goes to the tree and unfolds it, so you see where you are; in the lift's annotation it leaves the
 field. While the tree shows, it has the keys when no field has them. On a step it folds, and
 the page has the keys, so `h` and `l` walk the steps.
 
 Escape backs out one level at a time, from the page and the tree: it closes what is open
 over the page, then leaves the step for the page, then hides the tools.
 
-The tree is as Neovim's: this page and the pages with notes, in the order of
+The tree is as Neovim's: this page and the pages with annotations, in the order of
 their paths, and the journeys. A page's row is its chat: it shows the chat's last words, and
-opens the chat. A page opens on its notes not sent, a journey on its steps, and a step on
-its notes not sent. The journeys start with **This page**, the page's own review, and the
-settled journeys come last. This page and the journey walked start open, and the tree keeps what you open and close. A sent note leaves the tree;
+opens the chat. A page opens on its annotations not sent, a journey on its steps, and a step on
+its annotations not sent. The journeys start with **This page**, the page's own review, and the
+settled journeys come last. This page and the journey walked start open, and the tree keeps what you open and close. A sent annotation leaves the tree;
 its message in the chat has it.
 
 - `j` and `k` go over every row. The pointer selects the row it is on.
@@ -194,7 +194,7 @@ its message in the chat has it.
   the row names. `h` closes the row, or goes up to the row it is under and closes that; at
   the top, it goes up one row.
 - Enter does what a click on the row does, and opens the row too: a page goes to that page
-  and opens its chat, a journey starts, a step opens on its page, and a note opens where it
+  and opens its chat, a journey starts, a step opens on its page, and an annotation opens where it
   is.
 - `y` settles the selected step and goes on to the next open step, as on the page. On a
   settled step it opens the step again. The
@@ -211,11 +211,11 @@ the keys gets them back when the panel shows again, in its mode and at its place
 
 `p` is the **preview**, on a step and off one: it hides the tools, the panel too, and
 leaves only an eye that shows them again. Hide the tools in More does the same, and so does
-Escape in the tree off a step, so the panel and the note card come back together. A second
+Escape in the tree off a step, so the panel and the annotation card come back together. A second
 `p`, Escape or `i` shows them with the panel as it was, and comes back to the field, in its
 mode and at its place; Ctrl+B shows them with the panel shown. Hold `p` to peek: the tools
 hide at once and come back when you let go after 200 ms or more. A tap keeps them hidden.
-The keys do not change in the preview. After `g`, `p` is this page's chat, notes and parts.
+The keys do not change in the preview. After `g`, `p` is this page's chat, annotations and parts.
 
 ## The keys of a walk
 
@@ -233,7 +233,7 @@ Each arrow key does what its vim key does. No key needs AltGr or Option on a Nor
 | `y`, Enter                        | the page | settle the step, then go on to the next open step         |
 | `v`, Space                        | the page | lift the part                                             |
 | `i`                               | the page | write a message                                           |
-| `m`                               | the page | point at an element: a click pins a note there; Esc stops |
+| `m`                               | the page | annotate: a click pins an annotation there; Esc stops     |
 | `u`, Ctrl+Z, Cmd+Z                | the page | undo                                                      |
 | Ctrl+R, Ctrl+Shift+Z, Cmd+Shift+Z | the page | redo                                                      |
 | `p`                               | the page | the preview: a tap hides or shows the tools; held, a peek |
@@ -279,19 +279,19 @@ export const SuggestionView = variants<SuggestionProps>(
 On the step, `v` or Space lifts the part: variants in a row, states in a column. `h` and
 `l`, or ← and →, go through the variants, and `j` and `k`, or ↓ and ↑, through the states.
 `Enter` puts the variant shown on the page, and `v`, Space or Escape closes the lift and
-keeps the page as it was. `d` deletes a variant, `u` undoes, `z` zooms, `i` writes a note on
-the variant shown, and `R` goes to the next variant with a note.
+keeps the page as it was. `d` deletes a variant, `u` undoes, `z` zooms, `i` writes an annotation on
+the variant shown, and `R` goes to the next variant with an annotation.
 
 The lift's bar under the part gives the part's name, the variant and the state, **Use**,
 **Close** and **More** (⋯). Use is blue: it is the one main action. Close does what Escape
-does. More holds Delete, Note, Next note, Undo and Zoom; Next note shows only when a variant
-has a note. Delete asks first. The variant and the state keep their width, so the bar does
+does. More holds Delete, Annotate, Next annotation, Undo and Zoom; Next annotation shows only
+when a variant has an annotation. Delete asks first. The variant and the state keep their width, so the bar does
 not move while you go through them. On a phone the bar has two lines: the name, Use, Close
 and More, then the variant and the state. There, a tap on the left half of the variant or
 the state goes back, and a tap on the right half goes on.
 
 Settling the step with `y` keeps the
-variant the page shows, sends the step's notes not sent yet, and goes on to the next open
+variant the page shows, sends the step's annotations not sent yet, and goes on to the next open
 step, also from the tree or the Settle button; `y` on a settled step opens it again and
 keeps none. The last open step settled asks you to finish the review, as "Settle" says. The
 panel lists the variants as rows, and a click on a row shows that one. The bar says how many
@@ -305,41 +305,42 @@ them the step's states. A settle keeps the one shown too: the settle line names 
 `variant`, and its `keep` tells the agent to make it the app's own, as it has no
 `variants` call for `blueline apply` to change.
 
-Off the lift, the keys mean the same: `i` writes a note on the step, and `R` opens the
-next reply, or goes through the notes on the page when no reply is new.
+Off the lift, the keys mean the same: `i` writes a message on the step, and `R` opens the
+next reply, or goes through the annotations on the page when no reply is new.
 
-## Notes on a page
+## Annotations on a page
 
 Off a step, the panel is a chat with the agent on the page. `i` goes to its message field,
-and `m`, then a click, or Alt+click writes a note on an element. Enter in the note's card
+and `m`, then a click, or Alt+click writes an annotation on an element. **Annotate**, the pin beside send, does
+the same. Enter in the annotation's card
 sends it at once, as a message with its pin; Shift+Enter starts a new line. To send it
 later, press Cmd+Enter, or Ctrl+Enter off a Mac, or click **Later** beside the arrow. The
-note then waits on its pin, its chip stands over the message field, and it goes with the
-next message. While the message field holds words, the note joins them: Enter keeps it, its
+annotation then waits on its pin, its chip stands over the message field, and it goes with the
+next message. While the message field holds words, the annotation joins them: Enter keeps it, its
 chip stands over the field, and the message takes it when it sends. The card's button shows
-which: a blue arrow sends, and a grey check keeps. Enter in an empty message field sends the notes that joined
+which: a blue arrow sends, and a grey check keeps. Enter in an empty message field sends the annotations that joined
 alone. The agent reads them in the journey `page`, on the step `place:<path>`, and
 answers in the panel's chat. `blueline review` listens to it. On a page with no journey and
-no part with variants, the empty chat says "Alt+click anything to leave a note." until it has
-a message or a note.
+no part with variants, the empty chat says "Alt+click anything to annotate it." until it has
+a message or an annotation.
 
-A note line has the chat's `id`, and `pins`: each note in the message, with what it points
-at and its words. A pointed note has no ID of its own, so the agent answers the message and
-its notes with `blueline reply` on the chat's `id`. `/clear` empties the chat, and its
+A note line, the wire's name for a message, has the chat's `id`, and `pins`: each annotation
+in the message, with what it points at and its words. An annotation has no ID of its own, so
+the agent answers the message and its annotations with `blueline reply` on the chat's `id`. `/clear` empties the chat, and its
 old messages go.
 
-Each page has its own notes, by its path. An app whose router keeps the page out of the
+Each page has its own chat and annotations, by its path. An app whose router keeps the page out of the
 address's path, as in its hash, gives `DevTools` the page's `path`, and a `navigate` that
 goes to a path, so the tree's pages go there.
 
 ## Undo a send
 
-Each send waits five seconds before the agent gets it: a message, a pin's note sent from its
+Each send waits five seconds before the agent gets it: a message, an annotation sent from its
 card, and Finish review. The message shows in its chat at once, faint, with a ring that
 empties, **Sending** and **Undo**. After Finish, the hand-off says "Sending to the agent"
 with Undo. In that time, Undo, `u`, Ctrl+Z or Cmd+Z takes the send back: nothing goes to the
-agent. A message's words go back to the message field, and its notes back to their pins. A
-pin's note goes back to its card, which opens. Finish's Undo shows the finish again. When
+agent. A message's words go back to the message field, and its annotations back to their pins.
+An annotation goes back to its card, which opens. Finish's Undo shows the finish again. When
 the five seconds pass, the line goes, and the message looks as any other. Each send has its
 own wait and its own Undo. A reload keeps a send that waits: it goes at once if its time
 passed, else when the time is up. A settle, Open the step again, undo of another change and
@@ -357,7 +358,7 @@ flow across people or pages.
 
 ## Apply the reviewer's verdicts
 
-The settle line and the reviewer's next note carry `parts`, the variant kept and the ones
+The settle line and the reviewer's next message carry `parts`, the variant kept and the ones
 deleted per part, and an
 `apply` hint:
 
@@ -368,7 +369,7 @@ blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
 - With one variant kept, the call becomes that variant, typed from the call. The import
   and the steps' `part` fields go too.
 - Otherwise the deleted variants leave the call.
-- With none kept, name one with `--keep`. Read the notes for which one.
+- With none kept, name one with `--keep`. Read the messages for which one.
 
 ## The agent channel
 
@@ -381,7 +382,7 @@ blueline review <feedback.jsonl> --url <page> [--journey <id>] [--step <id>]
 It checks that the app answers at the page, prints the link to send the reviewer, and then
 listens. The link opens the review on the page: the page's own with no `--journey`, or
 that journey at `--step`. `blueline listen` only listens, and `blueline reply` answers
-a note. Run `blueline` alone for the usage.
+a message. Run `blueline` alone for the usage.
 
 While the agent works, it shows its progress in place, as a `plan` block:
 
@@ -389,13 +390,13 @@ While the agent works, it shows its progress in place, as a `plan` block:
 blueline reply <status.json> <note id> working --blocks <plan.json>
 ```
 
-The plan shows under "The agent is on it" in the note's chat. Each working reply puts its
+The plan shows under "The agent is on it" in the message's chat. Each working reply puts its
 blocks in place of the last, so the plan changes as the agent goes on; a working reply with
 no `--blocks` takes the plan away. The agent's reply ends it: the plan leaves the chat, and
 the reply shows.
 
 A settle does not wake the agent. The listener holds it and prints it, tagged `status`,
-with the next note, so the agent reads where the review is without a turn of its own. The
+with the next message, so the agent reads where the review is without a turn of its own. The
 last settle, which leaves no step open, wakes the agent: the review is done, and the agent
 applies the kept variants. The tools send that settle only when the reviewer finishes the
 review, so the agent wakes once, at the end. A listener that starts again still has the settles it held.
@@ -412,6 +413,6 @@ blueline reply <status.json> <hand-off id> replied "<what you did>"
 ```
 
 Write `working` as soon as you start, and again each time the plan changes. End with
-`replied`, which says what you did. Answer a message or a pointed note on its own chat's `id`,
+`replied`, which says what you did. Answer a message or an annotation on its own chat's `id`,
 as before: that answer shows in its step's chat, not in the hand-off. Each Finish has its own
 hand-off ID, so an answer to an earlier pass never shows on a new one.

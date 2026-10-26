@@ -177,14 +177,15 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   messages, a quiet button at the chat's top opens it, and **Back to the step** returns. Tab
   in the message field also switches.
 - **The message field wraps as a chat app's does.** While the words fit on one line, the
-  field is one row: + and the pin at the left, the field, and send at the right. Once the
+  field is one row: + at the left, the field, and **Annotate**, the pin, beside send at the
+  right. Once the
   words wrap, the field spans the box on top and grows down, and the buttons go to a row under
   it. It goes back to one row when the words fit again. A copy of the words out of sight, at
   the one row's width, says which form, before the browser paints, so nothing flickers. Only
   the layout changes, so the field keeps its focus, caret and scroll. The box grows upward
   into the chat, and the foot under it does not move. The vim mode's badge stands on the
-  box's top edge at the left, over no word in either form. A note card's field works the
-  same way.
+  box's top edge at the left, over no word in either form. An annotation card's field works
+  the same way.
 - **A fixed foot.** Under the message field, a bar holds the step before, Settle and the step
   after, as a left and a right chevron. Settle is the one primary button, as wide as the room
   between the chevrons. On a step that lists variants it names the variant it keeps, as
@@ -199,8 +200,8 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   sizes, row height and radius. One quiet line parts the tree from the chat. The message
   field's words name the chat, as "A message on this page". The panel has one hint, and only
   where the design cannot teach: on a page with no journey and no part with variants, the
-  empty chat says "Alt+click anything to leave a note." It goes with the first message or
-  note. A phone does not show it, as its message field's pin does the job.
+  empty chat says "Alt+click anything to annotate it." It goes with the first message or
+  annotation. A phone does not show it, as its message field's Annotate button does the job.
 - **The panel pushes the page aside.** The page narrows by the panel's width, so the
   panel covers nothing. One visible button on the panel and Ctrl+B hide it and show it
   again. An element that the app pins to the right edge can still sit under the panel.
@@ -210,15 +211,15 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
 - **The lift's bar is calm.** It holds the part's name, the variant and the state, **Use**
   and **Close**, and a ⋯ menu. Use is the one primary button, in blue, and puts the variant
   shown on the page. Close, as Esc, closes the lift and keeps the page as it was. The ⋯ menu
-  is the panel's menu, and holds Delete, Note, Next note, Undo and Zoom; each keeps its key.
+  is the panel's menu, and holds Delete, Annotate, Next annotation, Undo and Zoom; each keeps its key.
   The variant and the state keep the width of their widest value, and the count has tabular
   digits, so the bar keeps its width while they change. On a phone the bar has two lines,
   with 44 px targets.
-- **A pin's note card stays beside its pin** while the reviewer writes. Enter in the card
-  sends the note at once, as a message with its pin, and the sent note joins the chat in the
+- **A pin's annotation card stays beside its pin** while the reviewer writes. Enter in the
+  card sends the annotation at once, as a message with its pin, and it joins the chat in the
   panel. Cmd+Enter, or Ctrl+Enter off a Mac, and a quiet **Later** beside the send arrow keep
-  the note on its pin: it waits, its chip stands over the message field, and it goes with the
-  next message. The `?` menu lists both keys. While the chat's message field holds words, the note joins them instead: Enter keeps
+  the annotation on its pin: it waits, its chip stands over the message field, and it goes with the
+  next message. The `?` menu lists both keys. While the chat's message field holds words, the annotation joins them instead: Enter keeps
   it, its chip stands over the field, and it goes with that message. The card's button shows
   which, with no words: a blue send arrow, or a grey check.
 - **Three layers, each hidden on its own.** The page is at the bottom, the light is over
@@ -258,7 +259,7 @@ The variants stand in a list down the panel.
 | `y`, Enter                        | settle the step, or keep the variant shown; then go on    |
 | `v`, Space                        | lift the part; again, close the lift                      |
 | `i`                               | write a message                                           |
-| `m`, then a click                 | pin a note on the element clicked; Esc stops              |
+| `m`, then a click                 | annotate the element clicked; Esc stops                   |
 | `u`, Ctrl+Z, Cmd+Z                | undo                                                      |
 | Ctrl+R, Ctrl+Shift+Z, Cmd+Shift+Z | redo                                                      |
 | Esc                               | back one level                                            |
@@ -319,7 +320,7 @@ pulse. After a settle it glides at once, and follows the part as the page scroll
 page it fades in instead.
 
 The last settle does not end the walk. The light turns green where it stands, and the
-panel shows the finish in place of the step: "All 5 steps settled", the kept variant of each part, the number of notes sent, a primary
+panel shows the finish in place of the step: "All 5 steps settled", the kept variant of each part, the number of messages and annotations sent, a primary
 **Finish review**, with a send icon, in the place of Settle, and a back chevron in the place
 of the step before. Enter presses Finish, but only an Enter pressed after the finish shows.
 The back chevron, Escape and undo open the last step again. The last step's
@@ -327,7 +328,7 @@ settle line, the one with `left: 0`, waits until Finish, so the agent wakes once
 keeps the finish.
 
 Finish turns the finish into the **hand-off** in the same place. The title reads "Sent to the
-agent", and the same rows stay: the kept variant of each part and the notes sent. Under them
+agent", and the same rows stay: the kept variant of each part and the messages and annotations sent. Under them
 the agent's part shows, and it changes in place. First a small pulsing dot says "Waiting for
 the agent". When the agent writes `working`, the dot says "The agent is working", and the
 agent's plan shows under it, in place of the last plan. When the agent writes `replied`, the
@@ -337,7 +338,7 @@ panel's top leaves the hand-off for the tree. A reload keeps the hand-off.
 The agent answers the review on the hand-off's ID. Each Finish makes a new hand-off, a note
 with the ID `finish-<journey>-<time>`, and the last settle line carries it as `id`, with a
 `reply` hint. An answer to an earlier pass never shows on a new one. The agent's answers to
-the notes in the review's chats stay in those chats. While the agent has the hand-off, or its
+the messages in the review's chats stay in those chats. While the agent has the hand-off, or its
 reply is not read, the settled journey's row marks it as a chat's row does, and the row opens
 the hand-off and not another pass. Done after a reply settles the hand-off, so the reply
 counts as news no more. A toast tells of a reply that comes while the hand-off is not in
@@ -356,7 +357,7 @@ applies the new variant.
 The page review is one more journey, **This page**, with a step for each part that the page
 shows. It is first under the journeys, and it starts open. It walks its parts with the same
 panel, Settle, Finish and hand-off as any journey, so the reviewer learns one model. The page's
-row keeps only its chat and its notes. The feedback lines do not change: the journey is
+row keeps only its chat and its annotations. The feedback lines do not change: the journey is
 `page`, a step's id is `page:<part>`, and its group is the page's path.
 
 The tree keeps the open journeys on top. The settled ones stand folded at its foot, under a
@@ -367,14 +368,14 @@ foot had before, so the review's end has one place.
 ### Undo a send
 
 Agreed with Henrik on 2026-10-26. Each send waits five seconds (`SEND_MS`) before its lines
-are written: a message from the message field, with its notes, a pin's note sent from its
-card, and Finish review. The page shows the send at once. A message is faint in its chat,
+are written: a message from the message field, with its annotations, an annotation sent from
+its card, and Finish review. The page shows the send at once. A message is faint in its chat,
 with a small ring that empties, **Sending** and **Undo**. The hand-off says "Sending to the
 agent" with Undo in place of "Sent to the agent".
 
 - Undo, `u`, Ctrl+Z or Cmd+Z takes the send back as the newest change. Nothing is written.
-  The words and screenshots go back to the message field, and the notes back to their pins.
-  A pin's note sent from its card goes back to that card, which opens. Undo after Finish
+  The words and screenshots go back to the message field, and the annotations back to their
+  pins. An annotation sent from its card goes back to that card, which opens. Undo after Finish
   shows the finish again, on the last step.
 - When the time is up, the lines go as before, and the look turns normal.
 - Each send waits on its own, with its own Undo. A held Enter sends once.
@@ -386,6 +387,17 @@ agent" with Undo in place of "Sent to the agent".
 
 The session runs the wait as a delayed event of its own, so a test steps a simulated clock.
 The settle itself does not wait: it goes on at once, and `u` takes it back with a line.
+
+### Annotation, and the wire's note
+
+Agreed with Henrik on 2026-10-26. The reviewer's word for what they write on a pin is
+**annotation**. Each string on the screen, the `?` menu and the docs say it. The pin button
+beside send reads **Annotate**. A **message** is still what the message field sends.
+
+The wire format keeps its words: a line's `kind: "note"`, `pins` and `sentWords`, the chat
+IDs `note-<step>`, and the CLI's `<note id>`. The code keeps its `Note` type. The wire
+rename waits for the server step (ADR 0003), which owns the feedback file's format and moves
+every reader at once. A rename now would break the agents and listeners that read the lines.
 
 ## Requirements from the dev dashboard review
 

@@ -134,10 +134,10 @@ function ChatWorkshop() {
               </section>
             ))}
             <section
-              aria-label="Where a note is"
+              aria-label="Where an annotation is"
               className="flex w-[380px] flex-col gap-2.5 rounded-dt-panel bg-dt-panel p-3.5 text-dt-text shadow-dt-float"
             >
-              <span className="text-[14px] leading-5 font-semibold">Where a note is</span>
+              <span className="text-[14px] leading-5 font-semibold">Where an annotation is</span>
               <ul className="flex flex-col gap-2">
                 {STATES.map((n) => (
                   <li key={n.id} className="flex items-center gap-3">

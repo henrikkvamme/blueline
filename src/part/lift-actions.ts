@@ -34,9 +34,9 @@ export function liftActionLabel(action: LiftAction, zoomed: boolean): string {
     case "delete":
       return "Delete";
     case "note":
-      return "Note";
+      return "Annotate";
     case "next-note":
-      return "Next note";
+      return "Next annotation";
     case "undo":
       return "Undo";
     case "zoom":

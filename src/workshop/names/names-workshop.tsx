@@ -41,7 +41,11 @@ const PARTS: readonly Term[] = [
     what: "At the bottom of the panel. What you write here sends.",
   },
   { id: "pin", name: "Pin", what: "The numbered mark that Alt+click puts on an element." },
-  { id: "noteCard", name: "Note card", what: "Opens on a pin. What you write here waits." },
+  {
+    id: "noteCard",
+    name: "Annotation card",
+    what: "Opens on a pin. What you write here goes with its pin.",
+  },
   {
     id: "lift",
     name: "Lift",
@@ -73,11 +77,11 @@ const WORDS: readonly Term[] = [
   },
   { id: "part", name: "Part", what: "A piece of the page with variants." },
   { id: "variant", name: "Variant", what: "One way a part can look. y keeps the one on the page." },
-  { id: "note", name: "Note", what: "What you write on a pin. It waits, not sent." },
+  { id: "note", name: "Annotation", what: "What you write on a pin, about its element." },
   {
     id: "message",
     name: "Message",
-    what: "What you write in a message field. It sends, with the notes.",
+    what: "What you write in a message field. It sends, with the annotations.",
   },
   { id: "reply", name: "Reply", what: "The agent's answer, in the chat where you wrote." },
   { id: "keys", name: "Keys", what: "?: the list of keys and commands." },

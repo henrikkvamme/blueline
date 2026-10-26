@@ -4,7 +4,7 @@ import { liftActionLabel, liftActions } from "../src/part/lift-actions";
 const three = ["Table", "Cards", "Dense list"];
 
 describe("the lift's ⋯ menu", () => {
-  it("holds Delete, Note, Undo and Zoom, in that order", () => {
+  it("holds Delete, Annotate, Undo and Zoom, in that order", () => {
     expect(liftActions({ variants: three, noted: [], notes: true })).toEqual([
       "delete",
       "note",
@@ -17,11 +17,11 @@ describe("the lift's ⋯ menu", () => {
     expect(liftActions({ variants: ["Table"], noted: [], notes: true })).not.toContain("delete");
   });
 
-  it("has no Note where the lift takes no notes", () => {
+  it("has no Annotate where the lift takes no annotations", () => {
     expect(liftActions({ variants: three, noted: [], notes: false })).not.toContain("note");
   });
 
-  it("has Next note only while a variant left has a note", () => {
+  it("has Next annotation only while a variant left has an annotation", () => {
     expect(liftActions({ variants: three, noted: ["Cards"], notes: true })).toEqual([
       "delete",
       "note",
@@ -34,9 +34,10 @@ describe("the lift's ⋯ menu", () => {
     );
   });
 
-  it("names the zoom by what it goes to", () => {
+  it("names the zoom by what it goes to, and the annotations as the reviewer calls them", () => {
     expect(liftActionLabel("zoom", false)).toBe("Zoom");
     expect(liftActionLabel("zoom", true)).toBe("True size");
-    expect(liftActionLabel("next-note", false)).toBe("Next note");
+    expect(liftActionLabel("note", false)).toBe("Annotate");
+    expect(liftActionLabel("next-note", false)).toBe("Next annotation");
   });
 });
