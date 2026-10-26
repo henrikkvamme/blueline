@@ -2,3 +2,4 @@ node_modules
 dist
 .blueline
 *.tgz
+test/.apps

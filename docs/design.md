@@ -869,67 +869,84 @@ must do:
 ### B3 in steps
 
 `blueline dev -- <cmd>` runs the app's dev command, in the app's root, behind a proxy on
-the port the page would use. It knows Vite (`vite`, `vite dev`, `vite serve`, `vp dev`) and
-Next.js (`next dev`). It runs on macOS and Linux: it needs `sh` and process groups.
+the port the page would use. The command runs as it is given; a preload in each of its
+Node processes moves the dev server's listen to a port the system gives, so the dev server
+still believes it is on the page's port. It runs on macOS and Linux: it needs process
+groups.
 
-1. **The command.** The words after `--` are the command. When they name a package script
-   (`pnpm [run] <script>`, `npm run <script> [-- args]`, `yarn [run] <script>`,
-   `bun run <script>`), the command is that script's text from `package.json`, with the
-   extra words after it, as the package manager would run it. In the text, `&&`, `||`, `;`,
-   `|` and `&` split the parts. The dev server is the part whose program, after any
-   `NAME=value` words and `npx`, `pnpm exec`, `yarn`, `bunx` or `cross-env`, is one of the
-   known ones above. Any other command, a script for another package (`--filter`), two
-   dev servers or none is refused: the error names the known dev servers and the tag by
-   hand (`blueline add`).
-2. **The page's port, and where it listens.** The first that has one:
-   - the dev server's own flag in its part (`--port N`, `--port=N`; Next.js also `-p N`),
-     where words after the script win over the script's own;
-   - for Next.js, `PORT`, from the part's `NAME=value` words or from the environment;
-   - for Vite, the app's resolved config: the app's own `vite` (or `vite-plus`) package,
-     from the root, runs `resolveConfig` for `serve`, with the part's `--mode`, `--config`
-     and root, and gives `server.port`;
-   - the default: 5173 for Vite, 3000 for Next.js.
-
-   The proxy listens on the host the dev server would use: its `--host` (Vite, a bare
-   `--host` is every address) or `-H`/`--hostname` (Next.js), then Vite's `server.host`,
-   then the default, `localhost` for Vite and every address for Next.js. An HTTPS dev
-   server (`--https`, `server.https`, `--experimental-https`) is refused, as the proxy
-   speaks HTTP only.
-3. **Holding the port, and the hidden port.** The proxy listens on the page's port before
-   the command starts. When the port is taken, `blueline dev` says so and starts nothing.
-   The hidden port is one the system gives on `127.0.0.1`, freed just before the command
-   starts. The dev server's part changes in place: its port and host flags are taken out,
-   and `--port <hidden> --strictPort --host 127.0.0.1` (Vite) or
-   `-p <hidden> -H 127.0.0.1` (Next.js) go in, so they win over the config and over
-   `PORT`. The new text runs with `sh -c`, with each `node_modules/.bin` from the root up
-   first on `PATH`. A package manager's `pre` and `post` scripts do not run. If another
-   process takes the hidden port in the moment between, the dev server fails on its strict
-   port, and `blueline dev` stops as for any failed start.
-4. **The proxy.** Each request and websocket goes on to `127.0.0.1:<hidden>` with its
-   `Host` and its other headers, so the dev server sees the page as before; hop-by-hop
-   headers (`connection`, `keep-alive`, `proxy-*`, `te`, `trailer`, `transfer-encoding`,
-   `upgrade` but on a websocket) are taken out both ways. A request that comes before the
-   dev server listens waits for it: `blueline dev` tries the hidden port every 100 ms
-   until it answers or the command ends. A dev server that does not answer later gets
-   502. When the dev server listens, `blueline dev` says the page's address, and that the
-   dev server's own lines name the hidden port.
-5. **Blueline's routes.** The proxy answers `/__devtools/*` itself and sends nothing of it
-   to the dev server. Like the plugin, it first checks the `Host`, then `fromPage`. A
+1. **The page's port.** `blueline dev --port <n> -- <cmd>` names it, for any dev server
+   on Node. With no `--port`, `blueline dev` finds it for Vite (`vite`, `vite dev`,
+   `vite serve`, `vp dev`) and Next.js (`next dev`):
+   - **The dev server's words.** When the command names a package script (`pnpm [run]
+     <script>`, `npm run <script> [-- args]`, `yarn [run] <script>`, `bun run
+     <script>`), its words are the script's text from `package.json` and the words after
+     it. In the text, `&&`, `||`, `;`, `|` and `&` split the parts. The dev server is the
+     part whose program, after any `NAME=value` words and `npx`, `pnpm exec`, `yarn`,
+     `bunx` or `cross-env`, is one of the known ones. A command with another program, a
+     script for another package (`--filter`), two dev servers or none is refused with no
+     `--port`: the error names `--port` and the tag by hand (`blueline add`).
+   - **The port**, the first that has one: the part's flag (`--port N`, `--port=N`; for
+     Next.js also `-p N`), where words after the script win over the script's own; for
+     Next.js, `PORT` from the part's `NAME=value` words or from the environment; for Vite,
+     the resolved config; then the default, 5173 for Vite and 3000 for Next.js.
+   - **Vite's config.** A child Node process, in the root, with the environment that the
+     dev server gets (the part's `NAME=value` words too), loads the app's own `vite-plus`
+     (for `vp`) or `vite` from the root and runs `resolveConfig` for `serve`, with the
+     part's root, `--config`/`-c`, `--mode`/`-m` and `--configLoader`. It gives
+     `server.port`, `server.host`, `server.https` and `server.allowedHosts`.
+   - **The host.** The proxy listens where the dev server would: its `--host` (Vite; a
+     bare `--host` is every address) or `-H`/`--hostname` (Next.js), then Vite's
+     `server.host`, then the default, `localhost` for Vite and every address for Next.js.
+     `localhost` is each loopback address that the machine has; every address is `::`,
+     or `0.0.0.0` with no IPv6. With `--port`, the proxy listens on `localhost`, or on
+     `blueline dev --host <host>`.
+   - An HTTPS dev server (Vite's `--https` or `server.https`, Next.js's
+     `--experimental-https`) is refused: the proxy speaks HTTP.
+2. **Holding the port, and the preload.** The proxy listens on the page's port before the
+   command starts. When the port is taken, `blueline dev` says so and starts nothing. The
+   command starts with `NODE_OPTIONS` plus `--import <preload>` and two variables: the
+   page's port and a file to report in. In each Node process of the command, the preload
+   wraps `net.Server.prototype.listen`: a listen on the page's port listens on port 0 on
+   the host it asked for, and that server's `address()` gives the page's port, so the
+   dev server's own lines, Vite's HMR client and Next.js's request URL
+   (`request.nextUrl`) all name the page's port. When it listens, the preload writes its
+   real address to the report file, through a new file and a rename. No other listen
+   changes. As the system gives the port, no other process can take it first, and a dev
+   server that starts again, as Next.js does after a config change, reports its new
+   port. A dev server that is not on Node, or that does not listen on the page's port,
+   never reports: after 20 seconds `blueline dev` says so, and names `--port`.
+3. **The proxy.** Each request and websocket goes on to the reported address (a wildcard
+   address becomes the loopback address of its family) with its `Host` and other headers,
+   so the dev server sees the page as before. The hop-by-hop headers (`connection`,
+   `keep-alive`, `proxy-connection`, `proxy-authenticate`, `proxy-authorization`, `te`,
+   `trailer`, `transfer-encoding`, `upgrade`) and each header that `connection` names are
+   taken out both ways. A websocket's request and its 101 answer get `connection:
+   Upgrade` and their `upgrade` again, and then its two sockets are piped. A request
+   that comes before the report waits for it, while the command runs; when the command
+   ends, it gets 502, as does a request that the dev server does not take.
+4. **Blueline's routes.** The proxy answers `/__devtools/*` itself and sends nothing of it
+   to the dev server. Like the plugin, it checks the `Host` first, then `fromPage`. A
    `Host` passes when its name is `localhost`, ends in `.localhost`, is an IP address, is
    the dev server's own host, or is in Vite's `server.allowedHosts` (`true` lets every
    name pass); else the answer is 403, so a site that points a name of its own at the
-   loopback address reads nothing. The channel's routes and `overlay.js` go to the
-   server as the plugin sends them, with no `Origin`; that code moves from `src/vite.ts`
-   into `src/server/page.ts`, which both use, and the plugin's tests hold it. The proxy
-   registers the root with `http://localhost:<page port>` as its origin through
-   `holdRegistration`, as the plugin does, and ends the registration when it stops.
-   `tag.js` is the plugin's tag on the same routes, with `blueline` as its storage key, so
-   a review from the plugin and from `blueline dev` is one. A dev server that is not Vite
-   cannot serve `blueline.config.ts`, so for both the config comes from the server, as for
-   a tag by hand: `/__devtools/config.js` and `/__devtools/events` go to the app's
-   `config.js` and `events` on the server. A config that imports the app's code needs the
-   plugin, and the page says so.
-6. **The tag in HTML.** Only an answer with `content-type: text/html` and a body changes;
+   loopback address reads nothing.
+   - **The channel and the overlay.** The channel's routes and `overlay.js` go to the
+     server as the plugin sends them, as a tool's, with no `Origin`. That code (`forward`,
+     `fromPage`) moves from `src/vite.ts` to `src/server/page.ts`, which both use; the
+     plugin's tests hold it. The proxy registers the root, with
+     `http://localhost:<page port>` as its origin, through `holdRegistration`, as the
+     plugin does, and ends the registration when it stops.
+   - **The tag.** `tag.js` is the plugin's tag on the same routes, with `blueline` as its
+     storage key, so a review from the plugin and from `blueline dev` is one. A page that
+     also has the plugin's tag has one overlay, as B2 says.
+   - **The config.** A dev server that is not Vite cannot serve `blueline.config.ts`, so
+     the proxy serves it as the server does for a tag by hand: `/__devtools/config.js` is
+     the config with its types taken off (`configModule`), with its import of the config
+     module named `/__devtools/config-module.js`, on the page's own origin, which goes to
+     the server's `/blueline/config.js`. `/__devtools/events` goes to the app's `events`
+     on the server, and the tag loads the page again on a change. A config that imports
+     the app's code needs the plugin, and the panel says so.
+5. **The tag in HTML.** Only an answer with `content-type: text/html` and a body changes;
    every other answer, a 204 or 304 too, goes through byte for byte, with its headers.
    - **Compression.** The proxy takes out of `accept-encoding` each coding it cannot
      decode, so it can read every answer: it decodes gzip, deflate, br and, where Node has
@@ -940,49 +957,64 @@ Next.js (`next dev`). It runs on macOS and Linux: it needs `sh` and process grou
      name the dev server's bytes. As an HTML answer keeps no validator, a page request
      (one that accepts `text/html`) loses `if-none-match` and `if-modified-since`, so the
      browser never keeps a page from before `blueline dev` with no tag.
-   - **Where.** The tag goes in before the first `</head>`, else before the first
-     `<body`, matched in any case. An answer with neither goes through with no tag, as an
+   - **Where.** A small streaming scanner reads the HTML as a browser's tokenizer does in
+     the parts that matter: it skips comments, and the text of `script`, `style`,
+     `title`, `textarea`, `noscript`, `iframe`, `noembed`, `noframes` and `xmp` up to
+     their end tag. The tag goes in before the first `</head>` it finds, else before the
+     first `<body`, in any case. An answer with neither goes through with no tag, as an
      HTML fragment.
    - **Streaming.** The proxy sends each chunk on at once, but for the last bytes that
      could start a match, which wait for the next chunk; after the tag every byte goes on
-     as it comes. A page that streams, as Next.js does, still streams, and a `</head>`
-     split across two chunks is found.
-7. **Stopping.** The command starts in a process group of its own (`detached`), so
+     as it comes. A page that streams, as Next.js does, still streams, and a `</head>`,
+     a `<!--` or a `</script` split across two chunks is found.
+6. **Stopping.** The command starts in a process group of its own (`detached`), so
    `pnpm dev` and every process it starts are in it. Its stdin is a pipe that stays open
-   while `blueline dev` runs: a terminal stdin would stop a process in a background group,
-   and Vite ends when its stdin ends, so the dev server also ends when `blueline dev` dies.
-   On `SIGINT`, `SIGTERM` or `SIGHUP`, or when the command ends, `blueline dev` stops the
-   proxies and every open connection and websocket, ends the registration, sends `SIGTERM`
-   to the group, waits at most five seconds until no process is left in it, then sends
-   `SIGKILL`. It exits with the command's code, or 128 plus the signal's number. When the
-   command fails to start, it stops in the same way.
-8. **Tests.** In Node, with `blueline serve` on a free port and its own state folder.
-   Each app is a folder in `test/.apps/` (ignored by git), so the commands find the
-   repository's `node_modules`.
-   - The command, as plain functions: the scripts of each package manager, extra words, a
-     page port from each place in its order, the flags put in place of the old ones (also
-     `--port=N` and a bare `--host`), `NAME=value` and `cross-env`, a part after `&&`, and
-     each refusal.
-   - The proxy, on a plain Node server in place of the dev server: gzip, br and deflate
-     HTML get the tag and lose the headers above; a `</head>` split across two chunks; a
-     streamed page whose first part with the tag arrives before the server sends the rest;
-     JSON and a 304 pass unchanged; a page request loses its validators; a websocket goes
-     through both ways; a request before the dev server listens waits for it; another
-     `Host` or another site's origin on `/__devtools/*` gets 403 and writes nothing; a note
-     through the page's route lands in the root's `.blueline/`.
-   - Vite, as `blueline dev -- pnpm dev`: a script `vite` (a real `vite` command, from a
-     test-only dev dependency) with `server.port` in `vite.config.js`, and `vp dev
-     --port N`. The page is on the page's port with the tag, Vite's HMR websocket connects
-     through the proxy, and a note lands in the file.
-   - Next.js, from a test-only dev dependency: a script `next dev -p N` with `PORT` also
-     set. The page, streamed by the App Router, has the tag, and a note lands in the file.
-   - Stopping: after `SIGINT`, and after `SIGTERM`, `blueline dev` exits, the page's port
-     and the hidden port take connections no more, and no process is left in the
-     command's group. A command that fails to start (a missing Vite config) ends
-     `blueline dev` with its code and frees the page's port. A port that is taken starts
-     nothing.
-   - The built command (`dist/bin/blueline.js dev`) runs a Vite script and serves the page
-     with the tag.
+   while `blueline dev` runs, as a terminal stdin would stop a process in a background
+   group.
+   - **On a signal or an end.** On `SIGINT`, `SIGTERM` or `SIGHUP`, or when the command
+     ends, `blueline dev` stops the proxy and every open connection and websocket, ends
+     the registration, sends `SIGTERM` to the group, waits at most five seconds until no
+     process is left in it, then sends `SIGKILL`. It exits with the command's code, or
+     128 plus the signal's number. A command that fails to start stops in the same way.
+   - **When `blueline dev` dies.** A small guard process, in a group of its own, holds a
+     pipe from `blueline dev` and knows the command's group. When the pipe closes with no
+     word that the group is stopped, as when `blueline dev` gets `SIGKILL`, the guard
+     stops the group in the same way, then exits.
+7. **Tests.** In Node, with `blueline serve` on a free port and its own state folder and
+   overlay, as the plugin's tests have. Each app is a folder in `test/.apps/` (ignored by
+   git), so its commands find the repository's `node_modules`. `next` is a dev dependency
+   for the tests only; Vite runs as `vp dev`, the repository's own Vite.
+   - The command, as plain functions: the scripts of each package manager, extra words,
+     the page's port from each place in its order, `--port=N`, a bare `--host`,
+     `NAME=value` and `cross-env`, a part after `&&`, and each refusal.
+   - The scanner: a `</head>` in a comment, in a script's string and in a `title` is
+     skipped; each of them, and the `</head>` itself, split across chunks.
+   - The proxy, on a plain Node server that the preload moves: gzip, br and deflate HTML
+     get the tag and lose the headers above; a streamed page whose first part with the
+     tag arrives before the server sends the rest; JSON and a 304 pass unchanged; a page
+     request loses its validators; a header that `connection` names is taken out; a
+     websocket's whole handshake and its messages both ways; a request before the
+     dev server listens waits for it; another `Host` or another site's origin on
+     `/__devtools/*` gets 403 and writes nothing; a note through the page's route lands in
+     the root's `.blueline/`.
+   - Vite, as `blueline dev -- pnpm dev`: a script `vp dev` with `server.port` in
+     `vite.config.js`; `vp dev -c other.config.js`; a port from an inline `NAME=value`
+     that the config reads; a `--host` name in Vite's `allowedHosts`, which passes on a
+     page and on HMR. The page is on the page's port with the tag, Vite's HMR websocket
+     connects through the proxy, and a note lands in the file.
+   - Next.js: a script `next dev -p N`, with `PORT` also set. The page, streamed by the App
+     Router, has the tag; the app's `proxy.js` sees `request.nextUrl.origin` on the page's
+     port; a note lands in the file.
+   - In Chromium (Playwright), for the Vite app and the Next.js app: the tag loads, its
+     overlay mounts with the journeys of the app's `blueline.config.js`, which imports
+     the config module.
+   - Stopping: after `SIGINT`, after `SIGTERM`, and after `SIGKILL` to `blueline dev`, for
+     Vite and for Next.js, the page's port and the dev server's port take connections no
+     more, and no process is left in the command's group. A command that fails to start (a
+     config that throws) ends `blueline dev` with its code and frees the page's port. A
+     port that is taken starts nothing.
+   - The built command (`dist/bin/blueline.js dev`, with its built preload) runs a Vite
+     script and serves the page with the tag.
 
 ### D1 in steps
 
