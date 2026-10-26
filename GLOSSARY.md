@@ -77,8 +77,14 @@ _Avoid_: Marker, anchor
 
 **Message**:
 Words or annotations that the reviewer sends to the agent in a chat. A message sends
-at once.
+at once. Take back cancels it after it went.
 _Avoid_: Post
+
+**Take back**:
+The reviewer's statement, after a send, that the agent must ignore a message or a finished
+review. Blueline writes one follow-up in the same chat that tells the agent to ignore it and
+wait. Each one is taken back once.
+_Avoid_: Undo, cancel, recall, withdraw
 
 **Chat**:
 The messages and replies of one step or one page.

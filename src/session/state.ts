@@ -160,6 +160,8 @@ export const START: Kept = {
 /** A journey as the machine needs it: its steps' IDs, groups and variant counts. */
 export interface Shape {
   readonly id: string;
+  /** Its title, as a take-back names a finished review; its ID when it has none. */
+  readonly title?: string | undefined;
   readonly steps: readonly {
     readonly id: string;
     readonly group: string;

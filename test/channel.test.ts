@@ -36,6 +36,38 @@ describe("the agent's side of the channel", () => {
     expect(wake({ kind: "settle", settled: true, left: 0 })).toBe(true);
   });
 
+  it("wakes the agent for a take-back, as for any note, after the settles it held", () => {
+    const followUp = {
+      kind: "note",
+      journey: "prep",
+      sentAt: "2026-10-26T13:33:00.000Z",
+      id: "note-a",
+      thread: [
+        { by: "you", text: "Bold", at: 1 },
+        {
+          by: "you",
+          text: "Take back my message of 14:32",
+          at: 2,
+          withdraws: { id: "note-a", at: 1 },
+        },
+      ],
+      withdraws: { id: "note-a", at: 1 },
+    };
+    const finish = {
+      kind: "note",
+      journey: "prep",
+      id: "finish-prep-5",
+      thread: [{ by: "you", text: "Take back", at: 9, withdraws: { id: "finish-prep-5" } }],
+      withdraws: { id: "finish-prep-5" },
+    };
+    const text = [{ kind: "settle", settled: true, left: 1 }, followUp, finish]
+      .map((l) => `${JSON.stringify(l)}\n`)
+      .join("");
+    const { lines } = takeLines(bytes(text));
+    expect(lines.map(wakes)).toEqual([false, true, true]);
+    expect(lines[1]?.raw).toBe(JSON.stringify(followUp));
+  });
+
   it("says how long ago a note was sent", () => {
     const now = Date.parse("2026-10-21T08:00:00Z");
     expect(ageOf("2026-10-21T07:59:40Z", now)).toBe("just now");

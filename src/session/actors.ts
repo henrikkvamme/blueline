@@ -60,6 +60,7 @@ const choiceNamed = (name: string) =>
 export const shapesOf = (journeys: readonly JourneyInfo[]): readonly Shape[] =>
   journeys.map((j) => ({
     id: j.id,
+    title: j.title,
     steps: j.steps.map((s) => ({
       id: s.id,
       group: s.group.id,

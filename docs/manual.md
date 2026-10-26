@@ -364,6 +364,22 @@ Each page has its own chat and annotations, by its path. An app whose router kee
 address's path, as in its hash, gives `DevTools` the page's `path`, and a `navigate` that
 goes to a path, so the tree's pages go there.
 
+## Take back a message
+
+A message goes to the agent at once. To cancel it after it went, use **Take back** under the
+message. It shows when the pointer is on the message or the focus is in it, and always on a
+phone. It works on each message of a step's chat or the page's, with or without
+annotations, and on an annotation sent from its card. Blueline does not stop the agent, as it
+can work on other things. It sends one short follow-up in the same chat, which tells the agent
+to ignore the message and wait. The message then shows struck through, with **Taken back**,
+and the follow-up shows as a small line under it. The agent's reply shows under that line, as
+any reply does.
+
+Each message is taken back once: after that, Take back is gone. A follow-up has no Take back.
+`u` does not take back a message, as a send is not a change that undo takes back. `u` still
+takes back a settle and the other changes it lists. To take back a finished review, see
+[Answer the review](#answer-the-review).
+
 ## Review a page
 
 A page with `variants` parts needs no journey. The tree lists the journey **This page** first,
@@ -433,4 +449,30 @@ blueline reply <status.json> <hand-off id> replied "<what you did>"
 Write `working` as soon as you start, and again each time the plan changes. End with
 `replied`, which says what you did. Answer a message or an annotation on its own chat's `id`,
 as before: that answer shows in its step's chat, not in the hand-off. Each Finish has its own
-hand-off ID, so an answer to an earlier pass never shows on a new one.
+hand-off ID, so an answer to an earlier pass never shows on a new one. **Take back** on the hand-off
+tells the agent to ignore the review and its verdicts ([A take-back](#a-take-back)). The
+journey stays settled, so the reviewer can settle a step again or start another pass.
+
+### A take-back
+
+When the reviewer takes back a message, the agent gets one more note line in the same chat.
+The line is like any message's, and wakes the listener in the same way. It has one more
+field, `withdraws`, which names what the agent must ignore:
+
+- a message: `"withdraws": { "id": "<chat id>", "at": <the message's at> }`. The message is the
+  one in `thread` with that `at`.
+- a finished review: `"withdraws": { "id": "finish-<journey>-<time>" }`. The line's `id` is the
+  hand-off, and it has no `step`.
+
+The thread's last entry holds the words. Blueline writes them, not the reviewer, as in:
+
+```text
+Take back my message of 14:32 ("Make the button blue"). Ignore it. If you started work on
+it, stop. Do not undo the changes you made, unless I ask. Wait for my next message. Reply
+to confirm.
+```
+
+For a finish, the words name the journey: `Take back my finished review of "Handle a
+request". Ignore it and its verdicts.`, then the same last sentences. Do what the words say,
+and reply on the line's `id`, as for any message. A reply to a finish's take-back shows in the
+hand-off.

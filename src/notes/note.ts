@@ -41,6 +41,11 @@ const SentPinSchema = Schema.Struct({
 });
 export type SentPin = typeof SentPinSchema.Type;
 
+/** What a take-back takes back: a message, by its chat's ID and its time, or a finished
+ * review, by its hand-off's ID. */
+const WithdrawsSchema = Schema.Struct({ id: Schema.String, at: Schema.optional(Schema.Finite) });
+export type Withdraws = typeof WithdrawsSchema.Type;
+
 const MessageSchema = Schema.Struct({
   by: Schema.Literals(["you", "agent"]),
   text: Schema.String,
@@ -52,6 +57,9 @@ const MessageSchema = Schema.Struct({
   blocks: Schema.optional(Schema.Array(BlockSchema)),
   /** The pointed notes the reviewer sent with it. */
   pins: Schema.optional(Schema.Array(SentPinSchema)),
+  /** A take-back (take-back.ts): Blueline wrote it, to tell the agent to ignore the message of
+   * this chat sent at `at`, or with no `at`, the finished review of the hand-off `id`. */
+  withdraws: Schema.optional(WithdrawsSchema),
 });
 export type Message = typeof MessageSchema.Type;
 
@@ -101,6 +109,8 @@ export type NoteEvent =
       readonly text?: string | undefined;
       /** The pointed notes that go with it: a send with no words of its own still counts. */
       readonly pins?: readonly SentPin[] | undefined;
+      /** What it takes back, for a take-back: Blueline's words, not the reviewer's. */
+      readonly withdraws?: Withdraws | undefined;
     }
   /** The dev server did not take it: the words go back to the draft. */
   | { readonly type: "failed" }
@@ -156,6 +166,7 @@ const lifecycle = setup({
             variant: event.variant,
             ...(images.length === 0 ? {} : { images }),
             ...((event.pins?.length ?? 0) === 0 ? {} : { pins: event.pins }),
+            ...(event.withdraws === undefined ? {} : { withdraws: event.withdraws }),
           },
         ],
         draft: event.text === undefined ? "" : context.draft,
@@ -163,10 +174,14 @@ const lifecycle = setup({
         unread: false,
       };
     }),
+    // A message the dev server did not take leaves the chat, and its words go back to the
+    // draft. A take-back's words are Blueline's: they only leave.
     takeBack: assign(({ context }) => {
       const last = context.thread.at(-1);
       if (last?.by !== "you") return {};
-      return { thread: context.thread.slice(0, -1), draft: last.text, images: last.images };
+      const thread = context.thread.slice(0, -1);
+      if (last.withdraws !== undefined) return { thread };
+      return { thread, draft: last.text, images: last.images };
     }),
     addReplies: assign(({ context, event }) => {
       if (event.type !== "reply") return {};
@@ -293,7 +308,7 @@ export const sentCount = (notes: readonly Note[], steps: ReadonlySet<string>) =>
   notes
     .filter((n) => steps.has(n.step))
     .flatMap((n) => n.thread)
-    .filter((m) => m.by === "you")
+    .filter((m) => m.by === "you" && m.withdraws === undefined)
     .reduce((count, m) => count + (m.pins?.length ?? 0) + (m.text.trim() === "" ? 0 : 1), 0);
 
 export const isKept = (n: Note) => n.draft.trim() !== "" || (n.images?.length ?? 0) > 0;

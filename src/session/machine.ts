@@ -21,7 +21,8 @@ import {
   type Image,
   type Pin,
 } from "../notes/note";
-import { newHandoff } from "../notes/handoff";
+import { handoffJourney, newHandoff } from "../notes/handoff";
+import { canTakeBack, takeBackWords } from "../notes/take-back";
 import { dropped, keptOn } from "../part/store";
 import {
   keepsAnother,
@@ -168,6 +169,17 @@ export type Event =
       readonly step: string;
       readonly at: number;
       readonly text?: string | undefined;
+    }
+  /**
+   * Takes back the reviewer's message in the chat `id` sent at `message`, or with no
+   * `message` the finished review of the hand-off `id`: one follow-up goes to the agent at
+   * `at`, in the same chat, and tells it to ignore what it got. Once for each.
+   */
+  | {
+      readonly type: "takeBack";
+      readonly id: string;
+      readonly message?: number | undefined;
+      readonly at: number;
     }
   | { readonly type: "noteEvent"; readonly id: string; readonly event: NoteEvent }
   | { readonly type: "remove"; readonly id: string }
@@ -470,6 +482,23 @@ function turnedLines(
 
 /** How many actions `u` can take back. */
 const HISTORY = 50;
+
+/** The words of the follow-up that takes back the reviewer's message in the chat sent at
+ * `message`, or with no `message` the chat's finish; undefined when there is none to take
+ * back. */
+function followUpWords(c: Context, chat: Note, message: number | undefined) {
+  if (!canTakeBack(chat.thread, message)) return undefined;
+  if (message === undefined) {
+    const journey = handoffJourney(chat.step);
+    if (journey === undefined) return undefined;
+    const title = c.journeys.find((j) => j.id === journey)?.title;
+    return takeBackWords({ journey: title ?? journey });
+  }
+  const m = chat.thread.find((x) => x.by === "you" && x.at === message);
+  return m === undefined
+    ? undefined
+    : takeBackWords({ text: m.text, pins: m.pins ?? [], at: m.at });
+}
 
 /** What an event changes that `u` can take back; undefined when it is not undoable. */
 function changeOf(c: Context, event: Event): Change | undefined {
@@ -881,6 +910,26 @@ export const sessionMachine = setup({
             step?.settled === true && context.finish?.step !== event.step
               ? { kind: "settle", ids: [], step: event.step, session, next: note }
               : note,
+        });
+      }),
+    },
+    // A take-back is a message as any other to the agent, so the listener wakes for it. It
+    // changes no settle, and u does not take it back: what went to the agent stays sent.
+    takeBack: {
+      actions: enqueueActions(({ context, event, enqueue }) => {
+        const chat = context.notes.find((n) => n.id === event.id);
+        const text = chat === undefined ? undefined : followUpWords(context, chat, event.message);
+        if (chat === undefined || text === undefined) return;
+        const withdraws = {
+          id: chat.id,
+          ...(event.message === undefined ? {} : { at: event.message }),
+        };
+        const next = noteAfter(chat, { type: "send", at: event.at, text, withdraws });
+        const notes = context.notes.map((n) => (n.id === chat.id ? next : n));
+        enqueue.assign({ notes, posts: context.posts + 1 });
+        enqueue.spawnChild("post", {
+          id: `post-${context.posts}`,
+          input: { kind: "note", ids: [chat.id], session: { ...context, notes } },
         });
       }),
     },

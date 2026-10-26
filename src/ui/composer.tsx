@@ -1,12 +1,30 @@
 import { Effect } from "effect";
 import { PAGE_JOURNEY, placePath } from "../part/page";
-import { ArrowUp, Check, Clock, ImageIcon, LoaderCircle, MapPin, Plus, X } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  Clock,
+  CornerUpLeft,
+  ImageIcon,
+  LoaderCircle,
+  MapPin,
+  Plus,
+  X,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { postImage } from "../io/channel";
 import { isListened } from "../io/listening";
 import { ROUTES } from "../io/routes";
-import { blankNote, type Image, type Note, type Pin, type SentPin } from "../notes/note";
+import {
+  blankNote,
+  type Image,
+  type Message,
+  type Note,
+  type Pin,
+  type SentPin,
+} from "../notes/note";
 import { slashMatches, type Slash } from "../notes/slash";
+import { isFollowUp, takenBack } from "../notes/take-back";
 import { hasShots, insertShots, partsOf, removeShot, shotAt } from "../notes/shots";
 import { VimMode, useVim } from "../vim";
 import { Blocks } from "./blocks";
@@ -22,7 +40,9 @@ import { now, useSession, useTools } from "./session";
 /**
  * The chat with the agent on a step or a page, one for each: the reviewer's messages on the
  * right, each with the pointed notes sent in it, and the agent's answers as plain text, as a
- * chat shows them.
+ * chat shows them. Each message the reviewer sent has a quiet Take back, on hover or focus,
+ * and always on a phone. A message taken back is struck through, and Blueline's follow-up to
+ * the agent shows as a small line of its own.
  */
 export function Thread({
   note,
@@ -48,21 +68,68 @@ export function Thread({
   return (
     <ol ref={list} className={cx("flex flex-col gap-2 overflow-y-auto", className)}>
       {note.thread.map((m, i) =>
-        m.by === "you" ? (
-          <li key={String(i)} className="flex max-w-[85%] flex-col items-end gap-1 self-end">
-            <Images images={m.images ?? []} end />
-            {m.text !== "" && (
-              <span className="rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5 whitespace-pre-wrap">
-                <Written text={m.text} images={m.images ?? []} />
-              </span>
-            )}
-            <SentPins pins={m.pins ?? []} />
-          </li>
-        ) : (
+        m.by !== "you" ? (
           <Reply key={String(i)} note={note} at={i} />
+        ) : isFollowUp(m) ? (
+          <FollowUp key={String(i)} message={m} />
+        ) : (
+          <Sent key={String(i)} note={note} message={m} />
         ),
       )}
     </ol>
+  );
+}
+
+/** A message the reviewer sent, with its screenshots and annotations, and Take back under
+ * it; once taken back, struck through, with a quiet "Taken back" in its place. */
+function Sent({ note, message: m }: { readonly note: Note; readonly message: Message }) {
+  const { actor } = useTools();
+  const back = takenBack(note.thread, m.at);
+  return (
+    <li className="group/sent flex max-w-[85%] flex-col items-end gap-1 self-end">
+      <div className={cx("flex flex-col items-end gap-1", back && "opacity-60")}>
+        <Images images={m.images ?? []} end />
+        {m.text !== "" && (
+          <span
+            className={cx(
+              "rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5 whitespace-pre-wrap",
+              back && "text-dt-muted line-through",
+            )}
+          >
+            <Written text={m.text} images={m.images ?? []} />
+          </span>
+        )}
+        <SentPins pins={m.pins ?? []} />
+      </div>
+      {back ? (
+        <span className="h-4 text-[11px] text-dt-faint">Taken back</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => actor.send({ type: "takeBack", id: note.id, message: m.at, at: now() })}
+          className="h-4 rounded-dt-mark px-1 text-[11px] text-dt-faint opacity-0 transition-opacity group-hover/sent:opacity-100 group-focus-within/sent:opacity-100 hover:text-dt-text focus-visible:opacity-100 max-sm:h-11 max-sm:px-2 max-sm:text-[13px] max-sm:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          Take back
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** Blueline's follow-up after a take-back, as a small line of the chat's own: it told the
+ * agent to ignore the message and wait. Its whole words show on hover. */
+function FollowUp({ message }: { readonly message: Message }) {
+  const finish = message.withdraws?.at === undefined;
+  return (
+    <li
+      title={message.text}
+      className="flex items-center gap-1.5 self-center py-0.5 text-[11px] text-dt-faint max-sm:text-[13px]"
+    >
+      <CornerUpLeft className="size-3 shrink-0" aria-hidden />
+      {finish
+        ? "Asked the agent to ignore this review and wait"
+        : "Asked the agent to ignore it and wait"}
+    </li>
   );
 }
 

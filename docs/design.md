@@ -392,6 +392,32 @@ quiet **Settled** heading; a finished journey moves there with a short motion, a
 the same way for another pass. The hand-off replaces the "Review done" line that the tree's
 foot had before, so the review's end has one place.
 
+### Take back
+
+Agreed with Henrik on 2026-10-26, in place of a five second wait before each send. A send
+goes at once: a message, an annotation sent from its card, and Finish. After it went, the
+reviewer can cancel it with **Take back**. Blueline does not interrupt the agent, as it can
+work on other things. It writes one follow-up instead.
+
+- A message in a step's chat or the page's, with or without annotations, has a quiet **Take
+  back** under it. It shows on hover and on focus, and always on a phone. The hand-off has
+  **Take back** in its foot.
+- Take back writes one note line in the same chat, as any message, so the listener and the
+  dispatcher deliver it with no change. Its one new field, `withdraws`, names what it takes
+  back: `{ id, at }` for a message, by its chat's ID and its time, and `{ id }` for a finish,
+  by its hand-off's ID.
+- The thread's last entry holds the words. Blueline writes them, not the reviewer. They quote
+  the message's first words, about 60 characters, and its time, or name the finished journey.
+  They tell the agent to ignore it, to stop work on it if it started, not to undo changes
+  unless the reviewer asks, to wait for the next message, and to reply to confirm.
+- The message shows struck through, with a quiet **Taken back**. The follow-up shows as a small
+  line of the chat's own, not as the reviewer's bubble, and the agent's reply comes under it.
+  A finish taken back reads **Taken back** on its hand-off and its row. The journey stays
+  settled, so the reviewer can settle again or start another pass.
+- Each message and each finish is taken back once, and a follow-up has no Take back.
+- A send is not undoable: `u` takes back the settles and the other changes, and never a
+  message. Take back is the one way.
+
 ### Annotation, and the wire's note
 
 Agreed with Henrik on 2026-10-26. The reviewer's word for what they write on a pin is

@@ -318,7 +318,8 @@ function Pages({ heading }: { readonly heading: boolean }) {
   );
 }
 
-/** A chat's last words, under its page's name: the agent's, or the reviewer's after "You:". */
+/** A chat's last words, under its page's name: the agent's, or the reviewer's after "You:". A
+ * take-back's are Blueline's, so the row says only that one was taken back. */
 function LastWords({ chat }: { readonly chat: Note | undefined }) {
   const last = chat?.thread.at(-1);
   if (last === undefined) return null;
@@ -330,7 +331,11 @@ function LastWords({ chat }: { readonly chat: Note | undefined }) {
         chat !== undefined && hasNews(chat) ? "text-dt-text" : "text-dt-faint",
       )}
     >
-      {last.by === "you" ? `You: ${words}` : words}
+      {last.withdraws !== undefined
+        ? "You took a message back"
+        : last.by === "you"
+          ? `You: ${words}`
+          : words}
     </span>
   );
 }

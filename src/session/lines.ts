@@ -1,3 +1,4 @@
+import { handoffJourney } from "../notes/handoff";
 import type { Note } from "../notes/note";
 import { PAGE_JOURNEY, placePath } from "../part/page";
 import type { DevJourney } from "../types";
@@ -11,7 +12,8 @@ import { heardFeedback, openPlace } from "./state";
  * the chat, by the line's `id`. The settle that Finish sends has an `id` too: the hand-off,
  * where the agent answers the review as a whole. A note and a settle carry the variants the reviewer kept and deleted in the
  * step's parts, so the agent reads them with the reasons. A settled step is right: the
- * agent stops work on it.
+ * agent stops work on it. A take-back (notes/take-back.ts) is a chat's message as any other,
+ * with `withdraws`: the message, or the finished review, that the agent must ignore.
  */
 
 const journeyOf = <C>(journeys: readonly DevJourney<C>[], session: Context) =>
@@ -66,6 +68,21 @@ export function postedLine<C>(journeys: readonly DevJourney<C>[], post: Post, se
   const chat = session.notes.find((n) => n.id === post.ids[0]);
   if (post.kind === "note" && chat !== undefined) {
     const last = chat.thread.at(-1);
+    // A take-back names what it takes back; a finished review's names its hand-off, the chat
+    // the agent answers the review in, which has no step.
+    const withdraws = last?.withdraws === undefined ? {} : { withdraws: last.withdraws };
+    const finished = handoffJourney(chat.step);
+    if (finished !== undefined)
+      return {
+        kind: "note",
+        journey: finished,
+        sentAt,
+        id: chat.id,
+        thread: chat.thread,
+        sentWords: true,
+        pins: [],
+        ...withdraws,
+      };
     return {
       kind: "note",
       // The page's notes go to the page's own review, which `blueline review` listens to.
@@ -80,6 +97,7 @@ export function postedLine<C>(journeys: readonly DevJourney<C>[], post: Post, se
         text: p.text,
         ...(p.images === undefined ? {} : { images: p.images }),
       })),
+      ...withdraws,
     };
   }
   const id = post.step ?? "";

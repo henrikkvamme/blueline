@@ -1,12 +1,13 @@
 import { ChevronLeft, Send } from "lucide-react";
 import { isListened } from "../io/listening";
 import { handoffJourney } from "../notes/handoff";
-import { sentCount, type Note } from "../notes/note";
+import { isWithAgent, sentCount, type Note } from "../notes/note";
+import { takenBack } from "../notes/take-back";
 import { Blocks } from "./blocks";
 import { allSettled } from "./progress";
 import { Thread } from "./composer";
 import { cx } from "./cx";
-import { useNotes, useSession, useStep, useTools } from "./session";
+import { now, useNotes, useSession, useStep, useTools } from "./session";
 import { Foot, KEEP_FOCUS } from "./step-controls";
 
 /*
@@ -111,23 +112,34 @@ export function FinishView() {
  * went to the agent, with the same rows as the finish, and under them what the agent does with
  * it. First a quiet wait; then, as the agent works, its plan, which changes in place; then its
  * reply, as a chat shows one. Done, or Escape, leaves it for the tree. A reload keeps it.
+ * Take back tells the agent to ignore the review: the journey stays settled, and the reply to
+ * the take-back shows under it.
  */
 export function HandoffView({ note }: { readonly note: Note }) {
   const { actor, adapter } = useTools();
   const journeyId = handoffJourney(note.step) ?? "";
   const journey = adapter.journeys.find((j) => j.id === journeyId);
   const steps = journey?.steps ?? [];
+  const back = takenBack(note.thread, undefined);
+  const title = back ? "Taken back" : "Sent to the agent";
   return (
-    <section
-      aria-label="Sent to the agent"
-      className="flex min-h-0 flex-1 flex-col max-sm:flex-initial"
-    >
+    <section aria-label={title} className="flex min-h-0 flex-1 flex-col max-sm:flex-initial">
       <div className={BODY}>
-        <Head title="Sent to the agent" line={`${allSettled(steps.length)}.`} />
+        <Head title={title} line={`${allSettled(steps.length)}.`} />
         <Summary steps={steps} />
         <AgentAnswer note={note} journey={journeyId} />
       </div>
       <Foot>
+        {!back && (
+          <button
+            type="button"
+            {...KEEP_FOCUS}
+            onClick={() => actor.send({ type: "takeBack", id: note.id, at: now() })}
+            className="flex h-10 shrink-0 items-center rounded-dt-control px-3 text-[14px] text-dt-muted hover:bg-dt-raised hover:text-dt-text max-sm:h-11 max-sm:text-[15px]"
+          >
+            Take back
+          </button>
+        )}
         <button
           type="button"
           {...KEEP_FOCUS}
@@ -149,7 +161,8 @@ function AgentAnswer({ note, journey }: { readonly note: Note; readonly journey:
   const said = note.thread.some((m) => m.by === "agent");
   return (
     <section aria-label="The agent" className="mt-6 flex flex-col gap-2.5">
-      {!said && (
+      {note.thread.length > 0 && <Thread note={note} className="" />}
+      {(!said || isWithAgent(note)) && (
         <span className="flex h-5 items-center gap-2 text-[13px] text-dt-muted">
           <i
             aria-hidden
@@ -172,7 +185,6 @@ function AgentAnswer({ note, journey }: { readonly note: Note; readonly journey:
           <Blocks blocks={note.progress} note={note} after={[]} />
         </div>
       )}
-      {said && <Thread note={note} className="" />}
     </section>
   );
 }
