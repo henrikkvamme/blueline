@@ -4,7 +4,7 @@
  * pages name their choices. This entry brings its own React, for an app of any framework;
  * a React app can use `@henrikkvamme/blueline/react` instead.
  */
-export { mount, type Blueline, type MountOptions } from "./mount";
+export { mount, mountPage, type Blueline, type MountOptions, type PageOptions } from "./mount";
 export { registry, type DevChoice } from "./core/registry";
 export { part, type Part, type PartOptions, type PartShown } from "./part/part";
 export { ROUTES } from "./io/routes";

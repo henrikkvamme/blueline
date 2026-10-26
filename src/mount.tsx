@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { claim } from "./core/owner";
+import { claim, owner } from "./core/owner";
 import { part } from "./part/part";
 import { startSession } from "./core/session";
 import type { DevAdapter } from "./types";
@@ -97,4 +97,25 @@ export function mount<C>({
   });
   window.blueline = handle;
   return handle;
+}
+
+export interface PageOptions {
+  /** Where the browser keeps the review. */
+  readonly storageKey: string;
+  /** Where the page's channel is: the dev server's routes when none. */
+  readonly routes?: NonNullable<DevAdapter<void>["channel"]>;
+}
+
+/** The page's own review, as a script tag or the Vite plugin puts it on a page. Does nothing
+ * when an overlay owns the page already, as the app's own `mount` or `<DevTools>`: the app's
+ * tools come first. */
+export function mountPage({ storageKey, routes }: PageOptions): Blueline | undefined {
+  if (owner() !== undefined) return undefined;
+  const adapter: DevAdapter<void> = {
+    journeys: [],
+    context: () => undefined,
+    enter: () => undefined,
+    ...(routes === undefined ? {} : { channel: routes }),
+  };
+  return mount({ adapter, storageKey });
 }

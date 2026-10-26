@@ -59,7 +59,7 @@
     "css": "node scripts/overlay-css.ts",
     "typecheck": "node node_modules/@typescript/native/bin/tsc -p tsconfig.app.json && node node_modules/@typescript/native/bin/tsc -p tsconfig.node.json && node node_modules/@typescript/native/bin/tsc -p examples/review-demo",
     "test": "vp test run --project node --project browser-source",
-    "test:packed": "vp test run --project browser-packed",
+    "test:packed": "vp test run --project browser-packed --project node-packed",
     "pack": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\" && vp pack",
     "verify": "pnpm run check && pnpm test && pnpm run pack && pnpm run test:packed",
     "demo": "pnpm --filter review-demo dev"

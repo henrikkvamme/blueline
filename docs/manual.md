@@ -10,9 +10,13 @@ app can use `@henrikkvamme/blueline/react` instead, which runs on the app's Reac
 later. The app needs no CSS for Blueline: the tools and the lift stand in shadow roots with
 their own CSS. Three places use it:
 
-- The dev server's channel to the agent, in `vite.config.ts`:
-  `devtoolsChannel({ feedback, status })` from `@henrikkvamme/blueline/vite`. When the app
-  links Blueline from its source, the plugin also has Blueline's files use the app's React.
+- The dev server's channel to the agent, in `vite.config.ts`: `devtoolsChannel()` from
+  `@henrikkvamme/blueline/vite`. It starts `blueline serve` when none runs, registers the
+  app, and puts the page's own review on each page; an app that mounts its own tools sets
+  `overlay: false`. The notes go to `.blueline/` in the app's root, or to the `feedback` and
+  `status` files it gives. In middleware mode, give the page's `origin`. When the app links
+  Blueline from its source, the plugin also has Blueline's files use the app's React. An app
+  with no Vite uses a script tag by hand (see "One server for the machine").
 - `mount({ adapter, storageKey: "<app>.review" })`, in a module that the app loads in
   development only, or `<DevTools adapter={...} storageKey="<app>.review" />` from
   `@henrikkvamme/blueline/react` in a React app. The adapter (`DevAdapter` in `src/types.ts`) gives the journeys and opens a step's
@@ -28,8 +32,7 @@ their own CSS. Three places use it:
 The agent's command is `blueline`. `examples/review-demo` is a small app set up this way, with
 one journey over two pages and one part with variants; `pnpm run demo` starts it on port 4310.
 
-This setup is the one the code has now. [design.md](design.md) gives the setup that
-replaces it: `blueline dev`, a Vite plugin or a script tag, and no peers.
+`blueline dev`, which needs no change to the app, comes later ([design.md](design.md)).
 
 ### An app with its own keys
 
@@ -505,7 +508,9 @@ review, so the agent wakes once, at the end. A listener that starts again still 
 ### One server for the machine
 
 `blueline serve` keeps every app's channel on the machine, on `127.0.0.1:4399`, or the port in
-`BLUELINE_PORT`. Start it once: a second `blueline serve` finds the first, says so and exits.
+`BLUELINE_PORT`. The Vite plugin and `blueline add` start it when none runs, as a process of
+its own that writes to `serve.log` in its state folder. A second `blueline serve` finds the
+first, says so and exits. `blueline serve stop` stops it.
 
 A dev server registers its app's root and its page's origin with `POST /blueline/register`, and the page then reaches the
 app's channel under `/blueline/<app>/`. The app's name is its repository's folder and its
@@ -514,6 +519,17 @@ app's `.blueline/` folder. A page may use the channel only from an origin that a
 server registered; the agent's tools, which send no origin, always may. The server answers
 only a request to its own address, so another site cannot reach it by a name of its own. It
 keeps its apps in `~/.local/state/blueline/apps.json`, or in `BLUELINE_STATE`.
+
+A page that no dev server registers, such as one from Next.js, loads the overlay by a script
+tag by hand. In the app's root, keep the page's origin and get the tag:
+
+```sh
+blueline add http://localhost:3000
+```
+
+It prints the tag to put in the page in development, as
+`<script type="module" src="http://127.0.0.1:4399/blueline/<app>/tag.js"></script>`. The origin
+stays until `blueline remove http://localhost:3000`. A page cannot keep its own origin.
 
 ### Answer the review
 

@@ -1,39 +1,35 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createServer, type ViteDevServer } from "vite";
+import type { ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MAX_IMAGE_BYTES } from "../src/server/channel";
-import { devtoolsChannel, ROUTES } from "../src/vite";
+import { ROUTES } from "../src/vite";
+import { folder as newFolder, registered, startServe, startVite } from "./helpers/dev";
 
 /*
- * The channel over HTTP, as the page and the agent's tools reach it through the Vite
- * plugin's dev server.
+ * The channel over HTTP, as the page and the agent's tools reach it: through the Vite
+ * plugin's dev server to `blueline serve`, which writes the app's files.
  */
 
-const folder = mkdtempSync(path.join(tmpdir(), "blueline-channel-"));
+const folder = newFolder("channel");
 const feedback = path.join(folder, ".blueline", "feedback.jsonl");
 const status = path.join(folder, ".blueline", "status.json");
 let server: ViteDevServer | undefined;
+let closeServe: (() => Promise<void>) | undefined;
 let base = "";
 
 beforeAll(async () => {
-  server = await createServer({
-    root: folder,
-    configFile: false,
-    logLevel: "silent",
-    plugins: [devtoolsChannel({ feedback, status })],
-    server: { port: 0, host: "127.0.0.1", ws: false },
-    optimizeDeps: { noDiscovery: true },
-  });
-  await server.listen();
-  const address = server.httpServer?.address();
-  if (typeof address !== "object" || address === null) throw new Error("The server has no port.");
-  base = `http://127.0.0.1:${String(address.port)}`;
+  const served = await startServe();
+  closeServe = served.close;
+  const vite = await startVite(folder, served, { feedback, status });
+  server = vite.server;
+  base = vite.url;
+  await registered(base);
 });
 
 afterAll(async () => {
   await server?.close();
+  await closeServe?.();
   rmSync(folder, { recursive: true, force: true });
 });
 
@@ -55,7 +51,7 @@ const post = (route: string, body: BodyInit, type: string, origin?: string) =>
     headers: { "content-type": type, ...(origin === undefined ? {} : { origin }) },
   });
 
-describe("the channel over HTTP", () => {
+describe("the channel through the plugin and the server", () => {
   it("appends a note from the page with its ID and version", async () => {
     const answer = await post(ROUTES.feedback, '{"kind":"note"}', "application/json", base);
     expect(answer.status).toBe(204);

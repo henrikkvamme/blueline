@@ -349,13 +349,15 @@ describe("a second blueline serve", () => {
   it("finds the first and leaves it", async () => {
     const port = Number(url.split(":").at(-1));
     const found = await serve({ port, state });
-    expect(found).toMatchObject({ kind: "running", health: { blueline: true, protocol: 1 } });
+    expect(found).toMatchObject({ kind: "running", health: { blueline: true, protocol: 2 } });
     expect((await fetch(`${url}/blueline/health`)).status).toBe(200);
   });
 
-  it("refuses a Blueline of another protocol", async () => {
-    const port = await other((r) => r.end(JSON.stringify({ blueline: true, protocol: 2, pid: 1 })));
-    await expect(serve({ port, state })).rejects.toThrow(/protocol 2/);
+  it("refuses a Blueline of another protocol, as B1's, by its process", async () => {
+    const port = await other((r) =>
+      r.end(JSON.stringify({ blueline: true, protocol: 1, version: "0.0.0", pid: 41 })),
+    );
+    await expect(serve({ port, state })).rejects.toThrow(/protocol 1.*Stop process 41/);
   });
 
   it("fails in time on a server that is not Blueline, or does not answer", async () => {
@@ -365,5 +367,91 @@ describe("a second blueline serve", () => {
     const started = Date.now();
     await expect(serve({ port: silent, state })).rejects.toThrow(/does not answer as Blueline/);
     expect(Date.now() - started).toBeLessThan(3000);
+  });
+});
+
+describe("blueline serve for pages", () => {
+  const page = "http://localhost:6100";
+
+  it("serves the overlay with its ETag, 304 while it is the same, and a new ETag for a new build", async () => {
+    await served?.close();
+    const overlay = path.join(mkdtempSync(path.join(base, "dist-")), "index.js");
+    writeFileSync(overlay, "export const one = 1;\n");
+    const result = await serve({ port: 0, state, overlay });
+    if (result.kind !== "started") throw new Error("Another server answered.");
+    served = result;
+    url = `http://127.0.0.1:${String(result.port)}`;
+    const first = await fetch(`${url}/blueline/overlay.js`, { headers: { origin: page } });
+    expect(first.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(first.headers.get("access-control-allow-origin")).toBe("*");
+    const etag = first.headers.get("etag") ?? "";
+    expect((await raw("/blueline/overlay.js", { "if-none-match": etag })).status).toBe(304);
+    writeFileSync(overlay, "export const two = 2;\n");
+    const second = await fetch(`${url}/blueline/overlay.js`, {
+      headers: { "if-none-match": etag },
+    });
+    expect(second.status).toBe(200);
+    expect(second.headers.get("etag")).not.toBe(etag);
+    rmSync(overlay);
+    const none = await fetch(`${url}/blueline/overlay.js`);
+    expect(none.status).toBe(503);
+    expect(await none.text()).toContain("pnpm run pack");
+  });
+
+  it("gives a page of the app's origins its tag, on the app's channel at this server", async () => {
+    const a = await registered(repository("tagged"), page);
+    const tag = await fetch(`${url}${a.base}tag.js`, { headers: { origin: page } });
+    expect(tag.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(tag.headers.get("access-control-allow-origin")).toBe(page);
+    expect(tag.headers.get("vary")).toBe("Origin");
+    const text = await tag.text();
+    expect(text).toContain(`from "${url}/blueline/overlay.js"`);
+    expect(text).toContain(`"feedback":"${url}${a.base}feedback"`);
+    expect(text).toContain(`"storageKey":"blueline.${a.name}"`);
+    expect((await raw(`${a.base}tag.js`, { origin: "http://localhost:1" })).status).toBe(403);
+    expect((await fetch(`${url}/blueline/nobody/tag.js`)).status).toBe(404);
+  });
+
+  it("keeps an origin for a tag by hand across restarts, until it is removed", async () => {
+    const root = repository("by-hand");
+    const keep = (origin: string, headers: Record<string, string> = {}) =>
+      fetch(`${url}/blueline/register`, {
+        method: "POST",
+        body: JSON.stringify({ root, origin, keep: true }),
+        headers,
+      });
+    const kept = await keep(page);
+    expect(kept.status).toBe(200);
+    const app = (await kept.json()) as Registered;
+    // A page cannot keep its own origin.
+    expect((await keep("http://localhost:1", { origin: "http://localhost:1" })).status).toBe(403);
+    await served?.close();
+    await start();
+    expect(await preflight(app.base, page)).toBe(204);
+    expect((await note(app.base, page)).status).toBe(204);
+    const removed = await fetch(`${url}/blueline/remove`, {
+      method: "POST",
+      body: JSON.stringify({ root, origin: page }),
+    });
+    expect(removed.status).toBe(200);
+    expect(await preflight(app.base, page)).toBe(403);
+    const again = await fetch(`${url}/blueline/remove`, {
+      method: "POST",
+      body: JSON.stringify({ root, origin: page }),
+    });
+    expect(again.status).toBe(404);
+  });
+
+  it("stops when a tool asks, and not when a page does", async () => {
+    const stopped = vi.fn();
+    await served?.close();
+    const result = await serve({ port: 0, state, stopped });
+    if (result.kind !== "started") throw new Error("Another server answered.");
+    served = result;
+    url = `http://127.0.0.1:${String(result.port)}`;
+    expect((await raw("/blueline/stop", { origin: page }, "POST")).status).toBe(403);
+    expect((await fetch(`${url}/blueline/stop`, { method: "POST" })).status).toBe(204);
+    await vi.waitFor(() => expect(stopped).toHaveBeenCalled());
+    await expect(fetch(`${url}/blueline/health`)).rejects.toThrow();
   });
 });

@@ -14,12 +14,21 @@ export const USAGE = `Usage:
   blueline reply <status.json> <note id> replied <text> [--variant <label>] [--blocks <file.json>]
   blueline reply <status.json> <note id> settled
   blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
-  blueline serve`;
+  blueline serve [stop]
+  blueline add <origin> [--root <dir>]
+  blueline remove <origin> [--root <dir>]`;
 
 /** What the command line asks for. */
 export type Command =
-  /** Serves every app's channel on the machine (src/server/serve.ts). */
-  | { readonly kind: "serve" }
+  /** Serves every app's channel on the machine (src/server/serve.ts), or stops it. */
+  | { readonly kind: "serve"; readonly stop: boolean }
+  /** Keeps an origin for a script tag by hand, or removes it. */
+  | {
+      readonly kind: "add" | "remove";
+      readonly origin: string;
+      /** The app's root; the working directory by default. */
+      readonly root: string;
+    }
   | {
       readonly kind: "listen";
       readonly file: string;
@@ -70,7 +79,10 @@ export function commandOf(args: readonly string[]): Command | undefined {
     } else words.push(arg);
   }
   const [kind, file, id, state, text] = words;
-  if (kind === "serve" && words.length === 1 && flags.size === 0) return { kind };
+  if (kind === "serve" && flags.size === 0 && (words.length === 1 || file === "stop"))
+    return words.length <= 2 ? { kind, stop: file === "stop" } : undefined;
+  if ((kind === "add" || kind === "remove") && file !== undefined && words.length === 2)
+    return { kind, origin: file, root: flags.get("root") ?? "." };
   if (kind === "listen" && file !== undefined && words.length === 2) {
     const journey = flags.get("journey");
     return { kind, file, journey, name: flags.get("as") ?? journey ?? "agent" };

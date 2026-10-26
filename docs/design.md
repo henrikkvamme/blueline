@@ -818,9 +818,8 @@ hand. `blueline dev -- <cmd>` is slice B3, with a plan of its own.
      dev server runs, the plugin registers again after one second, then after twice as long
      each time, at most 30 seconds. It ends the registration when the dev server closes.
    - **The proxy.** Each page route goes to `/blueline/<app>/<route>` on the server, with
-     the rest of its path. The plugin's routes run before Vite's own checks, so the plugin
-     applies the dev server's `allowedHosts` rule itself, as Vite does (`localhost`, IP
-     addresses and the listed names), and then `fromPage`. It forwards a request that
+     the rest of its path. Vite checks the host (`allowedHosts`) before any plugin's routes,
+     so the plugin keeps that check, which a test holds, and adds `fromPage`. It forwards a request that
      passes as a tool's, with no `Origin`. Before the registration answers, a page request
      gets 503.
    - **The tag.** The plugin adds a module to each HTML page that mounts the overlay from

@@ -2,6 +2,7 @@ import path from "node:path";
 import { recommended } from "@effect/tsgo/oxlint-presets";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vite-plus";
+import { keep } from "./examples/review-demo/test/packed/serve.setup.ts";
 
 /** What the overlay's own bundle holds: React, Effect, XState, lucide and what they need. */
 const PRIVATE =
@@ -31,9 +32,17 @@ function browser(from: keyof typeof ENTRIES) {
     },
     test: {
       name: `browser-${from}`,
-      include: ["examples/review-demo/test/**/*.test.{ts,tsx}"],
+      include: [`examples/review-demo/test/${from === "packed" ? "**/" : ""}*.test.{ts,tsx}`],
+      // The built package also loads by a script tag from `blueline serve`.
+      ...(from === "packed"
+        ? { globalSetup: ["examples/review-demo/test/packed/serve.setup.ts"] }
+        : {}),
       browser: {
         enabled: true,
+        // The page keeps its origin for a tag by hand (test/packed/serve.setup.ts).
+        ...(from === "packed"
+          ? { commands: { keep: (_: unknown, ...args: Parameters<typeof keep>) => keep(...args) } }
+          : {}),
         provider: playwright(),
         headless: true,
         instances: [{ browser: "chromium" as const }],
@@ -66,7 +75,12 @@ export default defineConfig({
   },
   test: {
     projects: [
-      { extends: true, test: { name: "node", include: ["test/**/*.test.ts"] } },
+      {
+        extends: true,
+        test: { name: "node", include: ["test/**/*.test.ts"], exclude: ["test/packed/**"] },
+      },
+      // The plugin and the command as they are published, once `vp pack` built them.
+      { extends: true, test: { name: "node-packed", include: ["test/packed/*.test.ts"] } },
       browser("source"),
       browser("packed"),
     ],

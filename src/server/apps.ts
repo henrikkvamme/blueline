@@ -6,7 +6,7 @@ import type { ChannelFiles } from "./channel.ts";
  * An app is one root, by its real path; its repository is the `git` top level of the root.
  * Each dev server that registers the app owns the origin it gave, for as long as its
  * registration is open; the app stays after the last one ends, so its notes can still be
- * read and answered.
+ * read and answered. A kept origin, for a script tag by hand, stays until it is removed.
  */
 
 export interface App {
@@ -15,6 +15,8 @@ export interface App {
   readonly root: string;
   readonly repository: string;
   readonly files: ChannelFiles;
+  /** The origins kept for a script tag by hand (`blueline add`). */
+  readonly kept: readonly string[];
 }
 
 /** The files a dev server may give, each as an absolute path or one from the root. */
@@ -57,10 +59,14 @@ export interface Apps {
    * cannot change its files: "conflict".
    */
   readonly app: (root: string, repository: string, files: ChannelFiles) => App | "conflict";
+  readonly rooted: (root: string) => App | undefined;
+  /** Keeps an origin for the app, or removes it; says whether the app had it. */
+  readonly keep: (name: string, origin: string, keep: boolean) => boolean;
   /** Opens a registration of the app's origin; the function ends it. */
   readonly open: (name: string, origin: string) => () => void;
   readonly named: (name: string) => App | undefined;
-  /** Whether a page of `origin` may use the app: one of its open registrations gave it. */
+  /** Whether a page of `origin` may use the app: one of its open registrations gave it, or
+   * the app keeps it. */
   readonly allows: (name: string, origin: string) => boolean;
   readonly inRepository: (repository: string) => readonly App[];
   readonly all: () => readonly App[];
@@ -72,6 +78,13 @@ export function makeApps(kept: readonly App[], changed: () => void): Apps {
   const byName = new Map(kept.map((a) => [a.name, a]));
   /** Each app's open registrations, as their origins; one origin may be there twice. */
   const open = new Map<string, string[]>();
+
+  function put(app: App) {
+    byRoot.set(app.root, app);
+    byName.set(app.name, app);
+    changed();
+    return app;
+  }
 
   function freeName(repository: string, root: string) {
     const base = nameOf(repository, root);
@@ -86,11 +99,17 @@ export function makeApps(kept: readonly App[], changed: () => void): Apps {
       if (known !== undefined && sameFiles(known.files, files) && known.repository === repository)
         return known;
       if (known !== undefined && (open.get(known.name)?.length ?? 0) > 0) return "conflict";
-      const app = { name: known?.name ?? freeName(repository, root), root, repository, files };
-      byRoot.set(root, app);
-      byName.set(app.name, app);
-      changed();
-      return app;
+      const name = known?.name ?? freeName(repository, root);
+      return put({ name, root, repository, files, kept: known?.kept ?? [] });
+    },
+    rooted: (root) => byRoot.get(root),
+    keep(name, origin, keep) {
+      const app = byName.get(name);
+      if (app === undefined) return false;
+      const had = app.kept.includes(origin);
+      if (had !== keep)
+        put({ ...app, kept: keep ? [...app.kept, origin] : app.kept.filter((o) => o !== origin) });
+      return had;
     },
     open(name, origin) {
       const origins = open.get(name) ?? [];
@@ -104,7 +123,9 @@ export function makeApps(kept: readonly App[], changed: () => void): Apps {
       };
     },
     named: (name) => byName.get(name),
-    allows: (name, origin) => open.get(name)?.includes(origin) ?? false,
+    allows: (name, origin) =>
+      (open.get(name)?.includes(origin) ?? false) ||
+      (byName.get(name)?.kept.includes(origin) ?? false),
     inRepository: (repository) => [...byRoot.values()].filter((a) => a.repository === repository),
     all: () => [...byRoot.values()],
   };

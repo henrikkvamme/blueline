@@ -1,29 +1,37 @@
-import { Config, Console, Effect } from "effect";
-import { PORT, serve as start } from "../src/server/serve.ts";
+import { Config, Console, Effect, Option } from "effect";
+import { serve as start } from "../src/server/serve.ts";
+import { addOrigin, placeOf, removeOrigin, stopServer, tagFor } from "../src/server/start.ts";
 
 /*
  * `blueline serve`: starts the machine's server for every app's channel, or says which one
- * runs. It listens until the command stops, then closes the server.
+ * runs. It listens until the command or `blueline serve stop` stops it. `blueline add` keeps
+ * an origin for a page that loads the overlay by a script tag by hand.
  */
 
-/** Where the server keeps its apps: Blueline's folder in the user's state folder. */
-const STATE = Config.String("BLUELINE_STATE").pipe(
-  Config.orElse(() =>
-    Config.String("XDG_STATE_HOME").pipe(
-      Config.orElse(() => Config.String("HOME").pipe(Config.map((home) => `${home}/.local/state`))),
-      Config.map((folder) => `${folder}/blueline`),
-    ),
-  ),
-);
+const env = (name: string) =>
+  Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
 
-const program = Effect.gen(function* () {
-  const port = yield* Config.Port("BLUELINE_PORT").pipe(Config.withDefault(PORT));
-  const state = yield* STATE;
+/** Where the server runs and keeps its apps, from the environment (src/server/start.ts). */
+const PLACE = Config.all({
+  BLUELINE_PORT: env("BLUELINE_PORT"),
+  BLUELINE_STATE: env("BLUELINE_STATE"),
+  XDG_STATE_HOME: env("XDG_STATE_HOME"),
+  HOME: env("HOME"),
+}).pipe(Config.map(placeOf));
+
+/** A promise of src/server, with its error as a plain message. */
+const plain = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) => (error instanceof Error ? error.message : String(error)),
+  });
+
+const serveProgram = Effect.gen(function* () {
+  const { port, state } = yield* PLACE;
+  let ended: () => void = () => undefined;
+  const asked = new Promise<void>((done) => (ended = done));
   const served = yield* Effect.acquireRelease(
-    Effect.tryPromise({
-      try: () => start({ port, state }),
-      catch: (error) => (error instanceof Error ? error.message : String(error)),
-    }),
+    plain(() => start({ port, state, stopped: () => ended() })),
     (s) => (s.kind === "started" ? Effect.promise(s.close) : Effect.void),
   );
   if (served.kind === "running") {
@@ -33,13 +41,43 @@ const program = Effect.gen(function* () {
     );
   }
   yield* Console.log(`Blueline serves every app's channel on http://127.0.0.1:${String(port)}.`);
-  return yield* Effect.never;
+  yield* Effect.promise(() => asked);
+  yield* Console.log("Blueline's server stopped.");
 });
 
-// Why the server cannot start, as a plain line, and no stack.
-export const serve = program.pipe(
-  Effect.catchIf(
-    (error) => typeof error === "string",
-    (message) => Console.error(message).pipe(Effect.andThen(Effect.fail("serve"))),
-  ),
-);
+// Why a command cannot run, as a plain line, and no stack.
+const said =
+  (name: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.catchIf(
+        (error): error is E & string => typeof error === "string",
+        (message) => Console.error(message).pipe(Effect.andThen(Effect.fail(name))),
+      ),
+    );
+
+export const serve = serveProgram.pipe(said("serve"));
+
+export const stop = Effect.gen(function* () {
+  const place = yield* PLACE;
+  const ran = yield* plain(() => stopServer(place));
+  yield* Console.log(
+    ran ? "Blueline's server stopped." : `No Blueline server runs on port ${String(place.port)}.`,
+  );
+}).pipe(said("stop"));
+
+export const add = (root: string, origin: string) =>
+  Effect.gen(function* () {
+    const place = yield* PLACE;
+    const app = yield* plain(() => addOrigin(place, root, origin));
+    yield* Console.log(
+      `${origin} may use ${app.name}'s channel. Put this tag in the page:\n${tagFor(place.port, app)}`,
+    );
+  }).pipe(said("add"));
+
+export const remove = (root: string, origin: string) =>
+  Effect.gen(function* () {
+    const place = yield* PLACE;
+    const app = yield* plain(() => removeOrigin(place, root, origin));
+    yield* Console.log(`${origin} no longer uses ${app.name}'s channel.`);
+  }).pipe(said("remove"));
