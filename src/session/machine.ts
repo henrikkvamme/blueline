@@ -570,7 +570,12 @@ export const sessionMachine = setup({
       if (steps.length === 0) return;
       const next = reopened(context, steps);
       enqueue.assign(next);
-      const lines = turnedLines(context, { ...next, finish: context.finish }, steps);
+      // The lines name the journey that starts again, not the one the start leaves.
+      const lines = turnedLines(
+        { ...context, journey: event.journey },
+        { ...next, finish: context.finish },
+        steps,
+      );
       if (lines === undefined) return;
       enqueue.assign({ posts: context.posts + 1 });
       enqueue.spawnChild("post", { id: `post-${context.posts}`, input: lines });

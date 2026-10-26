@@ -1193,6 +1193,33 @@ describe("what the agent hears of the settles", () => {
     ).toEqual([]);
   });
 
+  it("names the journey that starts again, not the page review it starts from", () => {
+    const done = { a: { settled: true }, b: { settled: true }, c: { settled: true } };
+    const journeys: string[] = [];
+    const machine = sessionMachine.provide({
+      actors: {
+        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+          for (let post: Post | undefined = input; post !== undefined; post = post.next)
+            journeys.push(post.session.journey);
+          sendBack({ type: "posted", child: self.id });
+        }),
+      },
+    });
+    const actor = createActor(machine, {
+      input: {
+        kept: { ...START, journey: "page", feedback: done },
+        journeys: [
+          ...JOURNEYS,
+          { id: "page", steps: [{ id: "page:x", group: "/", variants: [] }] },
+        ],
+        now: 0,
+      },
+    }).start();
+    expect(actor.getSnapshot().context.journey).toBe("page");
+    actor.send({ type: "start", journey: "prep", at: 0, fresh: false, again: true });
+    expect(journeys).toEqual(["prep", "prep", "prep"]);
+  });
+
   it("hears nothing of the last settle until Finish, through undo, redo and Back", () => {
     const two = { a: { settled: true }, b: { settled: true } };
     expect(
