@@ -5,14 +5,17 @@ and annotations to the agent, and parts with variants. A build holds none of it.
 
 ## Set up in an app
 
-The app needs React 19.3 or later and effect 4.0.6, the package's peers. It needs no CSS for
-Blueline: the tools and the lift stand in shadow roots with their own CSS. Three places use it:
+`@henrikkvamme/blueline` holds its own React, so an app of any framework can use it. A React
+app can use `@henrikkvamme/blueline/react` instead, which runs on the app's React 19.3 or
+later. The app needs no CSS for Blueline: the tools and the lift stand in shadow roots with
+their own CSS. Three places use it:
 
 - The dev server's channel to the agent, in `vite.config.ts`:
-  `devtoolsChannel({ feedback, status })` from `@henrikkvamme/blueline/vite`.
+  `devtoolsChannel({ feedback, status })` from `@henrikkvamme/blueline/vite`. When the app
+  links Blueline from its source, the plugin also has Blueline's files use the app's React.
 - `mount({ adapter, storageKey: "<app>.review" })`, in a module that the app loads in
-  development only, or `<DevTools adapter={...} storageKey="<app>.review" />` in a React
-  app. The adapter (`DevAdapter` in `src/types.ts`) gives the journeys and opens a step's
+  development only, or `<DevTools adapter={...} storageKey="<app>.review" />` from
+  `@henrikkvamme/blueline/react` in a React app. The adapter (`DevAdapter` in `src/types.ts`) gives the journeys and opens a step's
   world. Its code for a step gives a value, a Promise or an Effect. It gets an
   `AbortSignal`, which aborts when the walk goes on without it; a result after that is
   dropped. `mount` gives a handle, which is also `window.blueline`: `start(journey, step?)`

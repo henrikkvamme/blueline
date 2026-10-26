@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import type { Plugin } from "vite";
 
@@ -10,7 +11,12 @@ import type { Plugin } from "vite";
  * answers in `status`, a JSON object by note ID, which the page reads while a note waits.
  * A screenshot the reviewer pastes goes to `images` first; the note then names its file.
  * Each agent's listener says it is there in `listening`, so the page knows a note is read.
- * Development only: a build has no dev tools.
+ * The channel is for development only: a build has no dev tools.
+ *
+ * An app that loads Blueline from its source, as a linked package, would also load
+ * Blueline's own install of React beside the app's, and two copies of React on one page
+ * break its hooks. The plugin has the app's React serve both, in development and in a build,
+ * where `variants()` stays.
  */
 
 export interface ChannelOptions {
@@ -46,6 +52,19 @@ const IMAGE_TYPES: Readonly<Record<string, string>> = {
   gif: "image/gif",
 };
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/** The packages that hold React's state, each with its subpaths, as the JSX runtimes. */
+const ONE_COPY = ["react", "react-dom"];
+
+/** Whether the app at `root` has its own React to share. */
+export function hasReact(root: string): boolean {
+  try {
+    createRequire(path.join(root, "package.json")).resolve("react/package.json");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whether a write comes from the dev server's own page. A browser names the page's origin
@@ -93,7 +112,9 @@ export function devtoolsChannel(options: ChannelOptions): Plugin {
   );
   return {
     name: "blueline:channel",
-    apply: "serve",
+    config: (config) =>
+      hasReact(path.resolve(config.root ?? ".")) ? { resolve: { dedupe: ONE_COPY } } : {},
+    // Only the dev server has the channel.
     configureServer(server) {
       server.middlewares.use(routes.feedback, (request, response) => {
         if (request.method !== "POST") {

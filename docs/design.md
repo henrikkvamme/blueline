@@ -594,7 +594,9 @@ dashboard. Browser checks start with step 2.
      The lift's data goes through the store: the part puts its labels, states, place and
      callbacks there when it rises; the overlay draws the lift's chrome from them and puts the
      options it shows, and the lift's host, back; `variants()` draws only the slotted copies.
-     `effect` and `tailwindcss` stop being peers. An adapter may still return an Effect of the
+     `effect` and `tailwindcss` stop being peers. `effect` is a dependency, as the command
+     needs it; `react`, `react-dom` and `tailwindcss` are optional peers. Only the workshop,
+     which draws in the app's own CSS, needs `tailwindcss`, for `./styles.css`. An adapter may still return an Effect of the
      same effect version; any other version gives a Promise. The dashboard moves in the same
      step: it imports `DevTools` from `/react`, its Vite alias covers `/react`, and its key
      guard (`entry.ts`) knows `[data-blueline-host]`. Step 4 is done when the dashboard works
