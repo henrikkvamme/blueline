@@ -5,6 +5,7 @@
 export { DevTools, useReviewControl, type DevToolsProps } from "./ui/devtools";
 export { registry, useDevTools, useRegistry, type DevChoice } from "./choices";
 export { ROUTES } from "./io/routes";
+export type { Walk as DevWalk } from "./keys/keymap";
 export type {
   DevAdapter,
   DevCommand,

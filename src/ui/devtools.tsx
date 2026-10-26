@@ -11,6 +11,7 @@ import {
   dispatch,
   ownerOf,
   nameOf,
+  walkOf,
   zoneOf,
   type Action,
   type Key,
@@ -613,6 +614,7 @@ export function DevTools<C>({
     <ToolsContext.Provider value={tools}>
       <div ref={root} className="blueline">
         <Keys />
+        <WalkSignal />
         <TreeFocus />
         <Review shift={shift} />
         <Toasts />
@@ -778,6 +780,33 @@ function Keys() {
       window.removeEventListener("keydown", onKey);
     };
   }, [actor, adapter, perform]);
+  return null;
+}
+
+/** The attribute on the page's root element that tells the app what the walk does now. */
+const WALK = "data-blueline";
+
+/** Tells the app what the walk does, as `data-blueline` on the page's root element: `step`,
+ * `finish`, `handoff`, `lift` or `preview`, and no attribute while the tools are idle or show
+ * the page with the tree. An app reads it to know that the tools have their keys. */
+function WalkSignal() {
+  const { actor, adapter } = useTools();
+  useEffect(() => {
+    const root = document.documentElement;
+    const mark = () => {
+      const walk = walkOf(viewOf(actor.getSnapshot(), adapter));
+      if (walk === undefined) root.removeAttribute(WALK);
+      else if (root.getAttribute(WALK) !== walk) root.setAttribute(WALK, walk);
+    };
+    mark();
+    const session = actor.subscribe(mark);
+    const lift = parts.subscribe(mark);
+    return () => {
+      session.unsubscribe();
+      lift();
+      root.removeAttribute(WALK);
+    };
+  }, [actor, adapter]);
   return null;
 }
 

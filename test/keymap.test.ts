@@ -12,6 +12,7 @@ import {
   nameOf,
   rowAction,
   ownsKeys,
+  walkOf,
   type Key,
   type View,
   type Zone,
@@ -739,5 +740,19 @@ describe("the keys first", () => {
     for (const zone of ZONES)
       for (const key of ["h", "l", "v", " ", "Escape", "Enter", "u"])
         expect(first({ ...onStep, lifting: true }, zone, key), key).toBeUndefined();
+  });
+});
+
+describe("the walk's signal", () => {
+  it("names what the walk does, and nothing while the tools are idle or off a step", () => {
+    expect(walkOf(idle)).toBeUndefined();
+    expect(walkOf({ ...idle, layer: "help" })).toBeUndefined();
+    expect(walkOf({ ...idle, aiming: true })).toBeUndefined();
+    expect(walkOf(onStep)).toBe("step");
+    expect(walkOf({ ...onStep, finishing: true })).toBe("finish");
+    expect(walkOf({ ...idle, handoff: true })).toBe("handoff");
+    expect(walkOf({ ...onStep, lifting: true })).toBe("lift");
+    expect(walkOf({ ...onStep, preview: true })).toBe("preview");
+    expect(walkOf({ ...idle, preview: true })).toBe("preview");
   });
 });

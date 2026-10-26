@@ -268,6 +268,10 @@ of the app's is a button, a link, a slider, tabs or another element that uses th
 listener before Blueline, still sees the keys first. No key needs AltGr or Option on a
 Norwegian Mac, so no key is `[ ] { } \ | @ $ ~` or a backtick.
 
+Blueline tells the app what the walk does with `data-blueline` on the page's root element:
+`step`, `finish`, `handoff`, `lift` or `preview`. The attribute is gone while Blueline is idle
+or shows the page with the tree. It is the one supported way for an app to know; the storage format is not.
+
 The keys move the way things stand on the screen, and each arrow key does what its vim key
 does. On a step, the panel's foot goes across: the step before, Settle and the step after.
 The variants stand in a list down the panel.

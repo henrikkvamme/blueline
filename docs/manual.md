@@ -23,6 +23,31 @@ one journey over two pages and one part with variants; `pnpm run demo` starts it
 This setup is the one the code has now. [design.md](design.md) gives the setup that
 replaces it: `blueline dev`, a Vite plugin or a script tag, and no peers.
 
+### An app with its own keys
+
+An app with its own keyboard shortcuts needs no code for Blueline. On a step, Blueline takes
+each key it binds before the app sees it, so the app's handler for `h` or Enter does not run.
+Off a step, the app gets its keys first. A key in the app's field, select or slider is the
+app's, but Ctrl+B on a step, and so are Enter, Space and the arrows on the app's button, link or other control. A
+key that Blueline does not bind always goes to the app. [The keys of a walk](#the-keys-of-a-walk)
+gives the whole rule.
+
+An app that wants to know what the walk does reads `data-blueline` on
+`document.documentElement`. It is the one supported way to know. Do not read Blueline's
+saved review in `localStorage`: its format can change.
+
+| `data-blueline` | While                                              |
+| --------------- | -------------------------------------------------- |
+| `step`          | a step is open                                     |
+| `finish`        | every step is settled and the panel asks to finish |
+| `handoff`       | the panel shows the hand-off after Finish          |
+| `lift`          | a part is lifted                                   |
+| `preview`       | the tools are hidden, on a step or off one         |
+| no attribute    | Blueline is idle, or shows the page with the tree  |
+
+The `DevWalk` type names the values. A CSS rule can use it too, as
+`:root[data-blueline="step"] .shortcut-hint { display: none; }`.
+
 ## Names
 
 The tools, their hints and these docs use one name for each thing. The workshop's Names
