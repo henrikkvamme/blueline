@@ -1,3 +1,4 @@
+import { isOwn } from "../core/root";
 /*
  * Where things are on the page: the box of the part a step is about, where a card goes
  * beside it, and an element in words a reviewer would use. Plain DOM reads, no React.
@@ -222,4 +223,4 @@ export function describe(element: Element): string {
 
 /** The page's element under a point, not the dev tools' own. */
 export const under = (x: number, y: number) =>
-  document.elementsFromPoint(x, y).find((e) => e.closest("[data-dt-ui]") === null);
+  document.elementsFromPoint(x, y).find((e) => !isOwn(e));

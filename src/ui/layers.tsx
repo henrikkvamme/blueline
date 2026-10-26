@@ -19,6 +19,7 @@ import type { DevInfo, DevPersonChoice } from "../types";
 import { Palette, type Item } from "./palette";
 import { useJourneys, useThisPage } from "./tree";
 import { usePins, useSession, useStep, useTools } from "./session";
+import { focused, targetOf } from "../core/root";
 
 /*
  * What opens over the page, one at a time: the pickers, the replies, the key menu and the
@@ -261,12 +262,13 @@ function Here() {
 function Go({ view }: { readonly view: View }) {
   const { actor, perform } = useTools();
   // The keys after g from where the keys are, as g g, the top row in the tree.
-  const items = goBindings(BINDINGS, view, zoneOf(document.activeElement));
+  const items = goBindings(BINDINGS, view, zoneOf(focused()));
   const menu = useRef<HTMLDivElement>(null);
   // A press outside closes it, as any other key does.
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
-      if (e.target instanceof Node && menu.current?.contains(e.target) !== true) actor.send(close);
+      const at = targetOf(e);
+      if (at instanceof Node && menu.current?.contains(at) !== true) actor.send(close);
     };
     window.addEventListener("pointerdown", onDown, true);
     return () => window.removeEventListener("pointerdown", onDown, true);

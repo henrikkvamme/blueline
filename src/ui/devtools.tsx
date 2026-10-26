@@ -45,6 +45,7 @@ import { finished } from "./tree";
 import { VariantNote } from "./variant-note";
 import { isPhone, useDockRoom, usePageFloor, usePhone, useSwipe } from "./touch";
 import { focusToWrite, modeOf } from "../vim";
+import { focused, own, ownAll, ownRoot } from "../core/root";
 
 /*
  * The dev tools on a page: give them the app's adapter, and they walk its journeys, take
@@ -73,12 +74,10 @@ const settling = settleGate();
 
 /** On a phone, puts the lit part above the sheet or the bar, once, so the settle shows. */
 function keepLit(target: string | undefined) {
-  const lit = document.querySelector("[data-dt-light]")?.getBoundingClientRect();
+  const lit = own("[data-dt-light]")?.getBoundingClientRect();
   const element = target === undefined ? null : document.querySelector(target);
   if (!isPhone() || lit === undefined || !(element instanceof HTMLElement)) return;
-  const tops = [...document.querySelectorAll("[data-dt-dock]")].map(
-    (e) => e.getBoundingClientRect().top,
-  );
+  const tops = ownAll("[data-dt-dock]").map((e) => e.getBoundingClientRect().top);
   const floor = Math.min(window.innerHeight, ...tops);
   // The check stands at the light's top corner: that much must show.
   if (lit.top < 0 || lit.top + 32 > floor) toTop(element);
@@ -132,15 +131,14 @@ const CARD_FRAMES = 30;
 const focusComposer = (frames = CARD_FRAMES): void => {
   requestAnimationFrame(() => {
     const field =
-      document.querySelector<HTMLElement>("[data-dt-composer=pinned]") ??
-      document.querySelector<HTMLElement>("[data-dt-composer=step]");
+      own<HTMLElement>("[data-dt-composer=pinned]") ?? own<HTMLElement>("[data-dt-composer=step]");
     if (field === null && frames > 0) return focusComposer(frames - 1);
     focusToWrite(field);
   });
 };
 
 /** Whether the focus is in the panel: in its tree, on one of its buttons or in its chat. */
-const inPanel = () => document.activeElement?.closest("[data-dt-panel]") != null;
+const inPanel = () => focused()?.closest("[data-dt-panel]") != null;
 
 /** The note field the preview hid, or Ctrl+B or Escape left for the tree, to come back to. */
 let away: { readonly el: HTMLElement; readonly kind: string; readonly insert: boolean } | undefined;
@@ -148,7 +146,7 @@ let away: { readonly el: HTMLElement; readonly kind: string; readonly insert: bo
 /** Lets the note field that has the focus go, as the preview or Ctrl+B hides it or Escape
  * goes to the tree, and keeps it with its mode; the field keeps its cursor. */
 function keepFocus() {
-  const active = document.activeElement;
+  const active = focused();
   // From the tree, the field it was left for is still the one to come back to.
   if (zoneOf(active) === "panel") return;
   const kind = active instanceof HTMLElement ? active.getAttribute("data-dt-composer") : null;
@@ -170,15 +168,13 @@ function comeBack(noteOpen: () => boolean, insert?: boolean): boolean {
   const restore = (frames: number): void => {
     requestAnimationFrame(() => {
       // The preview draws the field again, as a new element.
-      const el = was.el.isConnected
-        ? was.el
-        : document.querySelector<HTMLElement>(`[data-dt-composer=${was.kind}]`);
+      const el = was.el.isConnected ? was.el : own<HTMLElement>(`[data-dt-composer=${was.kind}]`);
       // The panel draws its chat again a frame after it shows.
       if (el === null && (was.kind !== "pinned" || noteOpen()) && frames > 0) {
         restore(frames - 1);
         return;
       }
-      const field = el ?? document.querySelector<HTMLElement>("[data-dt-composer=step]");
+      const field = el ?? own<HTMLElement>("[data-dt-composer=step]");
       if (field === null) return;
       if (insert ?? was.insert) focusToWrite(field);
       else field.focus();
@@ -476,7 +472,7 @@ export function Running({
         return act({ kind: "blur" });
       }
       if (action.kind === "blur" || (action.kind === "focus" && action.to === "page")) {
-        const active = document.activeElement;
+        const active = focused();
         if (active instanceof HTMLElement) active.blur();
         return;
       }
@@ -545,9 +541,7 @@ export function Running({
 
 /** The tree's rows as they show: this page's, the steps, then the journeys. */
 const treeRows = () =>
-  [...document.querySelectorAll<HTMLElement>("[data-dt-zone=panel] [data-dt-row]")].filter((r) =>
-    r.checkVisibility(),
-  );
+  ownAll<HTMLElement>("[data-dt-zone=panel] [data-dt-row]").filter((r) => r.checkVisibility());
 
 /** Where the selected row is in the rows: a step row is the step cursor, any other row is
  * selected by its id; -1 when it does not show. */
@@ -571,7 +565,7 @@ function selectRow(actor: SessionActor, row: HTMLElement) {
 /** Puts the keys in the tree, on a row that shows: the selected one, else the step the review
  * is on, else the first. */
 function focusTree(actor: SessionActor) {
-  document.querySelector<HTMLElement>("nav[data-dt-zone=panel]")?.focus({ preventScroll: true });
+  own<HTMLElement>("nav[data-dt-zone=panel]")?.focus({ preventScroll: true });
   const rows = treeRows();
   if (selectedRow(actor, rows) !== -1) return;
   const { active, at } = actor.getSnapshot().context;
@@ -602,7 +596,7 @@ function TreeFocus() {
       frame = requestAnimationFrame(() => {
         const { context } = actor.getSnapshot();
         if (!context.panel || context.preview || parts.current().lifting !== undefined) return;
-        const at = document.activeElement;
+        const at = focused();
         if (!treeShown(context, isPhone())) {
           if (zoneOf(at) === "panel" && at instanceof HTMLElement) at.blur();
           return;
@@ -611,12 +605,14 @@ function TreeFocus() {
       });
     };
     check();
-    document.addEventListener("focusout", check);
+    // A move of the focus inside the tools' shadow root sends the document no event.
+    const roots = [...new Set<Document | ShadowRoot>([document, ownRoot()])];
+    for (const r of roots) r.addEventListener("focusout", check);
     const session = actor.subscribe(check);
     const lift = parts.subscribe(check);
     return () => {
       cancelAnimationFrame(frame);
-      document.removeEventListener("focusout", check);
+      for (const r of roots) r.removeEventListener("focusout", check);
       session.unsubscribe();
       lift();
     };
@@ -646,7 +642,7 @@ function Keys() {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
       const key = keyOf(e);
-      const action = dispatch(bindings(), view(), zoneOf(document.activeElement), key);
+      const action = dispatch(bindings(), view(), zoneOf(focused()), key);
       if (action === undefined) return;
       e.preventDefault();
       run(action, key);
@@ -676,7 +672,7 @@ function Keys() {
     // The tools' own keys go first, and the app never sees them.
     const onFirstKey = (e: KeyboardEvent) => {
       if (e.isComposing) return;
-      const at = document.activeElement;
+      const at = focused();
       const key = keyOf(e);
       const action = captured(bindings(), view(), zoneOf(at), key, ownerOf(at));
       if (action === undefined) return;

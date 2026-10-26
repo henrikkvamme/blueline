@@ -11,6 +11,7 @@ import { DragHandle, useCard, useElementBox } from "./overlays";
 import { sendPins, useSession, useTools } from "./session";
 import { usePhone } from "./touch";
 import { focusToWrite } from "../vim";
+import { focused } from "../core/root";
 
 /*
  * A note on an element the reviewer pointed at, in a card beside the element. Enter sends it
@@ -40,7 +41,7 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
     // opened from the tree leaves the keys there, as its other rows do; i goes in.
     if (!shown) return;
     const fresh = note.draft === "";
-    if (!fresh && zoneOf(document.activeElement) === "panel") return;
+    if (!fresh && zoneOf(focused()) === "panel") return;
     if (note.draft === "") focusToWrite(field.current);
     else field.current?.focus();
   }, [note.id, shown]);

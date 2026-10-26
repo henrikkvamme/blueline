@@ -32,6 +32,7 @@ import { cx } from "./cx";
 import { useImageUrl } from "./images";
 import { pinTone } from "./overlays";
 import { now, useSession, useTools } from "./session";
+import { focused } from "../core/root";
 
 /*
  * A note as the reviewer reads and writes it: the thread with the agent, and the composer.
@@ -535,8 +536,7 @@ export function Composer({
       added.map((_, i) => before.length + i + 1),
     );
     const el = field.current;
-    if (el === null || document.activeElement !== el || el.value !== text)
-      return write(shots.text, next);
+    if (el === null || focused() !== el || el.value !== text) return write(shots.text, next);
     write(text, next);
     el.setSelectionRange(shots.place, shots.place);
     document.execCommand("insertText", false, shots.insert);

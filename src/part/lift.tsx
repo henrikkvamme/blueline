@@ -25,6 +25,7 @@ import { Menu, type MenuEntry } from "../ui/menu";
 import { menuTakes } from "../ui/menu-keys";
 import { swipeOf, swipeStarts, type Point } from "../ui/swipe";
 import { liftActionLabel, liftActions, type LiftAction } from "./lift-actions";
+import { elementOf } from "../core/root";
 
 /*
  * The lift: v takes the reviewed part off the page onto a stage, with the page dimmed
@@ -344,7 +345,7 @@ export function Lift({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // A note's field keeps its keys; Escape there closes the note, not the lift.
-      const t = e.target;
+      const t = elementOf(e);
       if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName)))
         return;
       // The open menu takes its own keys, and Escape closes it, not the lift; the lift's

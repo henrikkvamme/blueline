@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Box } from "./geometry";
 import { swipeOf, swipeStarts, type Point } from "./swipe";
+import { elementOf, isOwn, ownAll } from "../core/root";
 
 /*
  * The tools on a phone: whether the screen is a phone's, the swipe on the part under review,
@@ -58,10 +59,10 @@ export function useSwipe(box: Box | undefined, on: boolean, onSwipe: (by: 1 | -1
       from = undefined;
       const at = pointOf(e.touches[0]);
       const box = latest.current.box;
-      const target = e.target instanceof Element ? e.target : null;
+      const target = elementOf(e);
       if (e.touches.length !== 1 || at === undefined || box === undefined) return;
       if (!within(at, box) || !swipeStarts(at, window.innerWidth)) return;
-      if (target?.closest("[data-dt-ui]") != null || scrollsAcross(target)) return;
+      if ((target !== null && isOwn(target)) || scrollsAcross(target)) return;
       from = at;
       last = at;
     };
@@ -95,7 +96,7 @@ export function useSwipe(box: Box | undefined, on: boolean, onSwipe: (by: 1 | -1
 }
 
 /** Whether an element is the page's, not the tools'. */
-const isPage = (e: Element) => e.closest("[data-dt-ui], .blueline, .blueline-portal") === null;
+const isPage = (e: Element) => !isOwn(e);
 
 /**
  * The height of the page's own bar at the bottom of the screen, as a form's sticky Back and
@@ -128,7 +129,7 @@ function pageFloor(): number {
 function dockRoom(): number {
   let top = Infinity;
   let bottom = -Infinity;
-  for (const e of document.querySelectorAll("[data-dt-dock]")) {
+  for (const e of ownAll("[data-dt-dock]")) {
     const rect = e.getBoundingClientRect();
     if (rect.height === 0) continue;
     top = Math.min(top, rect.top);

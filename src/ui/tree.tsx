@@ -28,6 +28,7 @@ import { handoffOf, handoffStatus, isLive } from "../notes/handoff";
 import { foldTree, openHandoff } from "./replies";
 import { journeyOf, useNotes, useSession, useTools } from "./session";
 import type { JourneyInfo } from "../types";
+import { elementOf } from "../core/root";
 
 /*
  * Where the reviewer is, in the panel, as a tree: the pages, each with its chat, and this one
@@ -54,7 +55,7 @@ export function TreeZone({
   const { actor } = useTools();
   // The pointer selects the row it is on, so the keys, as y and Enter, act on that row.
   const hover = (e: PointerEvent) => {
-    const el = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-dt-row]") : null;
+    const el = elementOf(e)?.closest<HTMLElement>("[data-dt-row]") ?? null;
     if (el === null) return;
     const { cursor: now, row: was } = actor.getSnapshot().context;
     const step = el.dataset.step;

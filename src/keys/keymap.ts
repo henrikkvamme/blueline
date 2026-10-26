@@ -1,4 +1,5 @@
 import type { Event, Layer } from "../session/machine";
+import { isOwn } from "../core/root";
 
 /*
  * Every key of the dev tools, in one list. The dispatcher reads it to act on a key, and the
@@ -699,7 +700,7 @@ const CONTROL =
  * in a part that uses the arrows; of the tools', one the keyboard went to, as Tab does, and
  * not one a click left the focus on. */
 function isControl(element: Element): boolean {
-  const own = element.closest(".blueline, .blueline-portal") !== null;
+  const own = isOwn(element);
   if (!own && element.closest(ARROWS) !== null) return true;
   if (!element.matches(CONTROL)) return false;
   if (!own) return true;
@@ -714,7 +715,7 @@ export function ownerOf(element: Element | null): Owner | undefined {
   const zone = zoneOf(element);
   if (zone === "panel") return "tools";
   if (zone !== "field") return undefined;
-  return element.closest(".blueline, .blueline-portal") === null ? "page" : "tools";
+  return isOwn(element) ? "tools" : "page";
 }
 
 const GLYPHS: Readonly<Record<string, string>> = {

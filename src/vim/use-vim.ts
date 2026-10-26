@@ -5,6 +5,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { cursorOf, keepCursor } from "../io/cursors";
 import { clampNormal, initialVim, vimKey, type Mode, type Register, type VimState } from "./engine";
 import { afterPointer, apply, docOf, show, type Placed, type VimField } from "./field";
+import { focused as focusedElement } from "../core/root";
 
 export type VimOptions = {
   enabled: boolean;
@@ -38,7 +39,7 @@ export const modeOf = (el: HTMLElement): Mode | undefined => modes.get(el)?.();
 export function focusToWrite(el: HTMLElement | null) {
   if (el === null) return;
   const write = writers.get(el);
-  if (document.activeElement === el && write !== undefined) return write();
+  if (focusedElement() === el && write !== undefined) return write();
   writeNext = true;
   el.focus();
   writeNext = false;
@@ -163,10 +164,10 @@ export function useVim(
     const key = (e: KeyboardEvent) => onKey(e);
     const pointer = () => onPointerUp();
     const press = (e: PointerEvent) => {
-      const focused = document.activeElement === node;
-      if (!focused) pressed.current = true;
+      const hasFocus = focusedElement() === node;
+      if (!hasFocus) pressed.current = true;
       if (e.pointerType !== "touch") return;
-      if (focused) onTouch();
+      if (hasFocus) onTouch();
       else touched.current = performance.now();
     };
     const focus = () => onFocus();
@@ -182,7 +183,7 @@ export function useVim(
     // a new field's effects off and on again, after the caller focused it to write.
     const was = resumed.current;
     resumed.current = undefined;
-    if (was !== undefined && document.activeElement === node) {
+    if (was !== undefined && focusedElement() === node) {
       set(was);
       const at = el.selectionStart ?? el.value.length;
       placed.current = show(el, was, was.mode === "normal" ? clampNormal(el.value, at) : at);
@@ -196,7 +197,7 @@ export function useVim(
       node.removeEventListener("focus", focus);
       node.removeEventListener("blur", blur);
       // A field that goes while it has the focus gets no blur, so its place is kept here.
-      if (document.activeElement === el) {
+      if (focusedElement() === el) {
         keep(el);
         // Turning vim off leaves a plain caret, not a block.
         if (state.current.mode !== "insert") show(el, initialVim(), el.selectionStart ?? 0);

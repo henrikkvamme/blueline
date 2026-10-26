@@ -2,6 +2,7 @@ import { Ellipsis } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "./cx";
 import { menuMove, menuNext } from "./menu-keys";
+import { focused } from "../core/root";
 
 /*
  * A ⋯ button and the menu it opens: the panel's other actions, and the lift's. It knows no
@@ -69,7 +70,7 @@ export function Menu({
     const by = menuMove(e.key);
     if (by !== 0) {
       e.preventDefault();
-      const at = all.findIndex((el) => el === document.activeElement);
+      const at = all.findIndex((el) => el === focused());
       all[menuNext(at, by, all.length)]?.focus();
     } else if (e.key === "Escape") {
       e.preventDefault();

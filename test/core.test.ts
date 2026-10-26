@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Effect } from "effect";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { focused, targetOf } from "../src/core/root";
 import { startSession, type Session } from "../src/core/session";
 import type { DevAdapter } from "../src/types";
 
@@ -118,5 +119,25 @@ describe("a session", () => {
     session.dispose();
     expect(session.actor.getSnapshot().status).toBe("stopped");
     session = undefined;
+  });
+});
+
+describe("the tools' root", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reads an event's start through a shadow root, from a DOM event or React's", () => {
+    const inner = { name: "inner" };
+    const native = { composedPath: () => [inner], target: { name: "host" } } as unknown as Event;
+    expect(targetOf(native)).toBe(inner);
+    expect(targetOf({ nativeEvent: native })).toBe(inner);
+  });
+
+  it("follows the focus into a shadow root", () => {
+    const field = { shadowRoot: null };
+    const host = { shadowRoot: { activeElement: field } };
+    vi.stubGlobal("document", { activeElement: host });
+    expect(focused()).toBe(field);
+    vi.stubGlobal("document", { activeElement: field });
+    expect(focused()).toBe(field);
   });
 });
