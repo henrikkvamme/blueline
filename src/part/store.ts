@@ -1,6 +1,7 @@
 import { shared } from "../core/shared";
 import { STORED } from "../io/stored";
 import type { JourneyInfo, StepInfo } from "../types";
+import type { Still } from "./still";
 
 /*
  * The parts on the page that have variants (variants.tsx), as plain data: the variant and
@@ -46,9 +47,36 @@ export interface Judge {
   readonly docked?: number;
 }
 
+/** The lift of a step whose variants change the page, and not a part: Blueline copies each
+ * variant as a still (still.ts), and the lift shows the copies. */
+export interface StillLift {
+  /** The step's title. */
+  readonly title: string;
+  /** The step's variants, in its order. */
+  readonly labels: readonly string[];
+  /** The variant the page showed when the lift rose. */
+  readonly first: string;
+  /** Where the step's target was on the page. */
+  readonly from: DOMRect;
+  /** The variant being copied, while Blueline copies them. */
+  readonly copying: { readonly label: string; readonly at: number } | undefined;
+  /** The copies, by the variant's label, once each is copied. */
+  readonly copies: ReadonlyMap<string, Still> | undefined;
+  /** Why there are no copies, as a target too big to copy. */
+  readonly problem: string | undefined;
+  /** Stops the copying, and the page goes back to the first variant. */
+  readonly stop: () => void;
+  /** Shows the variant on the page as the step's own, and ends when the page shows it. */
+  readonly use: (label: string) => Promise<void>;
+  /** Where the step's target is on the page now. */
+  readonly where: () => DOMRect | undefined;
+}
+
 export interface Lifting {
   readonly id: string;
   readonly judge: Judge;
+  /** For a step's own variants: their copies, and no part in the store. */
+  readonly still?: StillLift;
 }
 
 /** One option the lift shows: a variant of the part in a state, by the state's place, 0 for
@@ -254,6 +282,8 @@ export const parts = {
       others,
     ),
   lift: (id: string, judge: Judge) => set({ lifting: { id, judge } }),
+  /** Lifts a step's own variants, or says how their copying goes. */
+  liftStill: (id: string, judge: Judge, still: StillLift) => set({ lifting: { id, judge, still } }),
   /** What the lift shows now, or nothing once it goes. */
   stage: (stage: Stage | undefined) => set({ stage }),
   /** The part is down on the page again. */

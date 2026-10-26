@@ -107,7 +107,8 @@ export function Lift({
   readonly from: DOMRect;
   /** Whether the part takes its content's size, so each option has a size of its own. */
   readonly hug: boolean;
-  readonly onDrop: (variant: string) => void;
+  /** Deletes a variant; none where the lift deletes nothing, as for a step's own variants. */
+  readonly onDrop: ((variant: string) => void) | undefined;
   /** Takes back the reviewer's last delete. */
   readonly onUndo: () => void;
   /** Opens the note on the variant and state shown; none where the lift takes no notes. */
@@ -116,8 +117,10 @@ export function Lift({
   readonly note: ReactNode;
   /** The variants with a note. */
   readonly noted: readonly string[];
-  /** Shows a variant and state on the page, under the stage: the one chosen, or the start. */
-  readonly onPut: (at: At) => void;
+  /** Shows a variant and state on the page, under the stage: the one chosen, or the start.
+   * The part goes down once the Promise it may give ends, as when the page takes a while to
+   * show the variant. */
+  readonly onPut: (at: At) => Promise<void> | void;
   /** Where the part is on the page now. */
   readonly where: () => DOMRect | undefined;
   /** The part is down on the page, and the lift ends. */
@@ -249,13 +252,24 @@ export function Lift({
   // page shows it first, under the stage, so the part lands where that option stands, which
   // differs when the option differs in size.
   const [down, setDown] = useState<At>();
+  const live = useRef(true);
+  useEffect(
+    () => () => {
+      live.current = false;
+    },
+    [],
+  );
   const finish = (chosen: At | undefined) => {
     if (leaving) return;
     setLeaving(true);
     // Closed, the stage first shows the part as the page has it, at once, then lowers it.
     if (chosen === undefined) setAt(start);
-    onPut(chosen ?? start);
-    setDown(chosen ?? start);
+    const put = onPut(chosen ?? start);
+    const lower = () => {
+      if (live.current) setDown(chosen ?? start);
+    };
+    if (put === undefined) lower();
+    else void put.finally(lower);
   };
   useEffect(() => {
     if (down === undefined) return;
@@ -298,7 +312,7 @@ export function Lift({
   };
   // The last variant stays: a part shows one.
   const ask = () => {
-    if (variants.length > 1) setAsking(at.variant);
+    if (onDrop !== undefined && variants.length > 1) setAsking(at.variant);
   };
   // The next variant with a note, after this one, round to the first.
   const nextNote = () => {
@@ -344,6 +358,7 @@ export function Lift({
     variants,
     noted,
     notes: onNote !== undefined,
+    deletes: onDrop !== undefined,
   }).map((action) => ({
     id: action,
     label: liftActionLabel(action, zoomed),
@@ -459,7 +474,7 @@ export function Lift({
     const next = variants[i + 1] ?? variants[i - 1];
     if (next === undefined) return;
     setAt((a) => ({ ...a, variant: next }));
-    onDrop(label);
+    onDrop?.(label);
   };
 
   /** What one option on one way's line shows. */

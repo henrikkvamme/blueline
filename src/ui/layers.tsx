@@ -28,31 +28,6 @@ import { focused, targetOf } from "../core/root";
 
 const close = { type: "close" } as const;
 
-/** The step's own states: what its `variants` set up on the page, as data, not a look of a
- * part. Only this step's, as the walk shows one step at a time. */
-function Variants() {
-  const { actor } = useTools();
-  const { step } = useStep();
-  const current = useSession((s) => (step === undefined ? 0 : (s.context.variants[step.id] ?? 0)));
-  const items = (step?.variants ?? []).map((v, i) => ({
-    id: v.label,
-    label: v.label,
-    current: i === current,
-  }));
-  return (
-    <Palette
-      label={`States of “${step?.title ?? ""}”`}
-      items={items}
-      empty="This step has one state."
-      onClose={() => actor.send(close)}
-      onChoose={(item) => {
-        if (step !== undefined) actor.send({ type: "showVariant", step: step.id, label: item.id });
-        actor.send(close);
-      }}
-    />
-  );
-}
-
 /** The step's pointed notes. */
 function Pointed() {
   const { actor } = useTools();
@@ -302,7 +277,6 @@ function Go({ view }: { readonly view: View }) {
 export function Layer({ view }: { readonly view: View }) {
   const layer = view.layer;
   const people = useTools().adapter.people;
-  if (layer === "variants") return <Variants />;
   if (layer === "notes") return <Pointed />;
   if (layer === "people" && people !== undefined) return <People people={people} />;
   if (layer === "help") return <Help view={view} />;

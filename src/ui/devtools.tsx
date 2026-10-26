@@ -44,6 +44,7 @@ import { holdToggle } from "../keys/hold";
 import { openHost, type Host } from "./host";
 import { claim, startReview } from "../core/owner";
 import { LiftLayer } from "../part/lift-layer";
+import { liftStill } from "./still-lift";
 import { watchParts } from "../part/part";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
@@ -443,14 +444,14 @@ export function Running({
       if (action.kind === "lift") {
         const step = stepIn(actor.getSnapshot(), info);
         const part = partOn(step, journeyIn(actor.getSnapshot(), info));
-        if (part === undefined || varietyOf(part, parts.verdicts(part.name)) === undefined)
-          return actor.send(
-            (step?.variants?.length ?? 0) > 1
-              ? { type: "open", layer: "variants" }
-              : { type: "unvaried" },
-          );
-
         const { panel, preview } = actor.getSnapshot().context;
+        // A step whose own variants change the page lifts copies of them.
+        if (part === undefined || varietyOf(part, parts.verdicts(part.name)) === undefined) {
+          if ((step?.variants?.length ?? 0) < 2) return actor.send({ type: "unvaried" });
+          const docked = panel && !preview && !isPhone() ? PANEL : 0;
+          return liftStill(actor, info, { drop: () => undefined, undo: () => undefined, docked });
+        }
+
         parts.lift(part.id, {
           docked: panel && !preview && !isPhone() ? PANEL : 0,
           drop: (variant) => actor.send({ type: "drop", part: part.name, variant }),

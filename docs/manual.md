@@ -428,10 +428,17 @@ for each; on a step with none, `v` says so.
 
 A variant is a way the part could look; a state is what it could show. Give a part's
 states as patches in `variants`, so the lift draws them side by side. A step's own
-`variants` set up data on the page through `apply`, one at a time: the bar and `v` call
-them the step's states. A settle keeps the one shown too: the settle line names it in
-`variant`, and its `keep` tells the agent to make it the app's own, as it has no
-`variants` call for `blueline apply` to change.
+`variants` set up data on the page through `apply`, one at a time. A settle keeps the one
+shown too: the settle line names it in `variant`, and its `keep` tells the agent to make it
+the app's own, as it has no `variants` call for `blueline apply` to change.
+
+`v` on a step whose own variants change the page, and that has no part, lifts still copies
+of its target. Blueline shows each variant on the page in turn, copies the target with its
+styles, and then shows the variant the step keeps again; a bar says which variant it copies,
+and Escape stops it. The lift then shows the copies in a row. Use puts the chosen variant on
+the page, and Close keeps the page as it is. A copy has no Delete and no annotations. Each
+variant runs the step's `reset` and `setup` again, as `j` does, so the page loses what you
+typed in it. A target of more than 20,000 elements is too big to copy: use `j` and `k`.
 
 Off the lift, the keys mean the same: `i` writes a message on the step, and `R` opens the
 next reply, or goes through the annotations on the page when no reply is new.

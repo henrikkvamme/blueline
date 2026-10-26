@@ -138,6 +138,15 @@ _Avoid_: Highlight, spotlight
 The view that shows a part's variants in a row and its states in a column.
 _Avoid_: Compare view, grid
 
+**Still**:
+A copy of a step's target, with its styles, as one of the step's own variants showed it. The
+lift shows stills for a step whose variants change the page and that has no part.
+_Avoid_: Snapshot, screenshot
+
+**Peek**:
+A variant that the walk shows for a while, without changing the variant the step keeps, as
+while the lift copies stills.
+
 **Preview**:
 The page with every Blueline control hidden except one eye.
 

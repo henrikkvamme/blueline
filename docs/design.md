@@ -977,6 +977,91 @@ in step 3.
      that loads a new page in a step go on after it; a tag by hand runs the served
      `config.js` and loads again when the file changes.
 
+### A5 in steps
+
+A5 gives a step with its own variants (`DevStep.variants`, also a config's `show`) the same
+lift as a part (requirement 2). Such a variant changes the page, so Blueline has no code to
+draw it in a slot. It shows each variant on the page in turn, copies the step's target as a
+still, and puts the page back.
+
+1. **The still copy.** `src/part/still.ts` copies the target's elements with their computed
+   styles in line, so the copy keeps the variant's look after the page shows another.
+   - Each element writes each property whose value differs from its tag's default, from a
+     document of its own, or from its parent's value; a target writes all of them, as it
+     inherits from the lift. `animation`, `transition` and `view-transition-name` are none.
+     `::before` and `::after` become spans with their styles, and their words when
+     `content` is one string.
+   - An open shadow root is flattened: the copy holds its children, and each slot the
+     nodes assigned to it.
+   - A field's value and check, a select's option and a textarea's words become
+     attributes. A canvas becomes an image of its pixels where the browser allows it, a
+     video its poster, an iframe and a custom element a plain box. Scroll offsets come back
+     once the copy is shown.
+   - The copy has no `class`, `name`, `for`, `form`, `slot` or `on*` attribute, and no
+     `script`, `style`, `link`, `template` or Blueline host. It keeps the IDs, so an SVG's
+     `url(#…)` and `<use href="#…">` find their own copies.
+   - The copy is a box of the targets' joint rectangle, each target at its place in it. The
+     box has the background of the first ancestor that paints one, else `Canvas` in the
+     page's colour scheme, and `overflow: hidden` with `contain: paint`. A fixed element
+     keeps its place relative to the box: once the copy is shown, Blueline measures it and
+     moves it by the difference, whatever its containing block is in the copy.
+   - Cost: an element whose box is out of the copy's box keeps its own size and styles but
+     not its children, so a long page costs what shows. A step with no target, or none that
+     the selectors find, copies the body, cut to the window. Past 20,000 copied elements the
+     copy stops, and the lift says the target is too big to copy.
+   - The lift shows each copy in a shadow root of its own, inside the slot's light child.
+     The page's queries do not find it, and the page's CSS, `!important` too, does not
+     reach it.
+2. **Showing a variant for a while.** The walk gets a `peek`: a variant that the step shows
+   for now, without changing the variant the step keeps (`context.variants`). `peek` with
+   a label shows it, as `j` would; `peek` with none goes back. Entering a step, and leaving
+   the walk, end the peek, so a step change needs no restoring. A switch starts again when
+   the variant asked for changes while it runs: the running switch's signal aborts, and the
+   next one runs its `reset` after it, as now. A switch clears the step's trouble when it
+   starts, so a failure is the new variant's.
+3. **Copying.** On `v`, on a step whose part does not lift and that has more than one
+   variant of its own, Blueline copies the variants. The one shown is copied first, as it
+   is. For each other one, in the step's order, it peeks at it, and waits until the walk is
+   ready on it with no trouble, then for two frames, the fonts and the targets' finite
+   animations (one second at most). Then it ends the peek and waits until the walk is ready
+   on the first variant again, and puts the window's scroll back.
+   - While it copies, the lift's dim covers the page, and a bar says "Copying Cards, 2 of
+     3", with Close. Esc, `v`, Space and Close stop it, and it goes back as above. The
+     copying takes every key, as the lift does.
+   - It stops with no lift when the walk leaves the step, goes to another step or opens it
+     again (`run` changes), or the tools go. The peek ends with the step, so the step comes
+     back on the variant it keeps.
+   - A variant that fails or is too late stops the copying: it goes back, and the bar says
+     why until the reviewer closes it, as going back clears the step's mark.
+   - Showing a variant runs its step's `reset` and `setup` again, as `j` does, so the page
+     loses what the reviewer typed in it. Blueline does not try to keep it.
+4. **The lift.** The store's `Lifting` gets an optional `still`: the step's title, the
+   labels, the first one shown, the rectangle, and the copies (none while copying). The
+   lift layer draws the copying bar, or `Lift` with the stills: the variants in the row,
+   one state ("As it is"), each at the box's size. still.ts fills each slot with the
+   copy of the slot's variant.
+   - Use on another variant sends `showVariant`, so the settle keeps it. The lift then
+     waits until the walk is ready on it before it lowers the copy onto the page's new
+     place; `Lift`'s `onPut` may return a Promise for this. Close keeps the page as it is.
+   - The still lift has no Delete and no notes, as a step's own variant has no verdicts:
+     `Lift` shows Delete only with `onDrop`. A step change while the lift is up lands it.
+5. **The modal goes.** The `variants` layer and its palette go: `v` always lifts.
+6. **Tests.** Browser tests on a config fixture with no React, where the variants change a
+   class on the body that the page's CSS reads:
+   - `v` copies each variant, the page comes back to the first, and the lift shows one copy
+     for each variant with its look; the page's class, data and `!important` rules do not
+     reach the copies, and its queries do not find them;
+   - Use on another variant shows it on the page, the copy lands once it is ready, and the
+     settle keeps it; Close keeps the page on the first variant, with no switch;
+   - Esc while a variant's `setup`, `show` or `ready` has not ended stops it at once, and
+     the page comes back to the first variant;
+   - a step change, and a journey change, while it copies open no lift and leave no copy,
+     and the step comes back on the variant it keeps;
+   - a variant whose `show` fails stops the copying, and the bar says why;
+   - the copy itself: a field's value, a `::before`, a flattened shadow root, an SVG
+     gradient and `<use>`, a fixed child at its place in a transformed parent, a dark page's
+     background, and a page of 5000 rows copied in bounded time.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.

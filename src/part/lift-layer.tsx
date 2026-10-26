@@ -1,16 +1,27 @@
 import { isValidElement, useState, useSyncExternalStore } from "react";
 import { Lift } from "./lift";
+import { StillLifted } from "./still-lift";
 import { AS_IT_IS, hugs, NO_VERDICTS, parts, rectOf, variantOf, type Instance } from "./store";
 
 /*
- * The lift, for the part the store says is lifted: the tools draw it, and the workshop. It
- * reads the part from the store, so the part's own code (variants.tsx) only draws its copies
- * in the lift's slots, in its own React.
+ * The lift, for the part the store says is lifted, or a step's own variants as stills
+ * (still-lift.tsx): the tools draw it, and the workshop. It reads the part from the store,
+ * so the part's own code (variants.tsx) only draws its copies in the lift's slots, in its
+ * own React.
  */
 
 export function LiftLayer() {
   const now = useSyncExternalStore(parts.subscribe, parts.current);
   const lifting = now.lifting;
+  if (lifting?.still !== undefined)
+    return (
+      <StillLifted
+        key={lifting.id}
+        id={lifting.id}
+        still={lifting.still}
+        docked={lifting.judge.docked}
+      />
+    );
   const instance = now.instances.find((i) => i.id === lifting?.id);
   if (lifting === undefined || instance === undefined) return null;
   return <Lifted key={lifting.id} instance={instance} />;

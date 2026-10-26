@@ -58,6 +58,8 @@ const ALPHABET: readonly Event[] = [
   { type: "go", by: -1 },
   { type: "go", by: 1, open: true },
   { type: "variant", by: 1 },
+  { type: "peek", step: "b", label: "Three" },
+  { type: "peek", step: "b", label: undefined },
   { type: "entered" },
   { type: "switched" },
   { type: "panel" },
@@ -140,11 +142,20 @@ describe("the review session, over every path of up to five events", () => {
   it("is ready only when the page shows the step and the variant the session says", () => {
     for (const { snapshot, path } of all) {
       if (!snapshot.matches({ review: { on: "ready" } })) continue;
-      const { entered, at, variants, journey } = snapshot.context;
+      const { entered, at, variants, journey, peek } = snapshot.context;
       const step = JOURNEYS[0]?.steps[at];
-      expect(entered, why(path)).toEqual(
-        expect.objectContaining({ journey, at, variant: variants[step?.id ?? ""] ?? 0 }),
-      );
+      // The variant it shows for now, else the one it keeps.
+      const variant = peek?.step === step?.id ? peek?.index : (variants[step?.id ?? ""] ?? 0);
+      expect(entered, why(path)).toEqual(expect.objectContaining({ journey, at, variant }));
+    }
+  });
+
+  it("shows a variant for now only on the step it is on, in a walk", () => {
+    for (const { snapshot, path } of all) {
+      const { peek, active, at } = snapshot.context;
+      if (peek === undefined) continue;
+      expect(active, why(path)).toBe(true);
+      expect(peek.step, why(path)).toBe(JOURNEYS[0]?.steps[at]?.id);
     }
   });
 
@@ -192,6 +203,70 @@ describe("the review session", () => {
     let s = after(start(), { type: "choose" }, { type: "entered" }, { type: "go", by: 1 });
     s = after(s, { type: "variant", by: 1 }, { type: "entered" });
     expect(s.matches({ review: { on: "switching" } })).toBe(true);
+  });
+
+  describe("a variant the step shows for now (peek)", () => {
+    /** On step b, open and ready. */
+    const onB = () =>
+      after(
+        start(),
+        { type: "choose" },
+        { type: "entered" },
+        { type: "go", by: 1 },
+        {
+          type: "entered",
+        },
+      );
+
+    it("shows it, and goes back to the one the step keeps", () => {
+      let s = after(onB(), { type: "peek", step: "b", label: "Three" });
+      expect(s.matches({ review: { on: "switching" } })).toBe(true);
+      expect(s.context.opening?.variant).toBe(2);
+      s = after(s, { type: "switched" });
+      expect(s.matches({ review: { on: "ready" } })).toBe(true);
+      expect(s.context.variants["b"]).toBeUndefined();
+      s = after(s, { type: "peek", step: "b", label: undefined });
+      expect(s.context.opening?.variant).toBe(0);
+      s = after(s, { type: "switched" });
+      expect(s.matches({ review: { on: "ready" } })).toBe(true);
+    });
+
+    it("starts a running switch again when the variant asked for changes", () => {
+      let s = after(onB(), { type: "peek", step: "b", label: "Two" });
+      const [next, actions] = transition(sessionMachine, s, {
+        type: "peek",
+        step: "b",
+        label: undefined,
+      });
+      s = next;
+      expect(s.matches({ review: { on: "switching" } })).toBe(true);
+      expect(s.context.opening?.variant).toBe(0);
+      // The running switch stops, so its signal aborts, and a new one starts.
+      const kinds = actions.map((a) => a.type);
+      expect(kinds).toContain("xstate.stopChild");
+      expect(kinds).toContain("xstate.spawnChild");
+    });
+
+    it("ends when a step opens, and the step comes back on the variant it keeps", () => {
+      let s = after(onB(), { type: "variant", by: 1 }, { type: "switched" });
+      s = after(s, { type: "peek", step: "b", label: "Three" }, { type: "go", by: 1 });
+      expect(s.context.peek).toBeUndefined();
+      s = after(s, { type: "entered" }, { type: "go", by: -1 });
+      expect(s.context.opening?.variant).toBe(1);
+    });
+
+    it("ends when the walk leaves, and a peek at another step's variant does nothing", () => {
+      let s = after(onB(), { type: "peek", step: "c", label: "Y" });
+      expect(s.context.peek).toBeUndefined();
+      s = after(s, { type: "peek", step: "b", label: "Two" }, { type: "leave" });
+      expect(s.context.peek).toBeUndefined();
+    });
+
+    it("clears the step's trouble when a switch starts, so a failure is the new variant's", () => {
+      let s = after(onB(), { type: "trouble", step: "b", reason: "setup failed" });
+      s = after(s, { type: "peek", step: "b", label: "Two" });
+      expect(s.context.trouble["b"]).toBeUndefined();
+    });
   });
 
   it("tells the next step's opening which step it leaves, so that step's state goes", () => {

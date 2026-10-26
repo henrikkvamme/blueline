@@ -56,7 +56,6 @@ import {
 export const LAYERS = [
   "none",
   "notes",
-  "variants",
   "people",
   "help",
   "go",
@@ -82,6 +81,9 @@ export interface Context extends Kept {
   readonly leaving: Entered | undefined;
   /** Why a step's code failed or was late, by the step's ID, until the step opens again. */
   readonly trouble: Readonly<Record<string, string>>;
+  /** A variant the step shows for now, as while the lift copies each one (part/still.ts),
+   * without changing the one it keeps in `variants`. Opening a step ends it. */
+  readonly peek: { readonly step: string; readonly index: number } | undefined;
   /** The tree's selected step. */
   readonly cursor: number;
   /** The tree's selected row when it is not a step, as a note or a journey: its id. */
@@ -138,6 +140,8 @@ export type Event =
   | { readonly type: "reset" }
   | { readonly type: "variant"; readonly by: number }
   | { readonly type: "showVariant"; readonly step: string; readonly label: string }
+  /** Shows the step's variant for now, or with none the one it keeps (Context.peek). */
+  | { readonly type: "peek"; readonly step: string; readonly label: string | undefined }
   /** Shows or hides the panel; with no `shown`, the other way. Hiding changes only the view:
    * the walk stays on its step, and the light stays. */
   | { readonly type: "panel"; readonly shown?: boolean | undefined }
@@ -308,9 +312,11 @@ const shapeOf = (c: Context) => c.journeys.find((j) => j.id === c.journey) ?? c.
 const stepOf = (c: Context, at = c.at) => shapeOf(c)?.steps[at];
 /** Where a new note goes: the step, or the page's place off a step or with its chat. */
 const noteStepOf = (c: Context) => (c.active && c.chat === "step" ? stepOf(c)?.id : c.place);
+/** The variant the step shows: the one it shows for now, else the one it keeps. */
 const variantOf = (c: Context, at = c.at) => {
   const step = stepOf(c, at);
-  return step === undefined ? 0 : (c.variants[step.id] ?? 0);
+  if (step === undefined) return 0;
+  return c.peek?.step === step.id ? c.peek.index : (c.variants[step.id] ?? 0);
 };
 const lastStep = (c: Context) => Math.max(0, (shapeOf(c)?.steps.length ?? 1) - 1);
 const clamp = (c: Context, at: number) => Math.min(Math.max(at, 0), lastStep(c));
@@ -653,6 +659,7 @@ export const sessionMachine = setup({
       leaving: ({ context }) => context.opening,
       entered: undefined,
       opening: undefined,
+      peek: undefined,
       preview: false,
     }),
     // A journey started again once every step is settled opens its steps for another pass.
@@ -761,6 +768,7 @@ export const sessionMachine = setup({
     opening: undefined,
     leaving: undefined,
     trouble: {},
+    peek: undefined,
     cursor: input.kept.at,
     row: undefined,
     tree: false,
@@ -1286,6 +1294,17 @@ export const sessionMachine = setup({
               reenter: true,
               actions: [assign({ fresh: true }), "nextRun"],
             },
+            peek: {
+              actions: assign({
+                peek: ({ context, event }) => {
+                  const step = stepOf(context);
+                  if (step?.id !== event.step) return context.peek;
+                  if (event.label === undefined) return undefined;
+                  const index = step.variants.indexOf(event.label);
+                  return index < 0 ? context.peek : { step: step.id, index };
+                },
+              }),
+            },
             variant: {
               guard: "hasVariants",
               actions: assign({
@@ -1311,11 +1330,12 @@ export const sessionMachine = setup({
                   tree: false,
                   trouble,
                   variants,
+                  peek: undefined,
                   leaving: context.opening,
                   opening: {
                     journey: context.journey,
                     at: context.at,
-                    variant: variantOf({ ...context, variants }),
+                    variant: variantOf({ ...context, variants, peek: undefined }),
                     run: context.run,
                   },
                 };
@@ -1342,13 +1362,25 @@ export const sessionMachine = setup({
                 },
               },
             },
+            // A switch starts again when the variant asked for changes while it runs: the
+            // running one's signal aborts. A failure is the new variant's.
             switching: {
-              entry: assign({
-                opening: ({ context }) =>
-                  context.entered === undefined
-                    ? undefined
-                    : { ...context.entered, variant: variantOf(context) },
+              entry: assign(({ context }) => {
+                const { [stepOf(context)?.id ?? ""]: _, ...trouble } = context.trouble;
+                return {
+                  trouble,
+                  opening:
+                    context.entered === undefined
+                      ? undefined
+                      : { ...context.entered, variant: variantOf(context) },
+                };
               }),
+              always: {
+                guard: ({ context }) =>
+                  context.opening !== undefined && context.opening.variant !== variantOf(context),
+                target: "switching",
+                reenter: true,
+              },
               invoke: {
                 src: "switchVariant",
                 input: ({ context }) => ({
@@ -1445,7 +1477,6 @@ export const sessionMachine = setup({
       states: {
         none: {},
         notes: {},
-        variants: {},
         people: {},
         help: {},
         go: {},
@@ -1461,7 +1492,6 @@ export const sessionMachine = setup({
       on: {
         open: [
           { target: ".notes", guard: ({ event }) => event.layer === "notes" },
-          { target: ".variants", guard: ({ event }) => event.layer === "variants" },
           { target: ".people", guard: ({ event }) => event.layer === "people" },
           { target: ".help", guard: ({ event }) => event.layer === "help" },
           { target: ".go", guard: ({ event }) => event.layer === "go" },

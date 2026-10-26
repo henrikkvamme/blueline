@@ -34,6 +34,12 @@ describe("the lift's ⋯ menu", () => {
     );
   });
 
+  it("has no Delete or Undo where the lift deletes nothing, as a step's own variants", () => {
+    expect(liftActions({ variants: three, noted: [], notes: false, deletes: false })).toEqual([
+      "zoom",
+    ]);
+  });
+
   it("names the zoom by what it goes to, and the annotations as the reviewer calls them", () => {
     expect(liftActionLabel("zoom", false)).toBe("Zoom");
     expect(liftActionLabel("zoom", true)).toBe("True size");
