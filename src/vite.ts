@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { Plugin } from "vite";
+import { answer, type ChannelFiles, type ChannelRoute } from "./server/channel.ts";
+
+export { isJson, LINE_FORMAT, stamped } from "./server/channel.ts";
 
 /*
  * The channel between the dev tools and the coding agent, through the dev server. A note
@@ -33,8 +34,8 @@ export interface ChannelOptions {
   readonly routes?: Routes;
 }
 
-/** Where the page posts notes and reads replies. The page's copy is in io/routes.ts: this
- * file has no relative imports, as Node loads it with the app's Vite config. A test keeps
+/** Where the page posts notes and reads replies. The page's copy is in io/routes.ts: Node
+ * loads this file with the app's Vite config, so it imports nothing of the page. A test keeps
  * the two the same. */
 export const ROUTES = {
   feedback: "/__devtools/feedback",
@@ -43,15 +44,7 @@ export const ROUTES = {
   listening: "/__devtools/listening",
 };
 export type Routes = typeof ROUTES;
-
-/** The screenshot types the page may paste, by their file ending. */
-const IMAGE_TYPES: Readonly<Record<string, string>> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  webp: "image/webp",
-  gif: "image/gif",
-};
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const CHANNEL_ROUTES: readonly ChannelRoute[] = ["feedback", "status", "images", "listening"];
 
 /** The packages that hold React's state, each with its subpaths, as the JSX runtimes. */
 const ONE_COPY = ["react", "react-dom"];
@@ -83,147 +76,24 @@ export function fromPage(headers: {
   }
 }
 
-/** The version of the feedback file's lines. A reader takes a line with no `v` as version 1. */
-export const LINE_FORMAT = 1;
-
-/**
- * A line as the feedback file keeps it: the page's JSON object with the format version and
- * the line's own ID, which readers claim it by (bin/wire.ts). The server sets both, so a page
- * cannot give two lines one ID. Undefined when the body is not a JSON object.
- */
-export function stamped(body: string, line: string): string | undefined {
-  try {
-    const value: unknown = JSON.parse(body);
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-    return JSON.stringify({ ...value, v: LINE_FORMAT, line });
-  } catch {
-    return undefined;
-  }
-}
-
-/** Whether a body is JSON by its type: a plain text body needs no CORS check first. */
-export const isJson = (type: string | undefined): boolean =>
-  type?.split(";")[0]?.trim().toLowerCase() === "application/json";
-
 export function devtoolsChannel(options: ChannelOptions): Plugin {
   const routes = options.routes ?? ROUTES;
-  const images = path.resolve(
-    options.images ?? path.join(path.dirname(options.feedback), "images"),
-  );
+  const files: ChannelFiles = {
+    feedback: options.feedback,
+    status: options.status,
+    images: path.resolve(options.images ?? path.join(path.dirname(options.feedback), "images")),
+    listening: options.listening ?? `${options.feedback}.listening.json`,
+  };
   return {
     name: "blueline:channel",
     config: (config) =>
       hasReact(path.resolve(config.root ?? ".")) ? { resolve: { dedupe: ONE_COPY } } : {},
     // Only the dev server has the channel.
     configureServer(server) {
-      server.middlewares.use(routes.feedback, (request, response) => {
-        if (request.method !== "POST") {
-          response.statusCode = 405;
-          response.end();
-          return;
-        }
-        if (!fromPage(request.headers) || !isJson(request.headers["content-type"])) {
-          response.statusCode = fromPage(request.headers) ? 415 : 403;
-          response.end();
-          return;
-        }
-        const chunks: Buffer[] = [];
-        request.on("data", (chunk: Buffer) => chunks.push(chunk));
-        request.on("end", () => {
-          const line = stamped(Buffer.concat(chunks).toString("utf8"), randomUUID());
-          if (line === undefined) {
-            response.statusCode = 400;
-            response.end();
-            return;
-          }
-          mkdir(path.dirname(options.feedback), { recursive: true })
-            .then(() => appendFile(options.feedback, `${line}\n`))
-            .then(
-              () => {
-                response.statusCode = 204;
-                response.end();
-              },
-              () => {
-                response.statusCode = 500;
-                response.end();
-              },
-            );
-        });
-      });
-      // POST a screenshot to keep it; GET /<name> to show it.
-      server.middlewares.use(routes.images, (request, response) => {
-        if (request.method === "GET") {
-          const name = (request.url ?? "").replace(/^\//, "");
-          const type = IMAGE_TYPES[path.extname(name).slice(1)];
-          if (!/^[\w-]+\.\w+$/.test(name) || type === undefined) {
-            response.statusCode = 404;
-            response.end();
-            return;
-          }
-          readFile(path.join(images, name)).then(
-            (body) => {
-              response.setHeader("content-type", type);
-              response.end(body);
-            },
-            () => {
-              response.statusCode = 404;
-              response.end();
-            },
-          );
-          return;
-        }
-        const ending = Object.keys(IMAGE_TYPES).find(
-          (k) => IMAGE_TYPES[k] === request.headers["content-type"],
+      for (const route of CHANNEL_ROUTES)
+        server.middlewares.use(routes[route], (request, response) =>
+          answer(files, (r) => fromPage(r.headers), route, request.url ?? "", request, response),
         );
-        if (request.method !== "POST" || ending === undefined) {
-          response.statusCode = request.method === "POST" ? 415 : 405;
-          response.end();
-          return;
-        }
-        if (!fromPage(request.headers)) {
-          response.statusCode = 403;
-          response.end();
-          return;
-        }
-        const chunks: Buffer[] = [];
-        let size = 0;
-        request.on("data", (chunk: Buffer) => {
-          size += chunk.length;
-          if (size <= MAX_IMAGE_BYTES) chunks.push(chunk);
-        });
-        request.on("end", () => {
-          if (size > MAX_IMAGE_BYTES) {
-            response.statusCode = 413;
-            response.end();
-            return;
-          }
-          const name = `${randomUUID()}.${ending}`;
-          const file = path.join(images, name);
-          mkdir(images, { recursive: true })
-            .then(() => writeFile(file, Buffer.concat(chunks)))
-            .then(
-              () => {
-                response.setHeader("content-type", "application/json");
-                response.end(JSON.stringify({ name, file }));
-              },
-              () => {
-                response.statusCode = 500;
-                response.end();
-              },
-            );
-        });
-      });
-      const json = (route: string, file: string) =>
-        server.middlewares.use(route, (_request, response) => {
-          response.setHeader("content-type", "application/json");
-          response.setHeader("cache-control", "no-store");
-          readFile(file, "utf8").then(
-            (body) => response.end(body),
-            () => response.end("{}"),
-          );
-        });
-      json(routes.status, options.status);
-      json(routes.listening, options.listening ?? `${options.feedback}.listening.json`);
     },
   };
 }

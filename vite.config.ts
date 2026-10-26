@@ -54,9 +54,9 @@ export default defineConfig({
     ignorePatterns: ["dist/**", "src/**/*.gen.ts"],
     overrides: [
       {
-        // Tool configuration, the dev server's plugin and the build's scripts run before the
-        // application runtime exists.
-        files: ["*.config.ts", "src/vite.ts", "scripts/*.ts"],
+        // Tool configuration, the dev server's plugin, the channel it shares with
+        // `blueline serve`, and the build's scripts run before the application runtime exists.
+        files: ["*.config.ts", "src/vite.ts", "src/server/channel.ts", "scripts/*.ts"],
         rules: { "effecttsgo/process-env": "off", "effecttsgo/node-builtin-import": "off" },
       },
     ],

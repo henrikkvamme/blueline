@@ -7,5 +7,5 @@
     "resolveJsonModule": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts"],
-  "exclude": ["src/vite.ts"]
+  "exclude": ["src/vite.ts", "src/server/**"]
 }
