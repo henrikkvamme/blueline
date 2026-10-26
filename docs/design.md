@@ -517,7 +517,8 @@ that two slices need has one owner, and the other slice waits for it.
 | A4    | Parts without React. `blueline.part(name, { variants, states, show })` and `data-blueline-part`. `variants()` in `/react` uses it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | A2             | `src/part`, `/react`                            |
 | A5    | Still copies for step variants. For a variant that is not a part: apply it, wait until it is ready, copy its targets with the page's styles, restore the page, and show the copies in the lift. Tests on a fixture with no React: Use, Close, and a step change in the middle.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | A3, D1         | `src/part/still.ts`                             |
 | B1    | `blueline serve`, one per machine. A repository is the `git` top level of the app's root, by real path; a worktree is its own repository. A dev server registers its root and its origin and gets routes under `/blueline/<app>/`. The server accepts a page request only from a registered origin, with CORS for the script tag; the Vite proxy keeps requests same-origin. Tests: two repositories, two dev servers for one repository, a script tag from its own origin.                                                                                                                                                                                                                                                                                                              | A3, W0         | `bin/serve.ts`, `src/io`                        |
-| B2    | Ways in: the Vite plugin (the script tag and a proxy to the server, which it starts), a script tag by hand, `blueline dev -- <cmd>`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | B1             | `src/vite.ts`, `bin/dev.ts`                     |
+| B2    | Ways in: the Vite plugin (the script tag and a proxy to the server, which it starts) and a script tag by hand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | B1             | `src/vite.ts`, `src/server`                     |
+| B3    | `blueline dev -- <cmd>`, after its own plan (see "B3 requirements").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | B2             | `bin/dev.ts`                                    |
 | C1    | `blueline mcp`: `wait_for_feedback`, `reply` and `apply`, on the W0 contract, so it does not wait for B1. The tools and their words never change, for the prompt cache. Test: a line that an agent pulled is not delivered again by a wake.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | W0, D0         | `bin/mcp.ts`, `src/mcp`                         |
 | C2    | Hooks, `blueline setup <harness>` and the wake adapters. Proves four cases before the launchd service retires: an agent in a turn gets a note at its next tool call, an idle agent wakes, with no agent a new one starts, an agent that thinks for minutes between hooks stays busy, and an agent killed in a turn is gone at once and its lines go to a wake.                                                                                                                                                                                                                                                                                                                                                                                                                           | C1, B1         | `src/deliver`, the dotfiles service             |
 | D1    | `blueline.config.ts`: journeys as data. A step has `enter`, `setup`, `ready` and `exit`; a variant has `show`. Before each variant, Blueline runs the step's `reset`, then `setup`, then the variant's `show`, then waits for `ready`. A step that does not get ready in time shows why on its row. The actions are `open`, `click`, `type`, `press`, `wait` and `emit`; a step can also hold an async function. The server bundles the config and reloads it on change.                                                                                                                                                                                                                                                                                                                 | A2, B1         | `src/config`                                    |
@@ -770,70 +771,101 @@ the script tag in front of it.
 
 ### B2 in steps
 
-B2 lets a page reach `blueline serve`: the Vite plugin, a script tag by hand, and
-`blueline dev -- <cmd>`. The plugin and the tag land first, in one merge; `blueline dev` is
-the second merge of the slice, as it adds a proxy of its own.
+B2 lets a page reach `blueline serve` through the Vite plugin and through a script tag by
+hand. `blueline dev -- <cmd>` is slice B3, with a plan of its own.
 
-1. **The server serves the overlay.** `GET /blueline/overlay.js` is the built main entry,
-   one file with its own React. It has an `ETag` of its content and `Cache-Control:
-   no-cache`, so a page asks again each time and the server answers 304 while the build is
-   the same. It is code with no data, so any origin may load it (`Access-Control-Allow-Origin:
-   *`; a module script loads in CORS mode). With no build, the answer is 503 and names
-   `pnpm run pack`. `GET /blueline/<app>/tag.js` is a short module: it imports the overlay
-   from the server and mounts it with the page's own review only, on the app's channel at
-   the server's address, with `blueline.<app>` as its storage key. It does nothing when the
-   page already has Blueline (`window.blueline`).
-2. **Kept origins, for a tag by hand.** A page whose server Blueline does not know, such as
+1. **A new protocol.** B2 adds routes and a kind of registration, so the protocol is 2. A
+   server of another protocol is never used: the plugin and `blueline add` stop with its
+   version and process ID, and say to stop it. A B1 server has no `stop`, so they name the
+   process.
+2. **The server serves the overlay.** Both answers are `text/javascript`.
+   - `GET /blueline/overlay.js` is the built main entry, one file with its own React. It has
+     an `ETag` of its content and `Cache-Control: no-cache`, so a page asks each time and
+     gets 304 while the build is the same, and the new file once it changes. It is code with
+     no data, so any origin may load it (`Access-Control-Allow-Origin: *`; a module script
+     loads in CORS mode). With no build, the answer is 503 and names `pnpm run pack`.
+   - `GET /blueline/<app>/tag.js` is a short module for a tag by hand. Like the channel, it
+     answers only the app's origins, live or kept, with CORS and `Vary: Origin`. It imports
+     the overlay from the server and mounts it with the page's own review only, on the app's
+     channel at the server's address, with `blueline.<app>` as its storage key.
+   - **One overlay.** An automatic mount, from the tag or from the plugin, first asks the
+     shared owner (A3) and does nothing when an overlay owns the page, as the app's own
+     `<DevTools>` or `mount`. An app's overlay that comes later takes the page: the newest
+     owner wins.
+3. **Kept origins, for a tag by hand.** A page whose server Blueline does not know, such as
    Next.js, has no dev server to register it. `blueline add <origin>`, in the app's root,
    registers the origin as kept: it stays until `blueline remove <origin>`, across restarts
    of the dev server and of `serve`. The registration says `keep: true`, gets its answer and
    ends; the app keeps its kept origins in `apps.json`. As for any registration, a page
    cannot add one. `blueline add` prints the tag to put in the page:
    `<script type="module" src="http://127.0.0.1:4399/blueline/<app>/tag.js"></script>`.
-3. **Starting the server.** The plugin, `blueline add` and `blueline dev` ask for the
-   server's health first. When nothing answers, they start `blueline serve` as a detached
-   process, with its output in `serve.log` in the state folder, and wait at most five
-   seconds for its health. Two that start it at once start one: the second finds the first
-   (B1). The server runs until `blueline serve stop`, which asks it to end
-   (`POST /blueline/stop`, from a tool only).
-4. **The Vite plugin.** `devtoolsChannel()` keeps the page's routes, `/__devtools/*` or
-   the app's own, and its options; `feedback` and `status` become optional, from the root.
-   When the dev server listens, the plugin starts the server, registers the root with the
-   dev server's local origin and its files, and keeps the registration open. When the
-   registration ends while the dev server runs, it registers again after one second, then
-   after twice as long each time, at most 30 seconds. It ends the registration when the dev
-   server closes.
+4. **Starting the server.** The plugin and `blueline add` ask for the server's health first.
+   When nothing answers, they start the server as a detached process: Node
+   (`process.execPath`) runs this package's own command, found from the starting module's
+   file, `bin/blueline.ts` in the source and `dist/bin/blueline.js` in the package, never
+   one on `PATH`. Its output is appended to `serve.log` in the state folder. They wait at
+   most five seconds for its health; a failure to start says so and names the log. Two that
+   start it at once start one: the second finds the first (B1). The server runs until
+   `blueline serve stop`, which asks it to end (`POST /blueline/stop`, from a tool only).
+5. **The Vite plugin.** `devtoolsChannel()` keeps the page's routes, `/__devtools/*` or
+   the app's own, at the root of the dev server whatever its `base`, and its options;
+   `feedback` and `status` become optional, from the root.
+   - **Registration.** When the dev server listens, the plugin starts the server and
+     registers the root with the dev server's local origin and its files, and keeps the
+     registration open. In middleware mode Vite has no address, so the plugin takes the
+     page's origin from its `origin` option, and registers at once; with no `origin` there,
+     it says so, and the page's routes answer 503. When the registration ends while the
+     dev server runs, the plugin registers again after one second, then after twice as long
+     each time, at most 30 seconds. It ends the registration when the dev server closes.
    - **The proxy.** Each page route goes to `/blueline/<app>/<route>` on the server, with
-     the rest of its path. The plugin keeps its own check, `fromPage`, and forwards the
-     request as a tool's, with no `Origin`, so a page of any host the dev server serves
-     works. Before the registration answers, a page request gets 503.
+     the rest of its path. The plugin's routes run before Vite's own checks, so the plugin
+     applies the dev server's `allowedHosts` rule itself, as Vite does (`localhost`, IP
+     addresses and the listed names), and then `fromPage`. It forwards a request that
+     passes as a tool's, with no `Origin`. Before the registration answers, a page request
+     gets 503.
    - **The tag.** The plugin adds a module to each HTML page that mounts the overlay from
-     `/__devtools/overlay.js`, which it forwards to the server, on the page's routes.
-     `overlay: false` leaves it out, for an app that mounts its own tools. An app that
-     mounts its own later wins anyway: the newest overlay owns the page (A3).
-5. **`blueline dev -- <cmd>`**, the second merge (ADR 0004). It runs the app's command and
-   puts a proxy where the page goes: everything passes through, websockets too, and each
-   HTML page gets the tag, as the plugin adds it. It asks for HTML without compression, so
-   it can add the tag. It knows two dev servers by the command or the `package.json` script
-   it runs: Vite, which gets `--port <hidden> --strictPort`, and Next.js, which gets
-   `PORT=<hidden>`. The proxy takes the port the app would have had: the one in the
-   command, or the server's default. For another command, `--port <n>` says where the app
-   listens; the proxy takes a new port and says what can break: sign-in redirects built
-   from the origin, a backend's CORS list and service workers. It registers the root and the
-   proxy's origin, stops the command when it stops, and exits with the command's code.
+     `/__devtools/overlay.js`, which it forwards to the server with its `ETag`, on the page's
+     routes. `overlay: false` leaves it out.
 6. **Tests.**
-   - The server, in Node: the overlay with its `ETag`, a 304, and 503 with no build; the
-     tag of a known app and 404 for another; a kept origin that a page may use after a
-     restart of `serve`, and not after `remove`; a page cannot add one; `stop`.
-   - Starting: the server starts when none runs, two at once make one, and a running one is
-     used.
-   - The plugin, on a Vite dev server: it registers, a note through the page's route lands
-     in the root's `.blueline/`, the HTML has the tag and none with `overlay: false`, and it
-     registers again after `serve` restarts.
-   - In the browser: a page on its own origin loads the tag from the server, as a page with
-     a tag by hand, and a note it sends lands in the app's file.
-   - `blueline dev`, with a small HTTP server as the app: the page has the tag, a websocket
-     passes, the app's port is the page's, and the exit code is the command's.
+   - The server, in Node: the overlay with its type, `ETag` and 304, a new `ETag` for a new
+     build, and 503 with no build; the tag for one of the app's origins, 403 for another,
+     and 404 for an unknown app; a kept origin that a page may use after a restart of
+     `serve`, and not after `remove`; a page cannot add one; `stop`; a server of protocol 1
+     is refused by name.
+   - Starting, from another working folder, for the source and for the packed package: the
+     server starts when none runs, two at once make one, a running one is used, and a
+     failed start names the log.
+   - The plugin, on a Vite dev server: it registers; a note through the page's route lands
+     in the root's `.blueline/`; custom routes; a `base` of `/app/`; HTTPS; a host outside
+     `allowedHosts` and another site's origin are refused and write nothing; the HTML has
+     the tag, and none with `overlay: false`; `overlay.js` through the proxy gets 304; it
+     registers again after `serve` restarts; middleware mode with and without `origin`.
+   - In the browser: a page on its own origin loads the tag from the server, as a tag by
+     hand, and a note it sends lands in the app's file; the page's routes through the
+     plugin; an automatic mount after `<DevTools>` or `mount` leaves the app's overlay, and
+     one before it gives way to it.
+
+### B3 requirements
+
+`blueline dev -- <cmd>` (ADR 0004) gets its own plan after B2. The B2 plan review set what it
+must do:
+
+- **The port.** Find the port the page uses: the command's own flag, its `package.json`
+  script, Vite's resolved config, or the dev server's default. Hold that port before the
+  command starts. Give the command a hidden port in a way that wins over the others: Vite
+  takes `--port <hidden> --strictPort` over its config; a Next.js `-p` in the command or the
+  script is replaced, as `PORT` does not win over it. Test real Vite and Next.js commands,
+  through package scripts and with ports in their config.
+- **The channel.** The proxy answers the overlay and the page's routes as the plugin does,
+  with the same host and page checks before it forwards a request with no `Origin`. Test a
+  note sent through it.
+- **HTML.** Define how a compressed answer is handled, which headers change once the tag is
+  added (length, validators), and how the tag goes in while the page streams, across chunk
+  boundaries. Test compressed HTML, a split place for the tag, a streamed page and an
+  answer that is not HTML, which passes unchanged.
+- **Stopping.** Stop the command's whole process group, as `pnpm dev` starts a child, close
+  open websockets, and stop on a signal and on a failed start. Test that the dev server and
+  both ports are gone afterwards.
 
 ## Evals
 
