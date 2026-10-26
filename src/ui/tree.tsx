@@ -199,7 +199,7 @@ function TreeRow({
       aria-current={current === true ? "page" : undefined}
       className={cx(
         // The selection shows where the keys are, so a row the pointer clicked shows no ring.
-        "flex w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted outline-none hover:bg-dt-raised max-sm:min-h-11 max-sm:text-[15px]",
+        "flex min-h-9 w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted outline-none hover:bg-dt-raised max-sm:min-h-11 max-sm:text-[15px]",
         tall ? "items-start" : "items-center",
         DEPTH[depth],
         selected && "bg-dt-raised",
@@ -273,7 +273,7 @@ function NoteCount({ notes }: { readonly notes: readonly Note[] }) {
     return <span className="size-2 shrink-0 rounded-full bg-dt-accent" aria-label="New reply" />;
   if (notes.length === 0) return null;
   return (
-    <span className="rounded-full bg-dt-ground px-1.5 text-[10px] text-dt-muted tabular-nums">
+    <span className="rounded-full bg-dt-ground px-1.5 text-[11px] leading-4 text-dt-muted tabular-nums">
       {notes.length}
     </span>
   );
@@ -379,7 +379,7 @@ function Pages({ heading }: { readonly heading: boolean }) {
                 </TreeRow>
               ))}
             {open === true && isHere && drafts > 0 && (
-              <span className={cx(DEPTH[1], "pt-1 text-[11px] text-dt-faint")}>
+              <span className={cx(DEPTH[1], "pt-1 text-[12px] text-dt-faint")}>
                 {drafts === 1 ? "1 note goes" : `${String(drafts)} notes go`} with the next message
               </span>
             )}
@@ -451,7 +451,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
         return (
           <li key={step.id} className="contents">
             {step.group.id !== journey.steps[i - 1]?.group.id && (
-              <span className={cx(DEPTH[1], "pt-2 pb-0.5 text-[11px] text-dt-faint")}>
+              <span className={cx(DEPTH[1], "pt-3 pb-1 text-[12px] text-dt-faint")}>
                 {step.group.title}
               </span>
             )}
@@ -470,7 +470,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
               <span
                 aria-current={here ? "step" : undefined}
                 className={cx(
-                  "w-4 shrink-0 text-[11px] tabular-nums",
+                  "w-4 shrink-0 text-[12px] tabular-nums",
                   here ? "text-dt-accent" : "text-dt-faint",
                 )}
               >
@@ -489,7 +489,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
               {news.length > 0 ? (
                 <span
                   aria-label={`${news.length} new replies`}
-                  className="rounded-full bg-dt-accent px-1.5 text-[10px] font-semibold text-white tabular-nums"
+                  className="rounded-full bg-dt-accent px-1.5 text-[11px] leading-4 font-semibold text-white tabular-nums"
                 >
                   {news.length}
                 </span>
@@ -497,7 +497,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
                 open === false && <NoteCount notes={pins} />
               )}
               {kept.length > 0 ? (
-                <span className="max-w-24 truncate text-[11px] text-dt-faint" title="Kept">
+                <span className="max-w-24 truncate text-[12px] text-dt-faint" title="Kept">
                   {kept.join(", ")}
                 </span>
               ) : (
@@ -527,7 +527,7 @@ function Steps({ journey, walked }: { readonly journey: JourneyInfo; readonly wa
 
 function Heading({ text, meta }: { readonly text: string; readonly meta?: string | undefined }) {
   return (
-    <span className="flex justify-between gap-2 px-2.5 pt-3 pb-1 text-[11px] font-medium text-dt-faint">
+    <span className="flex justify-between gap-2 px-2.5 pt-4 pb-1.5 text-[12px] text-dt-faint">
       <span className="truncate">{text}</span>
       {meta !== undefined && <span className="tabular-nums">{meta}</span>}
     </span>
@@ -541,7 +541,7 @@ function VariantCount({ count }: { readonly count: number }) {
   if (count < 2) return null;
   return (
     <span
-      className="flex shrink-0 items-center gap-0.5 text-[11px] text-dt-faint tabular-nums"
+      className="flex shrink-0 items-center gap-0.5 text-[12px] text-dt-faint tabular-nums"
       title={`${String(count)} variants`}
     >
       <Layers className="size-3" aria-hidden />
@@ -693,7 +693,7 @@ function Journeys({
               {settledIn(j) === j.steps.length && (
                 <CircleCheck className="size-3 shrink-0 text-dt-good" aria-label="Settled" />
               )}
-              <span className="text-[11px] font-normal text-dt-faint tabular-nums">
+              <span className="text-[12px] font-normal text-dt-faint tabular-nums">
                 {done ? j.steps.length : `${String(settledIn(j))}/${String(j.steps.length)}`}
               </span>
             </TreeRow>
@@ -765,7 +765,7 @@ function Done({
         <span className="flex-1">Review done</span>
         {waiting.length > 0 && (
           <span
-            className="flex items-center gap-1 text-[11px] font-normal text-dt-faint tabular-nums"
+            className="flex items-center gap-1 text-[12px] font-normal text-dt-faint tabular-nums"
             title={`The agent has not answered ${waiting.length === 1 ? "1 note" : `${String(waiting.length)} notes`}`}
           >
             <AgentMark notes={waiting} />
