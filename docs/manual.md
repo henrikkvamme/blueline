@@ -17,7 +17,9 @@ Blueline: the tools and the lift stand in shadow roots with their own CSS. Three
   `AbortSignal`, which aborts when the walk goes on without it; a result after that is
   dropped. `mount` gives a handle, which is also `window.blueline`: `start(journey, step?)`
   starts a review, `moved()` says that the app went to another page in a way the tools do
-  not see, and `dispose()` takes the tools off.
+  not see, and `dispose()` takes the tools off. A page has one overlay: the newest `mount`
+  or `<DevTools>` takes the one before off. `useReviewControl()` starts a review on the
+  overlay that has the page.
 - `variants` from `@henrikkvamme/blueline/variants` on each part with more than one design.
 
 The agent's command is `blueline`. `examples/review-demo` is a small app set up this way, with

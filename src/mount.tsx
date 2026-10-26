@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { claim } from "./core/owner";
 import { startSession } from "./core/session";
 import type { DevAdapter } from "./types";
 import { Running } from "./ui/devtools";
@@ -44,7 +45,8 @@ declare global {
 /** The events that say the page went to another address. */
 const MOVES = ["popstate", "hashchange"] as const;
 
-/** Puts the dev tools on the page. A page has one: a second mount takes the first off. */
+/** Puts the dev tools on the page. A page has one overlay: the newest, from `mount` or
+ * `<DevTools>`, takes the one before off. */
 export function mount<C>({
   adapter,
   storageKey,
@@ -52,7 +54,6 @@ export function mount<C>({
   path = () => location.pathname,
   navigate,
 }: MountOptions<C>): Blueline {
-  window.blueline?.dispose();
   const session = startSession({ adapter, storageKey, path });
   const host = openHost();
   const root = createRoot(host.container);
@@ -68,10 +69,15 @@ export function mount<C>({
       : undefined;
   navigation?.addEventListener("navigatesuccess", moved);
 
+  let disposed = false;
   const handle: Blueline = {
     start: session.start,
     moved,
+    // A newer overlay and the app can both take these tools off.
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      release();
       for (const move of MOVES) window.removeEventListener(move, moved);
       navigation?.removeEventListener("navigatesuccess", moved);
       root.unmount();
@@ -80,6 +86,11 @@ export function mount<C>({
       if (window.blueline === handle) delete window.blueline;
     },
   };
+  const release = claim({
+    start: (journey, at, fresh) => session.actor.send({ type: "start", journey, at, fresh }),
+    // A claim can come from inside a React commit, where a root cannot unmount.
+    yield: () => queueMicrotask(handle.dispose),
+  });
   window.blueline = handle;
   return handle;
 }

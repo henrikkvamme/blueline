@@ -41,6 +41,7 @@ import { useVariantPlace } from "./step-controls";
 import { release, settleGate, TURN_MS, TURN_WAIT } from "./settle";
 import { holdToggle } from "../keys/hold";
 import { openHost, type Host } from "./host";
+import { claim, owner } from "../core/owner";
 import { LiftLayer } from "../part/lift-layer";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
@@ -198,39 +199,50 @@ export function DevTools<C>({
   where.current = given;
   const goTo = useRef(navigate);
   goTo.current = navigate;
-  // The session runs outside React (core/session.ts): it starts with the tools, and stops
-  // when they go or the adapter changes.
-  const [session, setSession] = useState<Session>();
+  // A newer overlay took the page (core/owner.ts): these tools stay off it.
+  const [yielded, setYielded] = useState(false);
   // The tools stand in a shadow root of their own (host.ts); the app's dev parts stay here.
   const [host, setHost] = useState<Host>();
   useLayoutEffect(() => {
+    if (yielded) return;
     const opened = openHost();
     setHost(opened);
     return () => {
       setHost(undefined);
       opened.dispose();
     };
-  }, []);
+  }, [yielded]);
+  // The session runs outside React (core/session.ts): it starts with the tools, and stops
+  // when they go or the adapter changes.
+  const [session, setSession] = useState<Session>();
   useEffect(() => {
+    if (yielded) return;
     const started = startSession({
       adapter,
       storageKey,
       path: () => where.current ?? location.pathname,
     });
     setSession(started);
+    const release = claim({
+      start: (journey, at, fresh) => started.actor.send({ type: "start", journey, at, fresh }),
+      yield: () => setYielded(true),
+    });
     return () => {
+      release();
       setSession(undefined);
       started.dispose();
     };
-  }, [adapter, storageKey]);
+  }, [adapter, storageKey, yielded]);
   // The app went to another page, or names it another way.
   useEffect(() => session?.moved());
-  // The app's dev parts may use the tools (useReviewControl), so they wait for the session.
-  if (session === undefined || host === undefined) return null;
+  // The app's dev parts reach the review through the page's owner, so they need no session.
   return (
-    <Running session={session} anchors={anchors} goTo={goTo} into={host.container}>
+    <>
+      {session !== undefined && host !== undefined && (
+        <Running session={session} anchors={anchors} goTo={goTo} into={host.container} />
+      )}
       {children}
-    </Running>
+    </>
   );
 }
 
@@ -240,14 +252,12 @@ export function Running({
   anchors,
   goTo,
   into,
-  children,
 }: {
   readonly session: Session;
   readonly anchors: readonly string[];
   readonly goTo: { readonly current: ((path: string) => void) | undefined };
-  /** Where the tools render, when not where `Running` stands: the app's dev parts stay. */
+  /** Where the tools render, when not where `Running` stands. */
   readonly into?: Element | undefined;
-  readonly children?: React.ReactNode;
 }) {
   const { actor } = session;
   const info = useSyncExternalStore(session.subscribe, session.info);
@@ -552,7 +562,6 @@ export function Running({
   return (
     <ToolsContext.Provider value={tools}>
       {into === undefined ? own : createPortal(own, into)}
-      {children}
       {room > 0 && createPortal(<div aria-hidden style={{ height: room }} />, document.body)}
     </ToolsContext.Provider>
   );
@@ -939,14 +948,13 @@ const sameView = (a: View, b: View) =>
   a.handoff === b.handoff &&
   a.lifting === b.lifting;
 
-/** Starts the review from the app's own dev parts, as a link or another tool asks. */
+/** Starts the review from the app's own dev parts, as a link or another tool asks, on the
+ * overlay that has the page. */
 export function useReviewControl() {
-  const { actor } = useTools();
   return useMemo(
     () => ({
-      start: (journey: string, at: number, fresh: boolean) =>
-        actor.send({ type: "start", journey, at, fresh }),
+      start: (journey: string, at: number, fresh: boolean) => owner()?.start(journey, at, fresh),
     }),
-    [actor],
+    [],
   );
 }
