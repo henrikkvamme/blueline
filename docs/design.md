@@ -545,6 +545,10 @@ Evals come after the build, once the design and the behaviour are agreed in real
 
 ## To verify while building
 
+- Whether a claim needs an acknowledgement. `blueline listen` claims a line when it prints
+  it, so a watcher whose reader died takes lines that no agent sees; on 2026-10-26 a
+  listener left by an expired Monitor took a note this way. The MCP pull and the hooks
+  return lines inside the agent's turn, so they may not need one; C2 decides.
 - Whether still copies of a step's target (requirement 2) look right on the dev dashboard,
   whose styles come from the page and not from the part.
 
