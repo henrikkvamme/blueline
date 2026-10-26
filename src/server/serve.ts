@@ -115,8 +115,16 @@ function givenFiles(value: unknown): GivenFiles | undefined {
   return files;
 }
 
-async function register(apps: Apps, request: IncomingMessage, response: ServerResponse) {
+async function register(
+  apps: Apps,
+  saved: () => Promise<void>,
+  request: IncomingMessage,
+  response: ServerResponse,
+) {
   if (request.method !== "POST") return end(response, 405);
+  // A dev server that goes before its registration opens leaves none open.
+  let gone = false;
+  response.on("close", () => (gone = true));
   // A page cannot register: only a dev server on this machine, which sends no origin.
   if (request.headers.origin !== undefined) return end(response, 403);
   let given: { root?: unknown; origin?: unknown; files?: unknown };
@@ -134,6 +142,12 @@ async function register(apps: Apps, request: IncomingMessage, response: ServerRe
   const app = apps.app(root, await repositoryOf(root), filesOf(root, files));
   if (app === "conflict")
     return end(response, 409, { error: "A running dev server registered other files." });
+  try {
+    await saved();
+  } catch (error) {
+    return end(response, 500, { error: String(error) });
+  }
+  if (gone) return;
   const close = apps.open(app.name, given.origin);
   response.on("close", close);
   const registered: Registered = {
@@ -183,11 +197,40 @@ function channel(apps: Apps, url: URL, request: IncomingMessage, response: Serve
   );
 }
 
+const isFiles = (value: unknown): value is App["files"] =>
+  typeof value === "object" &&
+  value !== null &&
+  ["feedback", "status", "images", "listening"].every((key) => isText(Reflect.get(value, key)));
+
+const isApp = (value: unknown): value is App =>
+  typeof value === "object" &&
+  value !== null &&
+  "name" in value &&
+  isText(value.name) &&
+  "root" in value &&
+  isText(value.root) &&
+  "repository" in value &&
+  isText(value.repository) &&
+  "files" in value &&
+  isFiles(value.files);
+
+/** The apps kept before; a file Blueline cannot read stops it, so it overwrites nothing. */
 async function kept(file: string): Promise<readonly App[]> {
-  const text = await readFile(file, "utf8").catch(() => undefined);
+  const text = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return undefined;
+    throw new Error(`Blueline cannot read its apps in ${file}: ${error.message}`);
+  });
   if (text === undefined) return [];
-  const value = JSON.parse(text) as { apps?: readonly App[] };
-  return value.apps ?? [];
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    value = undefined;
+  }
+  const apps = typeof value === "object" && value !== null && "apps" in value ? value.apps : null;
+  if (!Array.isArray(apps) || !apps.every(isApp))
+    throw new Error(`${file} does not hold Blueline's apps. Move it away to start afresh.`);
+  return apps;
 }
 
 /** What answers on `port`: Blueline's health, or a reason it is not. */
@@ -208,15 +251,27 @@ async function probe(port: number): Promise<Health | string> {
 /** Starts the server, or finds the one that runs. Fails when the port has another server. */
 export async function serve(options: ServeOptions): Promise<Served> {
   const file = path.join(options.state, "apps.json");
+  // One save at a time, each with the apps as they are when it starts; the last says
+  // whether the apps are kept.
   let saving = Promise.resolve();
   const save = () => {
-    const text = `${JSON.stringify({ protocol: PROTOCOL, apps: apps.all() }, null, 2)}\n`;
     saving = saving
-      .then(() => mkdir(options.state, { recursive: true }))
-      .then(() => writeFile(`${file}.next`, text))
-      .then(() => rename(`${file}.next`, file))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .then(async () => {
+        const text = `${JSON.stringify({ protocol: PROTOCOL, apps: apps.all() }, null, 2)}\n`;
+        await mkdir(options.state, { recursive: true });
+        await writeFile(`${file}.next`, text);
+        await rename(`${file}.next`, file);
+      })
+      .catch((error: unknown) => {
+        throw new Error(
+          `Blueline cannot keep its apps in ${file}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    // A failed save is answered where a registration waits for it, and does not stop the server.
+    saving.catch(() => undefined);
   };
+  const saved = () => saving;
   const apps = makeApps(await kept(file), save);
   const health: Health = {
     blueline: true,
@@ -229,11 +284,16 @@ export async function serve(options: ServeOptions): Promise<Served> {
   let port = options.port;
   const server = createServer((request, response) => {
     if (!ownHost(request.headers.host, port)) return end(response, 421);
-    const url = new URL(request.url ?? "/", "http://blueline");
+    let url: URL;
+    try {
+      url = new URL(request.url ?? "/", "http://blueline");
+    } catch {
+      return end(response, 400);
+    }
     const fail = () => end(response, 500);
     if (url.pathname === "/blueline/health") return end(response, 200, health);
     if (url.pathname === "/blueline/register")
-      return void register(apps, request, response).catch(fail);
+      return void register(apps, saved, request, response).catch(fail);
     if (url.pathname === "/blueline/apps")
       return void listApps(apps, url, request, response).catch(fail);
     if (url.pathname.startsWith("/blueline/")) return channel(apps, url, request, response);
@@ -259,13 +319,21 @@ export async function serve(options: ServeOptions): Promise<Served> {
       );
     return { kind: "running", health: found };
   }
+  // The server keeps its apps from the start, or does not start.
+  save();
+  try {
+    await saved();
+  } catch (error) {
+    await new Promise<void>((done) => server.close(() => done()));
+    throw error;
+  }
   return {
     kind: "started",
     port: listened,
     close: async () => {
       server.closeAllConnections();
       await new Promise<void>((done) => server.close(() => done()));
-      await saving;
+      await saving.catch(() => undefined);
     },
   };
 }

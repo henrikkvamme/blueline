@@ -1,6 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, request, type Server } from "node:http";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -241,6 +250,67 @@ describe("blueline serve", () => {
     expect((await fetch(`${url}${web.base}status`)).status).toBe(200);
     // A page cannot list them.
     expect((await raw("/blueline/apps", { origin: "http://localhost:1" })).status).toBe(403);
+  });
+});
+
+describe("blueline serve on bad input", () => {
+  const port = () => Number(url.split(":").at(-1));
+
+  it("leaves no registration open for a dev server that went before it opened", async () => {
+    const root = repository("went");
+    await new Promise<void>((done) => {
+      const sent = request(`${url}/blueline/register`, { method: "POST" });
+      sent.on("error", () => done());
+      sent.end(JSON.stringify({ root, origin: "http://localhost:7000" }), () => {
+        sent.destroy();
+        done();
+      });
+    });
+    await new Promise((done) => setTimeout(done, 200));
+    const other = await register(root, "http://localhost:7001", { feedback: "other.jsonl" });
+    expect(other.status).toBe(200);
+    expect(await preflight("/blueline/went/", "http://localhost:7000")).toBe(403);
+  });
+
+  it("answers a request target it cannot read, and keeps serving", async () => {
+    const reply = await new Promise<string>((done) => {
+      const socket = connect(port(), "127.0.0.1", () =>
+        socket.write(`GET http://[ HTTP/1.1\r\nHost: 127.0.0.1:${String(port())}\r\n\r\n`),
+      );
+      socket.once("data", (data) => {
+        done(data.toString());
+        socket.destroy();
+      });
+    });
+    expect(reply).toMatch(/^HTTP\/1.1 400/);
+    expect((await fetch(`${url}/blueline/health`)).status).toBe(200);
+  });
+
+  it("does not start on a state file it cannot read, and leaves the file", async () => {
+    const folder = mkdtempSync(path.join(base, "bad-"));
+    const file = path.join(folder, "apps.json");
+    const app = { name: "a", root: "/a", repository: "/a", files: null };
+    for (const text of ["{nope", "{}", JSON.stringify({ apps: [app] }), '{"apps":{}}']) {
+      writeFileSync(file, text);
+      await expect(serve({ port: 0, state: folder })).rejects.toThrow(/does not hold Blueline/);
+      expect(readFileSync(file, "utf8")).toBe(text);
+    }
+  });
+
+  it("does not start where it cannot keep its apps", async () => {
+    const taken = path.join(base, "a-file");
+    writeFileSync(taken, "");
+    await expect(serve({ port: 0, state: taken })).rejects.toThrow(/cannot (read|keep) its apps/);
+  });
+
+  it("refuses a registration it cannot keep", async () => {
+    const root = repository("unkept");
+    rmSync(state, { recursive: true, force: true });
+    writeFileSync(state, "");
+    const refused = await register(root, "http://localhost:1");
+    expect(refused.status).toBe(500);
+    rmSync(state);
+    mkdirSync(state);
   });
 });
 
