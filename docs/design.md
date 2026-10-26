@@ -902,10 +902,17 @@ groups.
      `blueline dev --host <host>`.
    - An HTTPS dev server (Vite's `--https` or `server.https`, Next.js's
      `--experimental-https`) is refused: the proxy speaks HTTP.
+   - A dev server's part that sets `NODE_OPTIONS` itself, by a `NAME=value` word or
+     `cross-env`, is refused, also with `--port`: it would drop the preload. The error
+     says to set `NODE_OPTIONS` in the environment instead, where the preload joins it.
 2. **Holding the port, and the preload.** The proxy listens on the page's port before the
    command starts. When the port is taken, `blueline dev` says so and starts nothing. The
-   command starts with `NODE_OPTIONS` plus `--import <preload>` and two variables: the
-   page's port and a file to report in. In each Node process of the command, the preload
+   command starts with `--require <preload>` first in `NODE_OPTIONS`, before the options
+   it had, and two variables: the page's port and a file to report in. Node runs each
+   `--require` before each `--import`, in order, so the preload runs before any other;
+   it is CommonJS with no imports but Node's, so `require` loads it at once. A server
+   that a preload of the app's own starts is outside what `blueline dev` moves. In each
+   Node process of the command, the preload
    wraps `net.Server.prototype.listen`: a listen on the page's port listens on port 0 on
    the host it asked for, and that server's `address()` gives the page's port, so the
    dev server's own lines, Vite's HMR client and Next.js's request URL
@@ -957,12 +964,13 @@ groups.
      name the dev server's bytes. As an HTML answer keeps no validator, a page request
      (one that accepts `text/html`) loses `if-none-match` and `if-modified-since`, so the
      browser never keeps a page from before `blueline dev` with no tag.
-   - **Where.** A small streaming scanner reads the HTML as a browser's tokenizer does in
-     the parts that matter: it skips comments, and the text of `script`, `style`,
-     `title`, `textarea`, `noscript`, `iframe`, `noembed`, `noframes` and `xmp` up to
-     their end tag. The tag goes in before the first `</head>` it finds, else before the
-     first `<body`, in any case. An answer with neither goes through with no tag, as an
-     HTML fragment.
+   - **Where.** A small streaming scanner reads the bytes with the states of a browser's
+     tokenizer that matter here: the data, a tag with its quoted and unquoted attribute
+     values, a comment, the raw text of `style`, `title`, `textarea`, `noscript`,
+     `iframe`, `noembed`, `noframes` and `xmp` up to their end tag, and a script's data
+     with its escaped and double-escaped states. The tag goes in before the first
+     `</head>` tag it finds, else before the first `<body` tag, in any case. An answer
+     with neither goes through with no tag, as an HTML fragment.
    - **Streaming.** The proxy sends each chunk on at once, but for the last bytes that
      could start a match, which wait for the next chunk; after the tag every byte goes on
      as it comes. A page that streams, as Next.js does, still streams, and a `</head>`,
@@ -976,10 +984,13 @@ groups.
      the registration, sends `SIGTERM` to the group, waits at most five seconds until no
      process is left in it, then sends `SIGKILL`. It exits with the command's code, or
      128 plus the signal's number. A command that fails to start stops in the same way.
-   - **When `blueline dev` dies.** A small guard process, in a group of its own, holds a
-     pipe from `blueline dev` and knows the command's group. When the pipe closes with no
-     word that the group is stopped, as when `blueline dev` gets `SIGKILL`, the guard
-     stops the group in the same way, then exits.
+   - **The guard.** A small Node process, in a group of its own, starts the command and
+     owns its group, so no moment is left when the group runs with no one to stop it.
+     `blueline dev` starts the guard with two pipes: on one it says `stop`, and on the
+     other the guard says the command's process ID, its end, and when the group is
+     stopped. The guard checks its pipe from `blueline dev` before it starts the command
+     and right after: when the pipe is closed, as when `blueline dev` got `SIGKILL`, it
+     starts nothing, or stops the group it started, then exits.
 7. **Tests.** In Node, with `blueline serve` on a free port and its own state folder and
    overlay, as the plugin's tests have. Each app is a folder in `test/.apps/` (ignored by
    git), so its commands find the repository's `node_modules`. `next` is a dev dependency
@@ -987,8 +998,10 @@ groups.
    - The command, as plain functions: the scripts of each package manager, extra words,
      the page's port from each place in its order, `--port=N`, a bare `--host`,
      `NAME=value` and `cross-env`, a part after `&&`, and each refusal.
-   - The scanner: a `</head>` in a comment, in a script's string and in a `title` is
-     skipped; each of them, and the `</head>` itself, split across chunks.
+   - The scanner: a `</head>` in a comment, in a script's string, in a script's
+     double-escaped data (`<!--<script></script></head>-->`), in a `title` and in a
+     quoted attribute is skipped; each of them, and the `</head>` itself, split at each
+     byte.
    - The proxy, on a plain Node server that the preload moves: gzip, br and deflate HTML
      get the tag and lose the headers above; a streamed page whose first part with the
      tag arrives before the server sends the rest; JSON and a 304 pass unchanged; a page
@@ -1008,6 +1021,11 @@ groups.
    - In Chromium (Playwright), for the Vite app and the Next.js app: the tag loads, its
      overlay mounts with the journeys of the app's `blueline.config.js`, which imports
      the config module.
+   - The preload with `NODE_OPTIONS` that has a `--require` and an `--import` of the
+     app's own: both run, and the page's port still moves. A script with
+     `NODE_OPTIONS=... next dev` is refused before it starts.
+   - The guard: its pipe closed before it starts the command, and right after, leaves no
+     process.
    - Stopping: after `SIGINT`, after `SIGTERM`, and after `SIGKILL` to `blueline dev`, for
      Vite and for Next.js, the page's port and the dev server's port take connections no
      more, and no process is left in the command's group. A command that fails to start (a
