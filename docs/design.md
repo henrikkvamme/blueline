@@ -1129,7 +1129,9 @@ each harness.
    agent, and the settles before it. A settle that leaves steps open does not end the
    wait; it waits, unclaimed, for the next line. The last settle, with `left: 0`, is the
    finish, and ends the wait alone. The call claims at once, and then each second when the
-   feedback file's size has changed.
+   feedback file's size or the claims file's size or time has changed: a line given back
+   (below) changes only the claims file. `listen` gets the same rule, so it too gets a line
+   given back with no new line after it.
    - **Lines.** One text result, one line for each claimed line, tagged as `listen` tags them
      (one shared function): `status`, `new`, `late`, or `old ... before you listened` for
      the first lines this server gives.
@@ -1154,7 +1156,9 @@ each harness.
        after its Effect ended: `unclaim` in `bin/wire.ts`, under the feedback file's lock. A
        line given back is no longer claimed and goes in the claims file's `returned`. A
        returned line is fresh for every reader, also behind its cursor, until one claims it
-       again; then it leaves `returned`. No cursor moves back, so a hook with the same name
+       again; then it leaves `returned`. `returned` is optional in the schema, and a file
+       with none, as W0 writes it, has none returned; a claim keeps the other fields as
+       they are. No cursor moves back, so a hook with the same name
        or a wake that claimed later lines in the meantime keeps its place, and still gets the
        returned line. A claim never moves a cursor back to a returned line. `unclaim` gives
        back only lines that the reader still holds, so a second call does nothing.
@@ -1197,7 +1201,10 @@ each harness.
      behind its cursor, and leaves `returned` when one claims it; a cursor never moves back;
      a second `unclaim` does nothing. The case from review: the agent pulls A, a hook with
      the same name claims B, a wake claims C, then the pull gives A back: the next claim,
-     by either, gets A once.
+     by either, gets A once. A claims file as W0 wrote it, with no `returned`, reads, and a
+     claim keeps its fields.
+   - A waiting call, and `listen`, get a line given back while they wait, with no new line
+     in the feedback file.
    - The handler, in Node with a fake signal and transport: a signal that aborts during the
      claim's write gives the lines back; one that aborts after the result went to the
      transport keeps them.
