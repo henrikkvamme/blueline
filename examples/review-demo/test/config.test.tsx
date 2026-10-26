@@ -209,6 +209,32 @@ describe("a config's step", () => {
   });
 });
 
+describe("a step the walk left", () => {
+  it("keeps no place for the tab when its function ends late", async () => {
+    let end = () => undefined as void;
+    const late = new Promise<void>((done) => (end = done));
+    page('<p id="b"></p>');
+    walk(
+      configOf(
+        step("a", { enter: () => late }),
+        step("b", { enter: [{ wait: "#b" }], ready: ["#b"] }),
+      ),
+    );
+    window.blueline?.start("j", "b");
+    await vi.waitFor(() =>
+      expect(JSON.parse(sessionStorage.getItem("config.review.walk") ?? "{}")).toMatchObject({
+        step: "b",
+        phase: "ready",
+      }),
+    );
+    end();
+    await new Promise((done) => setTimeout(done, 50));
+    expect(JSON.parse(sessionStorage.getItem("config.review.walk") ?? "{}")).toMatchObject({
+      step: "b",
+    });
+  });
+});
+
 describe("a config's actions on a React page", () => {
   function Form() {
     const [name, setName] = useState("");

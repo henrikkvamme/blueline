@@ -54,14 +54,17 @@ function phaseCode(
         fail(new Error(`${doing} in ${seconds(timeout)}`));
       }, timeout);
     });
+    // A phase the walk left, or that was too late, runs and keeps nothing more, as a function
+    // may end after its signal aborted.
     const run = async () => {
       for (const [i, unit] of units.entries()) {
+        if (own.signal.aborted) return;
         if (i < start) continue;
         keep(i);
         said("the action");
         await unit(own.signal, said);
       }
-      keep(units.length);
+      if (!own.signal.aborted) keep(units.length);
     };
     try {
       await Promise.race([run(), late]);
