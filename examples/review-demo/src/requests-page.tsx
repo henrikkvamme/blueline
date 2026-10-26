@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { money, REQUESTS, STATUSES, type Status } from "./data";
-import { Link } from "./link";
-import { requestPath } from "./router";
-import { StatusPill } from "./status";
+import { REQUESTS, STATUSES, type Status } from "./data";
+import { RequestRows } from "./request-rows";
 
 /** The list of requests, with a tab for each status. */
 export function RequestsPage() {
@@ -34,44 +32,7 @@ export function RequestsPage() {
           );
         })}
       </nav>
-      <table data-review="request-table" className="w-full text-left text-sm">
-        <thead className="text-slate-500">
-          <tr className="border-b border-slate-200">
-            <th className="py-2 pr-4 font-normal">Request</th>
-            <th className="py-2 pr-4 font-normal max-sm:hidden">Asked by</th>
-            <th className="py-2 pr-4 font-normal">Status</th>
-            <th className="py-2 pr-4 text-right font-normal">Waiting</th>
-            <th className="py-2 text-right font-normal">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} data-review={`request-${r.id}`} className="border-b border-slate-100">
-              <td className="py-3 pr-4">
-                <Link to={requestPath(r.id)} className="flex flex-col hover:underline">
-                  <span className="font-medium text-slate-900">{r.title}</span>
-                  <span className="text-slate-500 tabular-nums">{r.id}</span>
-                </Link>
-              </td>
-              <td className="py-3 pr-4 text-slate-700 max-sm:hidden">
-                {r.requester}
-                <span className="block text-slate-500">{r.team}</span>
-              </td>
-              <td className="py-3 pr-4">
-                <StatusPill status={r.status} />
-              </td>
-              <td className="py-3 pr-4 text-right text-slate-700 tabular-nums">
-                {r.status === "Waiting" ? (
-                  `${String(r.waiting)} d`
-                ) : (
-                  <span className="text-slate-300">-</span>
-                )}
-              </td>
-              <td className="py-3 text-right text-slate-900 tabular-nums">{money(r.amount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <RequestRows rows={rows} />
     </main>
   );
 }

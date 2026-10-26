@@ -4,8 +4,8 @@ import { navigate, requestPath } from "../router";
 
 /*
  * Blueline on the demo, in development only (app.tsx): one journey over both pages. A step
- * opens its page and waits for its part to show. The header's step names its part, so `v`
- * lifts the header's variants.
+ * opens its page and waits for its part to show. The rows' and the header's steps name
+ * their parts, so `v` lifts their variants.
  */
 
 const LIST = "/";
@@ -20,6 +20,7 @@ const JOURNEY: DevJourney<void> = {
       title: "The requests",
       group: { id: "list", title: "The list" },
       target: ["[data-review=request-table]"],
+      part: "Request rows",
       look: "Each row says what was asked for, by whom, and how long it waits.",
       try: "Alt+click a row that reads wrong, and write what you expected.",
     },
