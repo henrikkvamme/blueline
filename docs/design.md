@@ -1079,10 +1079,11 @@ each harness.
      journey.
    - `--status` is `status.json` beside the feedback file by default, as the server keeps
      them. `--src` is the working folder by default.
-   - `--wait` is the longest time one `wait_for_feedback` call waits: 240 s by default, from
+   - `--wait` is the longest time one `wait_for_feedback` call waits: 50 s by default, from
      1 to 3540. ADR 0005 sets it below the client's tool timeout less 10 s and the cache
-     lifetime less 60 s. `blueline setup` (C2) sets it for each harness. It is a flag, so no
-     tool or its words hold it.
+     lifetime less 60 s. Codex's tool timeout is 60 s by default, so 50 s fits a harness with
+     no setup. `blueline setup` (C2) raises the timeout and sets a longer wait for each
+     harness. It is a flag, so no tool or its words hold it.
    - Nothing but the protocol goes to stdout. Each tool returns its text; a message for a
      person goes to stderr.
 2. **The SDK.** The official TypeScript SDK, v2: `@modelcontextprotocol/server` 2.4.0, the
@@ -1111,7 +1112,7 @@ each harness.
      on it, call reply with state working and your plan, then reply with state replied. A
      settle before it only says where the review is. The settle with left 0 ends the review:
      apply the kept variants. Each line comes to you once, here or in a hook. When nothing
-     comes in some minutes, it says so: call it again to wait more."
+     comes for a while, it says so: call it again to wait more."
    - **`reply`**: `id` (string, required), `state` (`working`, `replied` or `settled`,
      required), `text`, `variant` and `blocks` (a list of objects). "Answers a line in the
      review panel, on its id. working: you are on it, and blocks is your plan, such as
@@ -1125,8 +1126,9 @@ each harness.
      which: call it again with keep."
 4. **How `wait_for_feedback` waits.** Each call claims through W0's `claim`, by the reader's
    name, with `listenerPick`, as `listen` does: the lines up to the last line that needs the
-   agent, and the settles before it. A settle alone does not end the wait; it waits,
-   unclaimed, for the next line. The call claims at once, and then each second when the
+   agent, and the settles before it. A settle that leaves steps open does not end the
+   wait; it waits, unclaimed, for the next line. The last settle, with `left: 0`, is the
+   finish, and ends the wait alone. The call claims at once, and then each second when the
    feedback file's size has changed.
    - **Lines.** One text result, one line for each claimed line, tagged as `listen` tags them
      (one shared function): `status`, `new`, `late`, or `old ... before you listened` for
@@ -1134,12 +1136,22 @@ each harness.
    - **Time.** At `--wait`, the call returns one fixed line: "Nothing new. Call
      wait_for_feedback again to wait more."
    - **Abort.** A client's `notifications/cancelled` aborts the request's signal, and the
-     wait stops. The pick reads the signal under the lock: an aborted call claims nothing.
-     The claim and the result after it cannot be interrupted. A cancel that comes after
-     the claim, in the time to write one message, loses those lines for this reader.
+     wait stops. The SDK sends no result for an aborted request, so lines that the call
+     claimed would be lost. Three rules close that gap:
+     - The wait for the lock, the sleep and the read stay interruptible. The write of the
+       claims cannot be interrupted, so a claim is whole or none (W0).
+     - The pick reads the signal under the lock: an aborted call claims nothing.
+     - After its claim, the call reads the signal again. When it is aborted, the call gives
+       the lines back: `unclaim` in `bin/wire.ts`, under the same lock, removes this reader's
+       claims on those lines and moves its cursor back, if no other claim by the same name
+       moved it since. An abort comes from stdin, an event, so it cannot come between that
+       check and the SDK's own check, which runs in the same turn of the event loop.
+     - What is left: the process is killed, or stdout fails, after the claim. Then the lines
+       are lost to this reader, at most once. The tests cover the parts that can be
+       reached.
    - **The client goes away.** When stdin ends, the SDK closes the transport and aborts
-     every request in flight, so no wait claims after it. `blueline mcp` then ends with
-     code 0. A signal ends it the same way.
+     every request in flight, so the rules above apply. `blueline mcp` then ends with code
+     0. A signal ends it the same way.
    - A line that one reader claimed is never another reader's (W0), so a line that the agent
      pulled does not come again by a wake, and a line that a wake took does not come here.
 5. **`reply` and `apply`** do what the commands do. The commands' code is split, so the
@@ -1162,13 +1174,20 @@ each harness.
      `listChanged: false`; a raw 2025 `initialize` and `tools/list` get the same tools, and
      no `list_changed` comes in the session.
    - A note that comes while the call waits ends it, with the settles before it, tagged; a
-     settle alone does not end it.
+     settle that leaves steps open does not end it; the finish alone ends it.
    - A line the agent pulled is not given again by a wake (`claim` by another reader), nor
-     by the next call. A line a wake took first is not given here.
+     by the next call, nor by a hook with the same reader name. A line a wake took first is
+     not given here. Both orders of a pull and a wake that run at once: each line goes to
+     one of them.
    - With `--wait 1`, the call returns the fixed line.
    - A call the client cancels claims nothing: a line that comes after goes to a wake.
+   - `unclaim`, as a unit: it gives the lines back to every reader, moves the cursor back,
+     and leaves the cursor when a claim by the same name moved it since. The handler, with a
+     signal that aborts during the claim: the lines go back, and a wake gets them.
    - When stdin ends during a wait, the process ends with code 0 within a second, and a
      line that comes after goes to a wake.
+   - A claims file that cannot be written: the call returns an error result, and the lines
+     stay for the next call.
    - `reply` writes the status file as the command does, for each state, also with blocks;
      each wrong input is an error result. `apply` returns the changes, says when there are
      no verdicts, and returns the "call it again with keep" error.
