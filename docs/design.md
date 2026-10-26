@@ -607,6 +607,50 @@ dashboard. Browser checks start with step 2.
    type in the composer, walk the tree with keys, open and choose in a menu, and lift a
    part, go through its variants on both lines and put one on the page.
 
+### A4 in steps
+
+A part is a place on the page, marked `data-blueline-part="<name>"`, and the code that draws
+it. An app of any framework gives that code to `part`, from the main entry and as
+`window.blueline.part`:
+
+```ts
+const rows = part("Request rows", {
+  variants: ["Table", "Cards"], // the first is the one the app ships
+  states: ["Empty"],
+  // Draws the part into `into`, as `shown` says, and returns what takes it out again.
+  show: (into, { variant, state }) => draw(into, variant, state),
+  // Who draws the marked element on the page: Blueline by default, or the app.
+  page: "blueline",
+});
+rows.shown(); // { variant, state }
+rows.subscribe(() => render()); // for `page: "app"`
+rows.dispose();
+```
+
+1. **The core part.** `src/part/part.ts`, with no React. A MutationObserver finds each
+   element marked with a declared part's name, and each one is an instance in the store, as
+   a React part is. The element's own content is the first variant with no state. While
+   the reviewer shows another, Blueline moves that content aside and calls `show` on the
+   element; back on the first, it puts the content back. With `page: "app"`, Blueline does
+   not touch the element: the app reads `shown` and draws it. While the part is lifted,
+   Blueline makes a light child of the lift's host for each option, with its slot, and
+   calls `show` into it; the cleanup runs when the option goes. An instance goes when its
+   element leaves the page, and `dispose` takes the part and its copies away.
+2. **Parts in markup.** An element marked `data-blueline-part` with `<template
+   data-blueline-variant="<label>">` children, and optionally `data-blueline-state`, is a
+   part with no code: its variants and states are its templates', and `show` clones the
+   template. The element's own content, outside the templates, is the first variant.
+3. **React on the same store.** `variants()` keeps drawing its copies with portals, so
+   each copy keeps the app's props and React context, and it registers through the same
+   store calls as `part`. The observer skips an element that a registered instance holds,
+   so a React part is never counted twice.
+4. **Tests.** Browser tests on a page with no React and no Tailwind: a part from code and
+   one from markup; `v` lifts each, its slots hold the copies `show` drew, Enter puts the
+   variant on the page, Escape on the first puts the page's content back, an element that
+   leaves the page ends its instance, and `dispose` removes the copies. The demo's React
+   tests still pass. `blueline apply` for a part outside `variants()` stays open (To
+   verify).
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.
