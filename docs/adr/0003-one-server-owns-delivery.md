@@ -1,3 +1,7 @@
+---
+status: superseded in part by 0005
+---
+
 # One server on the machine owns delivery
 
 Before this decision, an agent got notes only while it listened. A watcher that expired, or
