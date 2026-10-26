@@ -214,8 +214,9 @@ describe("the keys", () => {
     for (const view of ON_STEP) {
       const many = view.variants > 1;
       for (const zone of ["page", "control"] as const) {
-        expect(press(view, zone, "j")).toEqual(many ? variant(1) : undefined);
-        expect(press(view, zone, "k")).toEqual(many ? variant(-1) : undefined);
+        // j and k are the walk's on every step; with one variant they do nothing.
+        expect(press(view, zone, "j")).toEqual(variant(1));
+        expect(press(view, zone, "k")).toEqual(variant(-1));
       }
       expect(press(view, "page", "ArrowDown")).toEqual(many ? variant(1) : undefined);
       expect(press(view, "page", "ArrowUp")).toEqual(many ? variant(-1) : undefined);
@@ -225,9 +226,7 @@ describe("the keys", () => {
   it("show a variant by its number, 1 to 9", () => {
     for (const view of ON_STEP) {
       for (let n = 1; n <= 9; n++)
-        expect(press(view, "page", String(n))).toEqual(
-          view.variants > 1 ? { kind: "variantAt", at: n - 1 } : undefined,
-        );
+        expect(press(view, "page", String(n))).toEqual({ kind: "variantAt", at: n - 1 });
       // 0 builds the step's page again.
       expect(press(view, "page", "0")).toEqual({ kind: "event", event: { type: "reset" } });
     }
@@ -616,6 +615,13 @@ describe("the keys first", () => {
     expect(ownsKeys({ ...idle, layer: "go" })).toBe(true);
     expect(ownsKeys({ ...idle, aiming: true })).toBe(true);
     expect(ownsKeys(idle)).toBe(false);
+  });
+
+  it("take j, k and the digits on a step with one variant too, and leave it the arrows", () => {
+    const plain: View = { ...onStep, variants: 1 };
+    for (const key of ["j", "k", "1", "9"]) expect(first(plain, "page", key), key).toBeDefined();
+    expect(first(plain, "page", "ArrowDown")).toBeUndefined();
+    expect(first(plain, "page", "ArrowUp")).toBeUndefined();
   });
 
   it("take every key of a step's before the app, in the capture phase", () => {

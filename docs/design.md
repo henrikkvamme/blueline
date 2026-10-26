@@ -261,7 +261,7 @@ with the tree, the app gets each key first, and Blueline takes only what the app
 | off a step, nothing open | the page or a control                  | the app first; Blueline after, as before              |
 | any                      | any                                    | the app, for a key Blueline does not bind             |
 
-A key with Ctrl, Cmd or Alt that Blueline does not bind is the app's. Ctrl+B, Ctrl+R,
+On every step, `j`, `k` and the digits are Blueline's, also when the step has one variant, so they never move the app under the review. The arrows go to the page on such a step, where they scroll it. A key with Ctrl, Cmd or Alt that Blueline does not bind is the app's. Ctrl+B, Ctrl+R,
 Ctrl+Z, Cmd+Z, Ctrl+Shift+Z and Cmd+Shift+Z are Blueline's while it owns the keys. A control
 of the app's is a button, a link, a slider, tabs or another element that uses the key
 (`zoneOf` and `isControl`). An app that listens on `window` in the capture phase, and adds its

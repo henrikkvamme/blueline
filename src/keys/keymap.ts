@@ -122,12 +122,22 @@ export const BINDINGS: readonly Binding[] = [
     when: active,
     does: event({ type: "go", by: 1 }),
   },
+  // j, k and the digits are the walk's on every step, so they never move the app under the
+  // review. The arrows pass to the page on a step with one variant, where they scroll it.
   {
     keys: ["j", "ArrowDown"],
     label: "Next variant",
     group: "Review",
     zone: "page",
     when: varied,
+    does: { kind: "variant", by: 1 },
+  },
+  {
+    keys: ["j"],
+    label: "Next variant",
+    group: "Review",
+    zone: "page",
+    when: (v) => active(v) && !varied(v),
     does: { kind: "variant", by: 1 },
   },
   {
@@ -139,12 +149,20 @@ export const BINDINGS: readonly Binding[] = [
     does: { kind: "variant", by: -1 },
   },
   {
+    keys: ["k"],
+    label: "Previous variant",
+    group: "Review",
+    zone: "page",
+    when: (v) => active(v) && !varied(v),
+    does: { kind: "variant", by: -1 },
+  },
+  {
     keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
     shows: "1-9",
     label: "Show the variant with that number",
     group: "Review",
     zone: "page",
-    when: varied,
+    when: active,
     does: (k) => ({ kind: "variantAt", at: Number(k) - 1 }),
   },
   {
