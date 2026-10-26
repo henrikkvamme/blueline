@@ -119,7 +119,8 @@ right edge can still sit under the panel.
 ## Settle
 
 A settle goes on at once: the panel shows the next open step, and the step's row in the
-tree gets its check. At the same time, the part you settled shows that the settle took: its
+tree gets its check. The next open step is the first open one after the step you settled.
+With none after it, it is the journey's first open step. At the same time, the part you settled shows that the settle took: its
 outline turns green and a check draws in at its corner, then both fade. The light glides
 from that part to the next one and pulses once, so you see where to look next. The whole
 motion takes about 250 ms. On another page the light fades out, and in on the new part. A

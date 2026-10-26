@@ -1107,11 +1107,13 @@ export const sessionMachine = setup({
           if (step === undefined) return;
           const was: Feedback = context.feedback[step.id] ?? {};
           const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
-          /** The walk goes on to the next open step, or back to one before when none is
-           * after, from the page and from the tree alike: the walk and the selection go there. */
+          /** The walk goes on to the next open step, or back to the first open one when none
+           * is after, as a reader goes on from the top: from the page and from the tree alike,
+           * the walk and the selection go there. With no step open, it stays. */
           const goOn = (feedback: Readonly<Record<string, Feedback>>) => {
             const after = stepBy(ids, feedback, at, 1);
-            const next = after !== at ? after : stepBy(ids, feedback, at, -1);
+            const first = ids.findIndex((id) => feedback[id]?.settled !== true);
+            const next = after !== at ? after : first === -1 ? at : first;
             enqueue.assign({ cursor: next, row: undefined });
             if (next !== context.at) enqueue.raise({ type: "go", by: next - context.at });
           };

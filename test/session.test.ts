@@ -503,12 +503,19 @@ describe("a settle from the tree", () => {
     expect(s.context.chat).toBe(open.context.chat);
   });
 
-  it("goes back to an open step before when none is after", () => {
+  it("goes back to the first open step when none is after, as the dashboard's walk showed", () => {
+    // Settled from the tree: a and b are open, so the walk goes to a, not to b.
     let s = after(start(), { type: "choose" }, { type: "entered" });
     s = after(s, { type: "settle", step: 2 });
     expect(s.context.feedback["c"]?.settled).toBe(true);
-    expect(s.context.at).toBe(1);
-    expect(s.context.cursor).toBe(1);
+    expect(s.context.at).toBe(0);
+    expect(s.context.cursor).toBe(0);
+    // Settled on the page, from the last step.
+    const last = after(start(), { type: "choose" }, { type: "entered" }, { type: "jump", at: 2 });
+    const on = after(last, { type: "entered" }, { type: "settle" });
+    expect(on.context.feedback["c"]?.settled).toBe(true);
+    expect(on.context.at).toBe(0);
+    expect(on.context.cursor).toBe(0);
   });
 
   it("undoes the settle back to the step the page showed", () => {
@@ -890,7 +897,7 @@ describe("settling a step", () => {
     expect(on.context.past).toEqual(back.context.past);
   });
 
-  it("goes on to the next open step, or back to one before when none is after", () => {
+  it("goes on to the next open step, or back to the first open one when none is after", () => {
     const s = after(ready(), { type: "settle" });
     expect(s.context.feedback["a"]?.settled).toBe(true);
     expect(s.context.at).toBe(1);

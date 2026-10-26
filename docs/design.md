@@ -309,7 +309,7 @@ The variants stand in a list down the panel.
 ### Settle
 
 A settle goes on at once. The session settles the step, and the panel shows the next open
-step. The step's row in the tree gets its check. At the same time the old part shows that
+step: the first open one after it, or with none after, the journey's first open step. The step's row in the tree gets its check. At the same time the old part shows that
 the settle took: its outline turns green, a clear green and not the blue accent, and a check
 draws in at its corner. The outline and the check then fade, while the light glides from the
 old part to the new one. The whole motion takes about 250 ms. With reduced motion, nothing
