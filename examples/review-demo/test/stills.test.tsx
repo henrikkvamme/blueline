@@ -1,4 +1,7 @@
 import { mountPage } from "@henrikkvamme/blueline";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { Lift } from "../../../src/part/lift";
 import type { BluelineConfig, ConfigStep, ConfigVariant } from "@henrikkvamme/blueline/config";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -237,5 +240,103 @@ describe("the lift of a step's own variants", () => {
     expect(shows).not.toContain("List");
     await userEvent.keyboard("{Escape}");
     await down();
+  });
+  it("leaves nothing behind when the tools go while it copies", async () => {
+    const slow = showing("Cards", {
+      show: async () => {
+        document.body.className = "Cards";
+        await new Promise((done) => setTimeout(done, 300));
+      },
+    });
+    walk(configOf(step("a", { variants: [showing("Table"), slow] })));
+    await ready();
+    await userEvent.keyboard("v");
+    await vi.waitFor(() => expect(status()).toContain("Copying"));
+    window.blueline?.dispose();
+    await vi.waitFor(() => expect(document.querySelector("blueline-tools")).toBeNull());
+    mountPage({ storageKey: "stills.review", config: configOf(step("a")) });
+    await new Promise((done) => setTimeout(done, 800));
+    expect(document.querySelector("blueline-lift")).toBeNull();
+  });
+
+  it("says so when the first variant does not come back", async () => {
+    let tables = 0;
+    const once = showing("Table", {
+      show: async () => {
+        shows.push("Table");
+        tables += 1;
+        if (tables > 1) throw new Error("no table");
+        document.body.className = "Table";
+      },
+    });
+    walk(configOf(step("a", { variants: [once, showing("Cards")] })));
+    await ready();
+    await userEvent.keyboard("v");
+    await vi.waitFor(() => expect(status()).toContain("Table did not come back"));
+    expect(holders()).toHaveLength(0);
+    await userEvent.keyboard("{Escape}");
+    await down();
+  });
+
+  it("keeps the variant chosen while the page takes a while to show it", async () => {
+    let slow = false;
+    const cards = showing("Cards", {
+      show: async () => {
+        shows.push("Cards");
+        document.body.className = "Cards";
+        if (slow) await new Promise((done) => setTimeout(done, 400));
+      },
+    });
+    walk(configOf(step("a", { variants: [showing("Table"), cards, showing("List")] })));
+    await ready();
+    await userEvent.keyboard("v");
+    await lifted();
+    slow = true;
+    await userEvent.keyboard("l");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("l");
+    // While it lands, the lift still shows Cards in the middle, as the page will.
+    expect(lift()?.querySelector('[aria-label="Use Cards"]')).not.toBeNull();
+    expect(lift()?.querySelector('[aria-label="Use List"]')).toBeNull();
+    await down();
+    expect(document.body.className).toBe("Cards");
+    const tools = document.querySelector("blueline-tools")?.shadowRoot;
+    await vi.waitFor(() => expect(tools?.textContent).toContain("Keep Cards"));
+  });
+});
+
+describe("the lift, under React's StrictMode", () => {
+  it("puts the part down once the page shows the variant chosen", async () => {
+    const at = document.createElement("div");
+    document.body.append(at);
+    const root = createRoot(at);
+    const done = vi.fn();
+    root.render(
+      <StrictMode>
+        <Lift
+          id="strict"
+          title="the rows"
+          variants={["Table", "Cards"]}
+          states={["As it is"]}
+          start={{ variant: "Table", state: 0 }}
+          from={new DOMRect(0, 0, 100, 40)}
+          hug={false}
+          onDrop={undefined}
+          onUndo={() => undefined}
+          onNote={undefined}
+          note={undefined}
+          noted={[]}
+          onPut={() => Promise.resolve()}
+          where={() => new DOMRect(0, 0, 100, 40)}
+          onDone={done}
+        />
+      </StrictMode>,
+    );
+    await vi.waitFor(() =>
+      expect(lift()?.querySelector('[aria-label="Use Table"]')).not.toBeNull(),
+    );
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+    root.unmount();
   });
 });

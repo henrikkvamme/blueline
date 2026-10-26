@@ -140,6 +140,41 @@ describe("a still copy", () => {
     ]);
   });
 
+  it("keeps a fixed child at its place in a scaled parent", () => {
+    const at = page(
+      '<div id="target" style="width: 120px; height: 120px"><div style="transform: scale(2); transform-origin: 0 0; width: 40px; height: 40px"><p id="pinned" style="position: fixed; left: 10px; top: 10px; margin: 0">x</p></div></div>',
+    );
+    const target = at.querySelector("#target");
+    const pinned = at.querySelector("#pinned");
+    if (target === null || pinned === null) throw new Error("No target");
+    const { copy } = shown([target]);
+    const kept = copy?.querySelector("#pinned")?.getBoundingClientRect();
+    const box = copy?.getBoundingClientRect();
+    const was = pinned.getBoundingClientRect();
+    const from = target.getBoundingClientRect();
+    expect(
+      [(kept?.left ?? 0) - (box?.left ?? 0), (kept?.top ?? 0) - (box?.top ?? 0)].map(Math.round),
+    ).toEqual([was.left - from.left, was.top - from.top].map(Math.round));
+  });
+
+  it("keeps the size of an inline element out of the box, so a scrolled line stays put", () => {
+    const at = page(
+      '<div id="target" style="width: 200px; overflow-x: auto; white-space: nowrap"><span>Far to the left, out of sight</span> <b id="seen">Seen</b> and more words after it, to scroll</div>',
+    );
+    const target = at.querySelector("#target");
+    const seen = at.querySelector("#seen");
+    if (target === null || seen === null) throw new Error("No target");
+    target.scrollLeft = 180;
+    const { copy } = shown([target]);
+    const list = copy?.firstElementChild;
+    expect(list?.scrollLeft).toBe(target.scrollLeft);
+    const kept = copy?.querySelector("#seen")?.getBoundingClientRect();
+    const box = copy?.getBoundingClientRect();
+    expect(Math.round((kept?.left ?? 0) - (box?.left ?? 0))).toBe(
+      Math.round(seen.getBoundingClientRect().left - target.getBoundingClientRect().left),
+    );
+  });
+
   it("keeps an SVG's own gradient and symbol, once the page's go", () => {
     const at = page(`
       <svg id="target" width="40" height="20">

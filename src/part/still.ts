@@ -191,6 +191,8 @@ function drawnOf(el: Element): readonly Node[] {
 
 /** Where a fixed element stood in the box, put back once the copy is shown. */
 const AT = "data-blueline-at";
+/** How far a fixed element moves to measure its containing block's scale, in px. */
+const PROBE = 100;
 /** How many elements a still copies at most. */
 export const MOST_ELEMENTS = 20_000;
 
@@ -253,8 +255,21 @@ function copyOf(
   if (node instanceof HTMLTextAreaElement || node instanceof HTMLIFrameElement) return shell;
   if (node instanceof HTMLCanvasElement || node instanceof HTMLVideoElement) return shell;
   // An element out of the box keeps its size, so what follows it keeps its place, and not
-  // what it holds: a long page costs what shows.
-  if (parent !== undefined && style.position !== "fixed" && outside(rect, box)) return shell;
+  // what it holds: a long page costs what shows. An inline one takes its size from what it
+  // holds, so it keeps that.
+  if (
+    parent !== undefined &&
+    style.position !== "fixed" &&
+    style.display !== "inline" &&
+    style.display !== "contents" &&
+    outside(rect, box)
+  ) {
+    shell.setAttribute(
+      "style",
+      `${shell.getAttribute("style") ?? ""};width:${style.width}!important;height:${style.height}!important`,
+    );
+    return shell;
+  }
   const before = node.namespaceURI === SVG ? undefined : pseudoOf(node, "::before", made, style);
   if (before !== undefined) shell.append(before);
   for (const child of drawnOf(node)) {
@@ -347,16 +362,28 @@ export function showStill(still: Still, into: Element): HTMLElement | undefined 
   const box = copy.getBoundingClientRect();
   // The lift may draw the copy at another scale than the page's.
   const scale = still.width > 0 ? box.width / still.width : 1;
-  const moves = [...copy.querySelectorAll(`[${AT}]`)].map((el) => {
-    const [x = 0, y = 0] = (el.getAttribute(AT) ?? "").split(" ").map(Number);
+  const where = (el: Element) => {
     const rect = el.getBoundingClientRect();
-    return { el, x: x - (rect.left - box.left) / scale, y: y - (rect.top - box.top) / scale };
-  });
-  for (const { el, x, y } of moves) {
+    return { x: (rect.left - box.left) / scale, y: (rect.top - box.top) / scale };
+  };
+  for (const el of copy.querySelectorAll(`[${AT}]`)) {
     if (!(el instanceof HTMLElement || el instanceof SVGElement)) continue;
+    const [x = 0, y = 0] = (el.getAttribute(AT) ?? "").split(" ").map(Number);
     const style = getComputedStyle(el);
-    el.style.setProperty("left", `${String(parseFloat(style.left) + x)}px`, "important");
-    el.style.setProperty("top", `${String(parseFloat(style.top) + y)}px`, "important");
+    const left = parseFloat(style.left);
+    const top = parseFloat(style.top);
+    const place = (l: number, t: number) => {
+      el.style.setProperty("left", `${String(l)}px`, "important");
+      el.style.setProperty("top", `${String(t)}px`, "important");
+    };
+    // A move of 100 px shows how far a px goes in its containing block, which can be
+    // scaled in the copy; then it moves by what is left, in that block's px.
+    const was = where(el);
+    place(left + PROBE, top + PROBE);
+    const moved = where(el);
+    const across = (moved.x - was.x) / PROBE || 1;
+    const down = (moved.y - was.y) / PROBE || 1;
+    place(left + (x - was.x) / across, top + (y - was.y) / down);
   }
   return copy;
 }

@@ -252,16 +252,18 @@ export function Lift({
   // page shows it first, under the stage, so the part lands where that option stands, which
   // differs when the option differs in size.
   const [down, setDown] = useState<At>();
+  const going = useRef(false);
   const live = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    live.current = true;
+    return () => {
       live.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
   const finish = (chosen: At | undefined) => {
     if (leaving) return;
     setLeaving(true);
+    going.current = true;
     // Closed, the stage first shows the part as the page has it, at once, then lowers it.
     if (chosen === undefined) setAt(start);
     const put = onPut(chosen ?? start);
@@ -292,10 +294,14 @@ export function Lift({
     return () => cancelAnimationFrame(frame);
   }, [down]);
 
-  const go = (to: Axis, i: number) =>
-    setAt((a) =>
-      to === "variant" ? { ...a, variant: variants[i] ?? a.variant } : { ...a, state: i },
-    );
+  // Once the part goes down, the option chosen stays, also while the page takes a while to
+  // show it, and a move that waited for a turn does not change it.
+  const go = (to: Axis, i: number) => {
+    if (!going.current)
+      setAt((a) =>
+        to === "variant" ? { ...a, variant: variants[i] ?? a.variant } : { ...a, state: i },
+      );
+  };
   // A move on the other way first turns to it, and moves once the turn is drawn.
   const pick = (to: Axis, i: number) => {
     if (to === axis) go(to, i);
@@ -459,7 +465,7 @@ export function Lift({
       // The lift takes every key while it is up, so the walk's keys wait under it.
       e.preventDefault();
       e.stopImmediatePropagation();
-      keys[e.key]?.();
+      if (!going.current) keys[e.key]?.();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

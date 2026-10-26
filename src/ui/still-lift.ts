@@ -79,16 +79,24 @@ export function liftStill(actor: SessionActor, info: DevInfo, judge: Judge) {
   const going = new AbortController();
   const first = labels[snapshot.context.variants[step.id] ?? 0] ?? labels[0] ?? "";
   const ours = () => parts.current().lifting?.id === id;
-  // The lift goes when the walk leaves the step, and the copying stops.
-  const watch = actor.subscribe((s) => {
-    if (there(s, place)) return;
+  const end = () => {
     going.abort();
     stopping.abort();
-    if (ours()) parts.land();
+  };
+  // The lift goes when the walk leaves the step or the tools go, and the copying stops.
+  const watch = actor.subscribe({
+    next: (s) => {
+      if (there(s, place)) return;
+      end();
+      if (ours()) parts.land();
+    },
+    complete: end,
+    error: end,
   });
-  // The lift went: as Close or Use put it down.
+  // The lift went, as Close or Use put it down or the tools went: nothing of it goes on.
   const landed = parts.subscribe(() => {
     if (ours()) return;
+    end();
     watch.unsubscribe();
     landed();
   });

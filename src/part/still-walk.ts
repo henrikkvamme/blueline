@@ -121,9 +121,17 @@ export async function copyVariants({
   onCopying(undefined);
   walk.peek(undefined);
   if (!gone.aborted) {
-    // A first variant that fails to come back says why on the step's mark.
-    await walk.ready(undefined, gone).catch(() => undefined);
-    if (!gone.aborted) window.scrollTo(scroll.x, scroll.y);
+    try {
+      await walk.ready(undefined, gone);
+      window.scrollTo(scroll.x, scroll.y);
+    } catch (error) {
+      // The page may still show another variant: the lift says so, and has no copies.
+      if (!gone.aborted)
+        copied = {
+          kind: "failed",
+          reason: `${first} did not come back: ${error instanceof Error ? error.message : String(error)}`,
+        };
+    }
   }
   return gone.aborted && copied.kind === "copied" ? { kind: "stopped" } : copied;
 }
