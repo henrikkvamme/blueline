@@ -1137,18 +1137,30 @@ each harness.
      wait_for_feedback again to wait more."
    - **Abort.** A client's `notifications/cancelled` aborts the request's signal, and the
      wait stops. The SDK sends no result for an aborted request, so lines that the call
-     claimed would be lost. Three rules close that gap:
-     - The wait for the lock, the sleep and the read stay interruptible. The write of the
-       claims cannot be interrupted, so a claim is whole or none (W0).
-     - The pick reads the signal under the lock: an aborted call claims nothing.
-     - After its claim, the call reads the signal again. When it is aborted, the call gives
-       the lines back: `unclaim` in `bin/wire.ts`, under the same lock, removes this reader's
-       claims on those lines and moves its cursor back, if no other claim by the same name
-       moved it since. An abort comes from stdin, an event, so it cannot come between that
-       check and the SDK's own check, which runs in the same turn of the event loop.
-     - What is left: the process is killed, or stdout fails, after the claim. Then the lines
-       are lost to this reader, at most once. The tests cover the parts that can be
-       reached.
+     claimed would be lost. These rules close that gap:
+     - The wait for the lock and the sleep stay interruptible. The work under the lock, from
+       the read to the write of the claims, cannot be interrupted, so a claim is whole or
+       none (W0). The pick reads the signal there: an aborted call claims nothing.
+     - **A receipt.** `claim` takes an optional `claimed` callback, which it calls with the
+       lines it took right after the write, in the same part that cannot be interrupted. The
+       call keeps them as its receipt, also when the abort makes its Effect fail after the
+       write.
+     - **Delivered** means that the transport got the call's result. `bin/mcp.ts` wraps the
+       stdio transport's `send`, and marks each request ID that it sends a result or an
+       error for. The SDK reads the signal and then calls `send` in one step, so for each
+       call one of two things is true: the result went to the transport, or the signal
+       aborted first and the SDK never sends it.
+     - When the signal aborts and the result did not go, the call gives its receipt back,
+       after its Effect ended: `unclaim` in `bin/wire.ts`, under the feedback file's lock. A
+       line given back is no longer claimed and goes in the claims file's `returned`. A
+       returned line is fresh for every reader, also behind its cursor, until one claims it
+       again; then it leaves `returned`. No cursor moves back, so a hook with the same name
+       or a wake that claimed later lines in the meantime keeps its place, and still gets the
+       returned line. A claim never moves a cursor back to a returned line. `unclaim` gives
+       back only lines that the reader still holds, so a second call does nothing.
+     - What is left: the process is killed, or stdout fails, after the result went to the
+       transport. Then the lines are lost to this reader, at most once. The tests cover the
+       parts that can be reached.
    - **The client goes away.** When stdin ends, the SDK closes the transport and aborts
      every request in flight, so the rules above apply. `blueline mcp` then ends with code
      0. A signal ends it the same way.
@@ -1181,9 +1193,14 @@ each harness.
      one of them.
    - With `--wait 1`, the call returns the fixed line.
    - A call the client cancels claims nothing: a line that comes after goes to a wake.
-   - `unclaim`, as a unit: it gives the lines back to every reader, moves the cursor back,
-     and leaves the cursor when a claim by the same name moved it since. The handler, with a
-     signal that aborts during the claim: the lines go back, and a wake gets them.
+   - `unclaim` and `returned`, as units: a returned line is fresh for every reader, also
+     behind its cursor, and leaves `returned` when one claims it; a cursor never moves back;
+     a second `unclaim` does nothing. The case from review: the agent pulls A, a hook with
+     the same name claims B, a wake claims C, then the pull gives A back: the next claim,
+     by either, gets A once.
+   - The handler, in Node with a fake signal and transport: a signal that aborts during the
+     claim's write gives the lines back; one that aborts after the result went to the
+     transport keeps them.
    - When stdin ends during a wait, the process ends with code 0 within a second, and a
      line that comes after goes to a wake.
    - A claims file that cannot be written: the call returns an error result, and the lines
