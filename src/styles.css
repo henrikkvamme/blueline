@@ -79,16 +79,6 @@
   }
 }
 
-/* The ring of a send that waits: it empties as the time to undo it runs out. */
-@keyframes dt-countdown {
-  from {
-    stroke-dashoffset: 0;
-  }
-  to {
-    stroke-dashoffset: 1;
-  }
-}
-
 /* The check draws in, from its start to its end. */
 @keyframes dt-draw {
   from {

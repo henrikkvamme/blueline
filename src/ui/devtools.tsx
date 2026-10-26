@@ -304,15 +304,9 @@ export function DevTools<C>({
       // A light that never shows, as in the preview, does not wait to turn.
       window.setTimeout(() => settling.turned(turned.step), TURN_WAIT);
     });
-    // A send taken back puts its words back to write again: in its card, or the message
-    // field. A Finish taken back shows the finish.
-    const unsent = actor.on("unsent", (e) => {
-      if (!e.finish) focusComposer();
-    });
     return () => {
       done.unsubscribe();
       sub.unsubscribe();
-      unsent.unsubscribe();
     };
   }, [actor]);
   // The parts on the page show the reviewer's verdicts, as a deleted variant leaves the

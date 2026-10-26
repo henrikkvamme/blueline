@@ -35,9 +35,6 @@ import {
   type Keep,
   type Kept,
   type PartVerdicts,
-  type Pending,
-  type PostData,
-  type PostSession,
   type Shape,
 } from "./state";
 
@@ -101,14 +98,7 @@ export interface Context extends Kept {
   /** What `u` takes back, the newest last, and what Ctrl+R does again. */
   readonly past: readonly Change[];
   readonly future: readonly Change[];
-  /** When the session started, in ms: a send that waits through a reload goes when its time
-   * comes, measured from here. */
-  readonly startedAt: number;
 }
-
-/** How long a send waits before its lines are written, in ms, so the reviewer can take it
- * back: a message, a pin's note sent from its card, and Finish. */
-export const SEND_MS = 5000;
 
 /**
  * One action to take back: the notes and feedback it changed, as they were before. Undo
@@ -120,8 +110,6 @@ export interface Change {
   readonly feedback: readonly (readonly [step: string, feedback: Feedback | undefined])[];
   /** The step the change was on, for a settle: the walk went on, so undo goes back. */
   readonly at?: number | undefined;
-  /** A send that waits (Pending), by its ID: undo takes it back before it is written. */
-  readonly send?: string | undefined;
 }
 
 export type Event =
@@ -180,13 +168,7 @@ export type Event =
       readonly step: string;
       readonly at: number;
       readonly text?: string | undefined;
-      /** The pin whose card sent it, with no words of its own: its undo opens the card. */
-      readonly card?: string | undefined;
     }
-  /** A send's wait is over: its lines are written. */
-  | { readonly type: "due"; readonly id: string }
-  /** Takes back a send that waits: nothing is written, and its words and pins go back. */
-  | { readonly type: "unsend"; readonly id: string }
   | { readonly type: "noteEvent"; readonly id: string; readonly event: NoteEvent }
   | { readonly type: "remove"; readonly id: string }
   | { readonly type: "failed"; readonly ids: readonly string[] }
@@ -260,10 +242,7 @@ export type Emitted =
   | { readonly type: "unvaried" }
   /** The last open step of the journey settled: the review ended, and the tools show the
    * page. */
-  | { readonly type: "done"; readonly journey: string }
-  /** A send that waited was taken back: its words are back in the message field, or in the
-   * card of `card`, to write again. */
-  | { readonly type: "unsent"; readonly card: string | undefined; readonly finish: boolean };
+  | { readonly type: "done"; readonly journey: string };
 
 /**
  * What the post actor sends the agent, at once: a chat's message with the pointed notes in
@@ -275,7 +254,7 @@ export interface Post {
   readonly ids: readonly string[];
   /** The step, for a settle. */
   readonly step?: string | undefined;
-  readonly session: PostSession;
+  readonly session: Context;
   /** A post sent once this one is, in its order, with the posts after it. */
   readonly next?: Post | undefined;
   /** For the settle that Finish sends: the hand-off's ID, which the agent answers. */
@@ -492,73 +471,6 @@ function turnedLines(
 /** How many actions `u` can take back. */
 const HISTORY = 50;
 
-/** The parts of the session that a line is written from, and no more, so a send that waits
- * keeps only what it needs through a reload. */
-const sessionOf = (c: PostSession): PostSession => ({
-  journey: c.journey,
-  variants: c.variants,
-  feedback: c.feedback,
-  notes: c.notes,
-  finish: c.finish,
-});
-
-/** A chain of posts as a list, in its order, to keep. */
-const listOf = (post: Post | undefined): readonly PostData[] =>
-  post === undefined
-    ? []
-    : [
-        {
-          kind: post.kind,
-          ids: post.ids,
-          ...(post.step === undefined ? {} : { step: post.step }),
-          ...(post.handoff === undefined ? {} : { handoff: post.handoff }),
-          session: sessionOf(post.session),
-        },
-        ...listOf(post.next),
-      ];
-
-/** The list of posts as one chain again, sent in its order. */
-const chainOf = (posts: readonly PostData[]): Post | undefined =>
-  posts.reduceRight<Post | undefined>((next, post) => ({ ...post, next }), undefined);
-
-/** The send's words put back where they came from: the message leaves its chat, its words
- * and screenshots go back to the chat's field, and its pins wait on their elements again.
- * A reply that came meanwhile, or a later message, stays. */
-function takenBack(c: Context, p: Pending) {
-  let notes = c.notes;
-  for (const [id, before] of p.before.notes) {
-    const now = notes.find((n) => n.id === id);
-    let next: Note | undefined;
-    if (id === p.chat?.id) {
-      const at = p.chat.at;
-      const sent = now?.thread.find((m) => m.by === "you" && m.at === at);
-      const thread = (now?.thread ?? []).filter((m) => m !== sent);
-      const words = sent?.text ?? "";
-      const draft = [words, now?.draft ?? ""].filter((w) => w !== "").join("\n");
-      const images = [...(sent?.images ?? []), ...(now?.images ?? [])];
-      const base =
-        before !== null && before.thread.length === thread.length
-          ? before
-          : (now ?? blankNote(id, before?.step ?? ""));
-      const { images: _, ...rest } = base;
-      next = { ...rest, thread, draft, ...(images.length === 0 ? {} : { images }) };
-      if (next.thread.length === 0 && next.draft === "" && before === null) next = undefined;
-      // A pin sent with it waits on its element again; a hand-off it made goes.
-    } else next = before === null ? undefined : (now ?? before);
-    notes =
-      next === undefined
-        ? notes.filter((n) => n.id !== id)
-        : now === undefined
-          ? [...notes, next]
-          : notes.map((n) => (n.id === id ? next : n));
-  }
-  const feedback = { ...c.feedback };
-  for (const [step, f] of p.before.feedback)
-    if (f === null) delete feedback[step];
-    else feedback[step] = f;
-  return { notes, feedback };
-}
-
 /** What an event changes that `u` can take back; undefined when it is not undoable. */
 function changeOf(c: Context, event: Event): Change | undefined {
   const note = (id: string, label: string): Change => ({
@@ -649,32 +561,6 @@ function restore(c: Context, change: Change) {
   return { notes, feedback };
 }
 
-/** Whether the event writes lines at once: then the sends that wait go first, so the agent
- * reads every line in its order. A settle that only goes on, and an undo that takes back a
- * send, write none. */
-function writesNow(c: Context, e: Event): boolean {
-  switch (e.type) {
-    case "settle": {
-      const step = stepOf(c, e.step ?? c.at);
-      return (
-        step !== undefined &&
-        (c.feedback[step.id]?.settled !== true || changesKept(c, step, e.keep))
-      );
-    }
-    case "undo":
-      return c.past.at(-1)?.send === undefined && c.past.length > 0;
-    case "redo":
-      return c.future.length > 0;
-    case "start":
-      return passOf(c, e).length > 0;
-    case "reopen":
-    case "back":
-      return true;
-    default:
-      return false;
-  }
-}
-
 export const sessionMachine = setup({
   types: {
     context: {} as Context,
@@ -705,19 +591,6 @@ export const sessionMachine = setup({
     readsNoReplies: ({ context }) => !readsReplies(context),
   },
   actions: {
-    // The sends that wait go now, before the lines of this event.
-    flush: enqueueActions(({ context, event, enqueue }) => {
-      if (context.pending.length === 0 || !writesNow(context, event)) return;
-      for (const p of context.pending) {
-        enqueue.cancel(p.id);
-        const input = chainOf(p.posts);
-        if (input !== undefined) enqueue.spawnChild("post", { id: p.id, input });
-      }
-      enqueue.assign(({ context: now }) => ({
-        pending: [],
-        past: now.past.filter((change) => change.send === undefined),
-      }));
-    }),
     remember: assign(({ context, event }) => {
       const change = changeOf(context, event);
       return change === undefined
@@ -769,15 +642,6 @@ export const sessionMachine = setup({
     turn: enqueueActions(({ context, event, enqueue }) => {
       const redo = event.type === "redo";
       const change = (redo ? context.future : context.past).at(-1);
-      // A send that waits is the newest change: undo takes it back, before it is written.
-      // After a reload no change is kept, and undo takes back the newest send that waits.
-      const send = redo
-        ? undefined
-        : (change?.send ?? (change === undefined ? context.pending.at(-1)?.id : undefined));
-      if (send !== undefined) {
-        enqueue.raise({ type: "unsend", id: send });
-        return;
-      }
       if (change === undefined) {
         enqueue.emit({ type: "nothing", redo });
         return;
@@ -865,15 +729,6 @@ export const sessionMachine = setup({
     posts: 0,
     past: [],
     future: [],
-    startedAt: input.now,
-  }),
-  // The sends that waited through a reload go when their time comes, or at once.
-  entry: enqueueActions(({ context, enqueue }) => {
-    for (const p of context.pending)
-      enqueue.raise(
-        { type: "due", id: p.id },
-        { id: p.id, delay: Math.max(0, p.due - context.startedAt) },
-      );
   }),
   on: {
     listening: { actions: assign({ listened: ({ event }) => event.listened }) },
@@ -923,50 +778,8 @@ export const sessionMachine = setup({
         }),
       ],
     },
-    undo: { actions: ["flush", "turn"] },
-    redo: { actions: ["flush", "turn"] },
-    // A send's wait is over: its lines go, and undo takes it back no more.
-    due: {
-      actions: enqueueActions(({ context, event, enqueue }) => {
-        const p = context.pending.find((x) => x.id === event.id);
-        if (p === undefined) return;
-        enqueue.assign({
-          pending: context.pending.filter((x) => x.id !== p.id),
-          past: context.past.filter((change) => change.send !== p.id),
-        });
-        const input = chainOf(p.posts);
-        if (input !== undefined) enqueue.spawnChild("post", { id: p.id, input });
-      }),
-    },
-    // A send taken back before it went: nothing is written. Its words go back to the field
-    // and its pins to their elements; a pin's card opens again. A Finish taken back shows the
-    // finish again.
-    unsend: {
-      actions: enqueueActions(({ context, event, enqueue }) => {
-        const p = context.pending.find((x) => x.id === event.id);
-        if (p === undefined) return;
-        enqueue.cancel(p.id);
-        const { notes, feedback } = takenBack(context, p);
-        enqueue.assign({
-          notes,
-          feedback,
-          pending: context.pending.filter((x) => x.id !== p.id),
-          past: context.past.filter((change) => change.send !== p.id),
-        });
-        const finish = p.before.finish;
-        if (finish !== undefined) {
-          enqueue.assign({ finish, handoff: null });
-          enqueue.raise({
-            type: "start",
-            journey: context.journey,
-            at: p.before.at ?? context.at,
-            fresh: false,
-          });
-        }
-        if (p.card !== undefined) enqueue.raise({ type: "pin", id: p.card });
-        enqueue.emit({ type: "unsent", card: p.card, finish: finish !== undefined });
-      }),
-    },
+    undo: { actions: "turn" },
+    redo: { actions: "turn" },
     posted: { actions: stopChild(({ event }) => event.child) },
     clear: {
       actions: [
@@ -1056,51 +869,24 @@ export const sessionMachine = setup({
           step?.settled === true
             ? { ...context.feedback, [event.step]: { ...step, settled: false } }
             : context.feedback;
+        enqueue.assign({ notes, feedback });
+        enqueue.assign({ posts: context.posts + 1 });
         const session = { ...context, notes, feedback };
         const note: Post = { kind: "note", ids, session };
         // The step opened again goes first, so the agent reads the message on an open step.
         // The last settle, which waits for Finish, never went: it has no line to take back.
-        const chain: Post =
-          step?.settled === true && context.finish?.step !== event.step
-            ? { kind: "settle", ids: [], step: event.step, session, next: note }
-            : note;
-        // It waits before it is written, so the reviewer can take it back.
-        const id = `send-${String(event.at)}-${String(context.posts)}`;
-        const taken = context.notes.filter(
-          (n) => n.id === event.id || (!notes.some((o) => o.id === n.id) && n.step === event.step),
-        );
-        const pending: Pending = {
-          id,
-          due: event.at + SEND_MS,
-          posts: listOf(chain),
-          chat: { id: event.id, at: event.at },
-          ...(event.card === undefined ? {} : { card: event.card }),
-          before: {
-            notes: [
-              [event.id, context.notes.find((n) => n.id === event.id) ?? null],
-              ...taken.filter((n) => n.id !== event.id).map((n) => [n.id, n] as const),
-            ],
-            feedback: step?.settled === true ? [[event.step, step]] : [],
-          },
-        };
-        enqueue.assign({
-          notes,
-          feedback,
-          posts: context.posts + 1,
-          pending: [...context.pending, pending],
-          past: [
-            ...context.past,
-            { label: "Sent a message", notes: [], feedback: [], send: id },
-          ].slice(-HISTORY),
-          future: [],
+        enqueue.spawnChild("post", {
+          id: `post-${context.posts}`,
+          input:
+            step?.settled === true && context.finish?.step !== event.step
+              ? { kind: "settle", ids: [], step: event.step, session, next: note }
+              : note,
         });
-        enqueue.raise({ type: "due", id }, { id, delay: SEND_MS });
       }),
     },
     settle: {
       actions: [
         "remember",
-        "flush",
         enqueueActions(({ context, event, enqueue }) => {
           const at = event.step ?? context.at;
           const step = stepOf(context, at);
@@ -1201,7 +987,6 @@ export const sessionMachine = setup({
     reopen: {
       actions: [
         "remember",
-        "flush",
         enqueueActions(({ context, event, enqueue }) => {
           const step = stepOf(context, event.step ?? context.at);
           if (step === undefined || context.feedback[step.id]?.settled !== true) return;
@@ -1249,43 +1034,21 @@ export const sessionMachine = setup({
       actions: enqueueActions(({ context, event, enqueue }) => {
         const held = context.finish;
         if (held === null) return;
-        const at = event.at ?? 0;
-        const handoff = newHandoff(context.journey, at);
+        const handoff = newHandoff(context.journey, event.at ?? 0);
         const notes = [...context.notes.filter((n) => n.id !== handoff.id), handoff];
+        enqueue.assign({ finish: null, posts: context.posts + 1, notes });
         const session = { ...context, finish: null, notes };
-        // It waits before it is written, as a message does: undo shows the finish again.
-        const id = `send-${String(at)}-${String(context.posts)}`;
-        const pending: Pending = {
-          id,
-          due: at + SEND_MS,
-          posts: listOf({
+        enqueue.spawnChild("post", {
+          id: `post-${context.posts}`,
+          input: {
             kind: "settle",
             ids: [],
             step: held.step,
             session,
             handoff: handoff.id,
             next: held.ids.length === 0 ? undefined : { kind: "note", ids: held.ids, session },
-          }),
-          handoff: handoff.id,
-          before: {
-            notes: [[handoff.id, context.notes.find((n) => n.id === handoff.id) ?? null]],
-            feedback: [],
-            finish: held,
-            at: context.at,
           },
-        };
-        enqueue.assign({
-          finish: null,
-          posts: context.posts + 1,
-          notes,
-          pending: [...context.pending, pending],
-          past: [
-            ...context.past,
-            { label: "Finished the review", notes: [], feedback: [], send: id },
-          ].slice(-HISTORY),
-          future: [],
         });
-        enqueue.raise({ type: "due", id }, { id, delay: SEND_MS });
         enqueue.raise({ type: "leave" });
         enqueue.assign({ handoff: handoff.id });
         enqueue.emit({ type: "done", journey: context.journey });
@@ -1310,34 +1073,31 @@ export const sessionMachine = setup({
     // and the notes the chat shows as sent go now.
     back: {
       guard: ({ context }) => context.finish !== null,
-      actions: [
-        "flush",
-        enqueueActions(({ context, enqueue }) => {
-          const held = context.finish;
-          if (held === null) return;
-          const last = context.past.at(-1);
-          // The settle that settled it, not a change of the variant it kept.
-          if (
-            last?.at !== undefined &&
-            last.feedback[0]?.[0] === held.step &&
-            last.feedback[0][1]?.settled !== true
-          ) {
-            enqueue.raise({ type: "undo" });
-            return;
-          }
-          const feedback = {
-            ...context.feedback,
-            [held.step]: { ...context.feedback[held.step], settled: false },
-          };
-          enqueue.assign({ feedback, finish: null });
-          if (held.ids.length === 0) return;
-          enqueue.assign({ posts: context.posts + 1 });
-          enqueue.spawnChild("post", {
-            id: `post-${context.posts}`,
-            input: { kind: "note", ids: held.ids, session: { ...context, feedback, finish: null } },
-          });
-        }),
-      ],
+      actions: enqueueActions(({ context, enqueue }) => {
+        const held = context.finish;
+        if (held === null) return;
+        const last = context.past.at(-1);
+        // The settle that settled it, not a change of the variant it kept.
+        if (
+          last?.at !== undefined &&
+          last.feedback[0]?.[0] === held.step &&
+          last.feedback[0][1]?.settled !== true
+        ) {
+          enqueue.raise({ type: "undo" });
+          return;
+        }
+        const feedback = {
+          ...context.feedback,
+          [held.step]: { ...context.feedback[held.step], settled: false },
+        };
+        enqueue.assign({ feedback, finish: null });
+        if (held.ids.length === 0) return;
+        enqueue.assign({ posts: context.posts + 1 });
+        enqueue.spawnChild("post", {
+          id: `post-${context.posts}`,
+          input: { kind: "note", ids: held.ids, session: { ...context, feedback, finish: null } },
+        });
+      }),
     },
     drop: {
       actions: [
@@ -1377,7 +1137,6 @@ export const sessionMachine = setup({
               target: "on",
               actions: [
                 "remember",
-                "flush",
                 "anotherPass",
                 assign({
                   journey: ({ event }) => event.journey,
@@ -1408,7 +1167,6 @@ export const sessionMachine = setup({
               reenter: true,
               actions: [
                 "remember",
-                "flush",
                 "anotherPass",
                 assign({
                   journey: ({ event }) => event.journey,

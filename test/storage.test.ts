@@ -30,6 +30,14 @@ describe("the review kept in the browser", () => {
     expect(loadKept("kept").handoff).toBeNull();
   });
 
+  it("loads a review kept with sends that waited, and lets that field go", () => {
+    // A version that waited five seconds before a send kept the sends in `pending`.
+    stored({ journey: "prep", at: 2, pending: [{ id: "send-1-0", due: 5001, posts: [] }] });
+    const kept = loadKept("kept");
+    expect(kept).toMatchObject({ journey: "prep", at: 2 });
+    expect("pending" in kept).toBe(false);
+  });
+
   it("keeps a pointed note not sent, and lets a sent one go, as its chat has it", () => {
     stored({
       notes: [

@@ -13,7 +13,6 @@ import { Blocks } from "./blocks";
 import { cx } from "./cx";
 import { useImageUrl } from "./images";
 import { pinTone } from "./overlays";
-import { Sending, useWaits } from "./sending";
 import { now, useSession, useTools } from "./session";
 
 /*
@@ -23,7 +22,7 @@ import { now, useSession, useTools } from "./session";
 /**
  * The chat with the agent on a step or a page, one for each: the reviewer's messages on the
  * right, each with the pointed notes sent in it, and the agent's answers as plain text, as a
- * chat shows them. A message whose send waits is faint, with "Sending" and Undo under it.
+ * chat shows them.
  */
 export function Thread({
   note,
@@ -35,10 +34,6 @@ export function Thread({
 }) {
   const { actor } = useTools();
   const unread = note?.unread === true ? note.id : undefined;
-  const waiting = useSession(
-    (s) => s.context.pending.filter((p) => note !== undefined && p.chat?.id === note.id),
-    (a, b) => a.length === b.length && a.every((p, i) => p === b[i]),
-  );
   useEffect(() => {
     if (unread !== undefined)
       actor.send({ type: "noteEvent", id: unread, event: { type: "read" } });
@@ -52,29 +47,21 @@ export function Thread({
   if (note === undefined || count === 0) return null;
   return (
     <ol ref={list} className={cx("flex flex-col gap-2 overflow-y-auto", className)}>
-      {note.thread.map((m, i) => {
-        if (m.by !== "you") return <Reply key={String(i)} note={note} at={i} />;
-        const pending = waiting.find((p) => p.chat?.at === m.at);
-        return (
+      {note.thread.map((m, i) =>
+        m.by === "you" ? (
           <li key={String(i)} className="flex max-w-[85%] flex-col items-end gap-1 self-end">
-            <div
-              className={cx(
-                "flex flex-col items-end gap-1 transition-opacity duration-150",
-                pending !== undefined && "opacity-55",
-              )}
-            >
-              <Images images={m.images ?? []} end />
-              {m.text !== "" && (
-                <span className="rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5 whitespace-pre-wrap">
-                  <Written text={m.text} images={m.images ?? []} />
-                </span>
-              )}
-              <SentPins pins={m.pins ?? []} />
-            </div>
-            {pending !== undefined && <Sending pending={pending} />}
+            <Images images={m.images ?? []} end />
+            {m.text !== "" && (
+              <span className="rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5 whitespace-pre-wrap">
+                <Written text={m.text} images={m.images ?? []} />
+              </span>
+            )}
+            <SentPins pins={m.pins ?? []} />
           </li>
-        );
-      })}
+        ) : (
+          <Reply key={String(i)} note={note} at={i} />
+        ),
+      )}
     </ol>
   );
 }
@@ -170,8 +157,6 @@ function SentPins({ pins }: { readonly pins: readonly SentPin[] }) {
  */
 export function NoteState({ note }: { readonly note: Note | undefined }) {
   const state = note?.state;
-  // While its send waits, the message itself says "Sending".
-  const waits = useWaits(note?.id);
   // A note on a page goes to the page's own review.
   const unheard = useSession(
     (s) =>
@@ -182,7 +167,6 @@ export function NoteState({ note }: { readonly note: Note | undefined }) {
   );
   if (note === undefined || state === undefined || state === "new" || state === "replied")
     return null;
-  if (waits && state === "waiting") return null;
   const line = (
     <span className="flex h-4 items-center gap-1.5 text-[11px] text-dt-muted">
       {state === "waiting" && (

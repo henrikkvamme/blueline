@@ -7,7 +7,6 @@ import { allSettled } from "./progress";
 import { Thread } from "./composer";
 import { cx } from "./cx";
 import { useNotes, useSession, useStep, useTools } from "./session";
-import { Sending, usePending } from "./sending";
 import { Foot, KEEP_FOCUS } from "./step-controls";
 
 /*
@@ -16,8 +15,7 @@ import { Foot, KEEP_FOCUS } from "./step-controls";
  * review ends only when the reviewer finishes it; the last settle waits until then, so the
  * agent wakes once. The foot holds Back, which opens the last step again as Escape and u do,
  * in the place of the step before, and Finish review in the place of Settle. Once finished,
- * the hand-off takes its place: the same rows, and what the agent does with the review. For
- * the first seconds it says "Sending to the agent", with Undo, which shows the finish again.
+ * the hand-off takes its place: the same rows, and what the agent does with the review.
  */
 
 /** What the review kept and sent, as rows: the variant kept of each part, and what was sent.
@@ -119,19 +117,15 @@ export function HandoffView({ note }: { readonly note: Note }) {
   const journeyId = handoffJourney(note.step) ?? "";
   const journey = adapter.journeys.find((j) => j.id === journeyId);
   const steps = journey?.steps ?? [];
-  // The Finish waits before it goes: Undo shows the finish again.
-  const pending = usePending({ handoff: note.id });
-  const title = pending === undefined ? "Sent to the agent" : "Sending to the agent";
   return (
-    <section aria-label={title} className="flex min-h-0 flex-1 flex-col max-sm:flex-initial">
+    <section
+      aria-label="Sent to the agent"
+      className="flex min-h-0 flex-1 flex-col max-sm:flex-initial"
+    >
       <div className={BODY}>
-        <Head title={title} line={`${allSettled(steps.length)}.`} />
+        <Head title="Sent to the agent" line={`${allSettled(steps.length)}.`} />
         <Summary steps={steps} />
-        {pending === undefined ? (
-          <AgentAnswer note={note} journey={journeyId} />
-        ) : (
-          <Sending pending={pending} className="mt-6" />
-        )}
+        <AgentAnswer note={note} journey={journeyId} />
       </div>
       <Foot>
         <button

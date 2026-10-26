@@ -62,7 +62,7 @@ function Opened() {
         escapeTo="page"
         onDone={(how) => {
           actor.send({ type: "close" });
-          if (how === "enter" && isKept(note)) sendPins(actor, note.step, note.id);
+          if (how === "enter" && isKept(note)) sendPins(actor, note.step);
         }}
       />
     </div>

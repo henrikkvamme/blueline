@@ -87,14 +87,6 @@ export const useNotes = () => useSession((s) => s.context.notes);
 /** The time now, for the session's events. */
 export const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
-/** Sends the step's pointed notes now, with no words: the step's own draft waits. `card` is
- * the pin whose card sent them: an undo opens it again. */
-export const sendPins = (actor: SessionActor, step: string, card?: string) =>
-  actor.send({
-    type: "send",
-    id: stepNoteId(step),
-    step,
-    at: now(),
-    text: "",
-    ...(card === undefined ? {} : { card }),
-  });
+/** Sends the step's pointed notes now, with no words: the step's own draft waits. */
+export const sendPins = (actor: SessionActor, step: string) =>
+  actor.send({ type: "send", id: stepNoteId(step), step, at: now(), text: "" });

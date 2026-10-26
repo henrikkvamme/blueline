@@ -404,7 +404,6 @@ export const KEPT: Kept = {
   folds: {},
   finish: null,
   handoff: null,
-  pending: [],
 };
 
 /** A note in each state, for the line that says where a note is. */

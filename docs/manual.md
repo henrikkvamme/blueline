@@ -364,19 +364,6 @@ Each page has its own chat and annotations, by its path. An app whose router kee
 address's path, as in its hash, gives `DevTools` the page's `path`, and a `navigate` that
 goes to a path, so the tree's pages go there.
 
-## Undo a send
-
-Each send waits five seconds before the agent gets it: a message, an annotation sent from its
-card, and Finish review. The message shows in its chat at once, faint, with a ring that
-empties, **Sending** and **Undo**. After Finish, the hand-off says "Sending to the agent"
-with Undo. In that time, Undo, `u`, Ctrl+Z or Cmd+Z takes the send back: nothing goes to the
-agent. A message's words go back to the message field, and its annotations back to their pins.
-An annotation goes back to its card, which opens. Finish's Undo shows the finish again. When
-the five seconds pass, the line goes, and the message looks as any other. Each send has its
-own wait and its own Undo. A reload keeps a send that waits: it goes at once if its time
-passed, else when the time is up. A settle, Open the step again, undo of another change and
-Back from the finish write their lines at once, so a send that waits goes first.
-
 ## Review a page
 
 A page with `variants` parts needs no journey. The tree lists the journey **This page** first,

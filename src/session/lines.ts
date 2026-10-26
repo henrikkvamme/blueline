@@ -1,8 +1,8 @@
 import type { Note } from "../notes/note";
 import { PAGE_JOURNEY, placePath } from "../part/page";
 import type { DevJourney } from "../types";
-import type { Post } from "./machine";
-import { heardFeedback, openPlace, type PostSession } from "./state";
+import type { Context, Post } from "./machine";
+import { heardFeedback, openPlace } from "./state";
 
 /*
  * What the agent reads in the feedback file, as it happens: a chat's message with the step
@@ -14,10 +14,10 @@ import { heardFeedback, openPlace, type PostSession } from "./state";
  * agent stops work on it.
  */
 
-const journeyOf = <C>(journeys: readonly DevJourney<C>[], session: PostSession) =>
+const journeyOf = <C>(journeys: readonly DevJourney<C>[], session: Context) =>
   journeys.find((j) => j.id === session.journey) ?? journeys[0];
 
-function lineOf<C>(journey: DevJourney<C> | undefined, session: PostSession, n: Note) {
+function lineOf<C>(journey: DevJourney<C> | undefined, session: Context, n: Note) {
   // A page's chat: its place is the page.
   const path = placePath(n.step);
   if (path !== undefined)
@@ -40,7 +40,7 @@ function lineOf<C>(journey: DevJourney<C> | undefined, session: PostSession, n: 
 
 /** The variants the reviewer kept and deleted in the step's parts (part/variants.tsx), with
  * the command that applies them to the code; none when the step has no verdicts. */
-function partsOf(session: PostSession, step: string) {
+function partsOf(session: Context, step: string) {
   const parts = session.feedback[step]?.parts;
   if (parts === undefined || Object.keys(parts).length === 0) return {};
   return {
@@ -51,7 +51,7 @@ function partsOf(session: PostSession, step: string) {
 
 /** The step's own variant (DevStep.variants) that the settle kept. It has no `variants()` call
  * for `blueline apply` to change, so the line tells the agent to make it the app's own. */
-function keptVariantOf(session: PostSession, step: string) {
+function keptVariantOf(session: Context, step: string) {
   const variant = session.feedback[step]?.variant;
   if (variant === undefined) return {};
   return {
