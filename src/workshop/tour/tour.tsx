@@ -95,7 +95,7 @@ const TOUR: DevJourney<undefined> = {
     {
       id: "tour.step",
       title: "A step",
-      look: "A review walks a journey of steps. The panel says what to look at, and the light shows where. The switch above its chat says whose chat you write in: the step's, or the page's.",
+      look: "A review walks a journey of steps. The panel says what to look at, and the light shows where. The chat under the step is the step's; the page's chat is at the chat's top once it has messages.",
       try: "Press j for the next step, and k to come back. Tab switches the chat to the page and back.",
       group: walk,
       target: ["[data-tour=title]"],

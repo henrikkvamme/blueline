@@ -49,10 +49,19 @@ too. The walk stays where it was, so the journey's row opens it again on the sam
 ## The panel
 
 The panel stands at the right, and the page narrows by its width, so the panel covers
-nothing. On a step it shows, from the top: the tree folded to one line, with the journey and
-the group; the step's header, with the step before and after, the step's number and title,
-and Settle; the step's words; and the step's chat, with the message field at the bottom.
-Off a step it shows the tree and the page's chat in the same place.
+nothing. Its top line holds the journey's title, the journey's progress, **More** and the
+button that hides the panel. The title unfolds the tree. The progress has a dot for each
+step: green when settled, grey when open, and a wider blue pill for the step shown. More holds
+Reset the step, Hide the tools, Undo and the keys (`?`).
+
+On a step, the step fills the rest of the panel. A faint line gives the step's number and
+group. Under it are the step's title, what to look at and what to try. When the step has
+more than one variant, the **Variants** list shows them as rows, with **Lift** at its right.
+The raised row is the variant that the page shows. A click on a row shows that variant, as
+`h` and `l` do. Then comes the step's chat, which scrolls, and the message field. At the
+foot are the step before, **Settle** and the step after. The foot stays in one place from
+step to step. A click on a variant row, Lift, an arrow or Settle leaves the focus where it
+was, so Enter settles next. Off a step, the panel shows the tree and the page's chat.
 
 The button at the panel's top right and Ctrl+B hide the panel, and show it again. Hiding
 changes only the view: the walk stays on its step, and the light stays on the part. The
@@ -91,9 +100,11 @@ When the last open step settles, the review does not end at once. The panel show
 finish in place of the step: how many steps are settled, the variant kept of each part, and
 how many notes went to the agent. **Finish review**, or Enter, ends the review: the tools go
 back to the page, a short message says the journey is done, and the journey goes down to
-**Settled**. **Back**, Escape or `u` opens the last step again. The Enter that settled the
+**Settled**. The back arrow, where the step before was, Escape or `u` opens the last step
+again. The Enter that settled the
 last step does not also finish: Finish takes only an Enter pressed after the finish shows.
-A reload keeps the finish.
+A reload keeps the finish. Each change of a step's settled state, undo and redo too, writes
+the step's settle line, so the agent always knows which steps are settled.
 
 After Finish, `u` takes the last settle back and opens its step again. The tree keeps the
 open journeys on top, and the journeys with every step settled at its foot, folded, under
@@ -101,9 +112,10 @@ open journeys on top, and the journeys with every step settled at its foot, fold
 with every step settled opens all its steps again from its row, or from `g j`, for another
 pass; a step's row opens that one step and keeps the journey settled.
 
-On a step, the switch above the chat says whose chat you write in: **Step** or **Page**. A click
-or Tab switches it, also in the message field, so you write on the page and keep your
-place in the journey. Alt+click writes its note in the same chat.
+On a step, the chat is the step's. Once the page's chat has messages, a quiet button at the
+chat's top opens it, so you write on the page and keep your place in the journey; **Back to
+the step** returns. Tab in the message field switches too, also before the page's chat has
+messages. Alt+click writes its note in the chat that shows.
 
 ## The g menu
 
@@ -122,7 +134,7 @@ bar, and its tree stays folded until you tap its line. Hidden, it folds to the b
 takes the screen's width in the same place. The note card stands above the bar as a sheet.
 A swipe to the left or the right across the lit part shows the next or the previous
 variant, as `l` and `h` do. The step arrows in the sheet and the bar go to the step before
-and after, and their check settles: the light turns green above the sheet, as on a wide
+and after. Settle, between the arrows in the sheet's foot and a check in the bar, settles: the light turns green above the sheet, as on a wide
 screen. When the sheet would cover the light's corner, the page scrolls the part up once.
 Every button there is at least 44 px. On the lift, a swipe across goes through the variants, and a swipe up or down goes
 through the states. The pin in the message field points at an element for a note, as
@@ -226,9 +238,10 @@ variant shown on the page, `d` deletes one, `u` undoes, `i` writes a note on the
 shown, and `R` goes to the next variant with a note. Settling the step with `y` keeps the
 variant the page shows, sends the step's notes not sent yet, and goes on to the next open
 step, also from the tree or the Settle button; `y` on a settled step opens it again and
-keeps none. The last open step settled asks you to finish the review, as "Settle" says. The bar says
-how many variants the step has, and a tab on the light's edge shows which one the page
-shows, a dot for each; on a step with none, `v` says so.
+keeps none. The last open step settled asks you to finish the review, as "Settle" says. The
+panel lists the variants as rows, and a click on a row shows that one. The bar says how many
+variants the step has, and a tab on the light's edge shows which one the page shows, a dot
+for each; on a step with none, `v` says so.
 
 A variant is a way the part could look; a state is what it could show. Give a part's
 states as patches in `variants`, so the lift draws them side by side. A step's own

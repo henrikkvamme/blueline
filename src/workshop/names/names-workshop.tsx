@@ -22,7 +22,7 @@ const PARTS: readonly Term[] = [
   {
     id: "panel",
     name: "Panel",
-    what: "On the right, and the page makes room: the tree, the step, the chat. Its switch says whose chat.",
+    what: "On the right, and the page makes room: the tree, the step, its variants, the chat, and Settle at its foot.",
   },
   {
     id: "tree",

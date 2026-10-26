@@ -80,8 +80,8 @@ _Avoid_: Response, comment
 ## On the screen
 
 **Panel**:
-The one Blueline column at the right of the page. It holds the tree, the step's header, the
-step's words and the chat. The page narrows by its width, so it covers nothing. On a phone
+The one Blueline column at the right of the page. It holds the tree, the step's words, its
+variants, the chat and Settle. The page narrows by its width, so it covers nothing. On a phone
 it is a sheet at the bottom.
 _Avoid_: Sidebar, step card, page card, drawer
 

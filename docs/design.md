@@ -158,11 +158,29 @@ app's own code at Levels 2 and 3 finds it there, and the app does not bundle the
 
 Agreed on 2026-10-25, after Henrik's first review of the demo app.
 
-- **One panel.** The step card moves into the sidebar. The panel shows the step's header
-  (the step before and after, the step's number and title, Settle), the step's words, and
-  the step's chat with its message field. While a step is open, the tree of pages and
-  journeys folds to one line at the panel's top. Off a step, the panel shows the page's
-  chat in the same place.
+- **One panel.** The step card moves into the sidebar. The panel is calm: one accent, flat
+  tints, few text sizes, and no key labels. The keys are in the `?` menu.
+- **Its top line.** The journey's title, in muted text, is a button that unfolds the tree.
+  After it come the journey's progress as dots, one for each step: green when settled, grey
+  when open, and the step shown as a wider blue pill. Then **More** and **Hide**. More holds
+  Reset the step, Hide the tools (the preview), Undo and the `?` keys. Hide stays visible,
+  beside Ctrl+B.
+- **The step fills the panel.** A faint line gives the step's number and group. Under it are
+  the step's title, large, then what to look at and what to try, in muted words.
+- **One control for the variants.** When the step has more than one variant, of its part or
+  its own, a **Variants** list shows them as radio rows, with a quiet **Lift** at its right.
+  The row of the variant shown is raised. A click on a row shows that variant on the page, as
+  `h` and `l` do. A deleted variant has no row. The states show only in the lift.
+- **The chat fills the rest, and scrolls.** It is the step's chat. When the page's chat has
+  messages, a quiet button at the chat's top opens it, and **Back to the step** returns. Tab
+  in the message field also switches.
+- **A fixed foot.** Under the message field, a bar holds the step before, Settle and the step
+  after. Settle is the one primary button, as wide as the room between the arrows. On a
+  settled step it reads **Settled** in green, keeps its width, and opens the step again. The
+  foot does not move from step to step. A click on a step control leaves the focus where it
+  was, so Enter still settles.
+- **Off a step**, the panel shows the tree and the page's chat, with the same top line, type
+  sizes, row height and radius.
 - **The panel pushes the page aside.** The page narrows by the panel's width, so the
   panel covers nothing. One visible button on the panel and Ctrl+B hide it and show it
   again. An element that the app pins to the right edge can still sit under the panel.
@@ -220,10 +238,16 @@ fades, with no glide or pulse.
 
 The last settle does not end the walk. The panel shows the finish in place of the step:
 "All 5 steps settled", the kept variant of each part, the number of notes sent, a primary
-**Finish review** and a quiet **Back**. Enter presses Finish, but only an Enter pressed
-after the finish shows. Back, Escape and undo open the last step again. The last step's
+**Finish review**, with a send icon, in the place of Settle, and a back arrow in the place of
+the step before. Enter presses Finish, but only an Enter pressed after the finish shows. The
+back arrow, Escape and undo open the last step again. The last step's
 settle line, the one with `left: 0`, waits until Finish, so the agent wakes once. A reload
 keeps the finish.
+
+Each change of a step's settled state writes the step's settle line: a settle, Settle on a
+settled step, undo, redo, another pass over a settled journey, and a message on a settled
+step. Each line counts the steps left after it. So the agent never keeps a settle that the
+page took back. Only the last settle waits, for Finish, and has no line until then.
 
 The tree keeps the open journeys on top. The settled ones stand folded at its foot, under a
 quiet **Settled** heading; a finished journey moves there with a short motion, and back up
