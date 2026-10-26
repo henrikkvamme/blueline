@@ -13,6 +13,7 @@ import { Blocks } from "./blocks";
 import { cx } from "./cx";
 import { useImageUrl } from "./images";
 import { pinTone } from "./overlays";
+import { Sending, useWaits } from "./sending";
 import { now, useSession, useTools } from "./session";
 
 /*
@@ -22,7 +23,7 @@ import { now, useSession, useTools } from "./session";
 /**
  * The chat with the agent on a step or a page, one for each: the reviewer's messages on the
  * right, each with the pointed notes sent in it, and the agent's answers as plain text, as a
- * chat shows them.
+ * chat shows them. A message whose send waits is faint, with "Sending" and Undo under it.
  */
 export function Thread({
   note,
@@ -34,6 +35,10 @@ export function Thread({
 }) {
   const { actor } = useTools();
   const unread = note?.unread === true ? note.id : undefined;
+  const waiting = useSession(
+    (s) => s.context.pending.filter((p) => note !== undefined && p.chat?.id === note.id),
+    (a, b) => a.length === b.length && a.every((p, i) => p === b[i]),
+  );
   useEffect(() => {
     if (unread !== undefined)
       actor.send({ type: "noteEvent", id: unread, event: { type: "read" } });
@@ -47,38 +52,56 @@ export function Thread({
   if (note === undefined || count === 0) return null;
   return (
     <ol ref={list} className={cx("flex flex-col gap-2 overflow-y-auto", className)}>
-      {note.thread.map((m, i) =>
-        m.by === "you" ? (
+      {note.thread.map((m, i) => {
+        if (m.by !== "you") return <Reply key={String(i)} note={note} at={i} />;
+        const pending = waiting.find((p) => p.chat?.at === m.at);
+        return (
           <li key={String(i)} className="flex max-w-[85%] flex-col items-end gap-1 self-end">
-            <Images images={m.images ?? []} end />
-            {m.text !== "" && (
-              <span className="rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5 whitespace-pre-wrap">
-                <Written text={m.text} images={m.images ?? []} />
-              </span>
-            )}
-            <SentPins pins={m.pins ?? []} />
+            <div
+              className={cx(
+                "flex flex-col items-end gap-1 transition-opacity duration-150",
+                pending !== undefined && "opacity-55",
+              )}
+            >
+              <Images images={m.images ?? []} end />
+              {m.text !== "" && (
+                <span className="rounded-dt-control bg-dt-raised px-2.5 py-1.5 text-[13px] leading-5 whitespace-pre-wrap">
+                  <Written text={m.text} images={m.images ?? []} />
+                </span>
+              )}
+              <SentPins pins={m.pins ?? []} />
+            </div>
+            {pending !== undefined && <Sending pending={pending} />}
           </li>
-        ) : (
-          <li key={String(i)} className="flex flex-col gap-1.5 text-[13px] leading-[1.45]">
-            {m.text !== "" && <span className="whitespace-pre-wrap">{m.text}</span>}
-            {m.blocks !== undefined && (
-              <Blocks blocks={m.blocks} note={note} after={note.thread.slice(i + 1)} />
-            )}
-            {m.variant !== undefined && (
-              <button
-                type="button"
-                onClick={() =>
-                  actor.send({ type: "showVariant", step: note.step, label: m.variant ?? "" })
-                }
-                className="self-start rounded-dt-mark bg-dt-raised px-1.5 py-px text-[11px] text-dt-text hover:bg-dt-line max-sm:min-h-11 max-sm:px-3 max-sm:text-[14px]"
-              >
-                Show “{m.variant}”
-              </button>
-            )}
-          </li>
-        ),
-      )}
+        );
+      })}
     </ol>
+  );
+}
+
+/** One answer of the agent's in the chat, as plain text, with its blocks and its variant. */
+function Reply({ note, at }: { readonly note: Note; readonly at: number }) {
+  const { actor } = useTools();
+  const m = note.thread[at];
+  if (m === undefined) return null;
+  return (
+    <li className="flex flex-col gap-1.5 text-[13px] leading-[1.45]">
+      {m.text !== "" && <span className="whitespace-pre-wrap">{m.text}</span>}
+      {m.blocks !== undefined && (
+        <Blocks blocks={m.blocks} note={note} after={note.thread.slice(at + 1)} />
+      )}
+      {m.variant !== undefined && (
+        <button
+          type="button"
+          onClick={() =>
+            actor.send({ type: "showVariant", step: note.step, label: m.variant ?? "" })
+          }
+          className="self-start rounded-dt-mark bg-dt-raised px-1.5 py-px text-[11px] text-dt-text hover:bg-dt-line max-sm:min-h-11 max-sm:px-3 max-sm:text-[14px]"
+        >
+          Show “{m.variant}”
+        </button>
+      )}
+    </li>
   );
 }
 
@@ -147,6 +170,8 @@ function SentPins({ pins }: { readonly pins: readonly SentPin[] }) {
  */
 export function NoteState({ note }: { readonly note: Note | undefined }) {
   const state = note?.state;
+  // While its send waits, the message itself says "Sending".
+  const waits = useWaits(note?.id);
   // A note on a page goes to the page's own review.
   const unheard = useSession(
     (s) =>
@@ -157,6 +182,7 @@ export function NoteState({ note }: { readonly note: Note | undefined }) {
   );
   if (note === undefined || state === undefined || state === "new" || state === "replied")
     return null;
+  if (waits && state === "waiting") return null;
   const line = (
     <span className="flex h-4 items-center gap-1.5 text-[11px] text-dt-muted">
       {state === "waiting" && (
@@ -623,6 +649,8 @@ export function Composer({
               }
               if (e.key !== "Enter" || e.shiftKey) return;
               e.preventDefault();
+              // A held Enter sends once: its repeats do nothing.
+              if (e.repeat) return;
               // A pointed note kept for the next message: it waits on its pin.
               if (!sends && (e.metaKey || e.ctrlKey)) {
                 leave("later");

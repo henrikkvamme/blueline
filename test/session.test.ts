@@ -3,11 +3,13 @@ import {
   createActor,
   fromCallback,
   initialTransition,
+  SimulatedClock,
   transition,
   type SnapshotFrom,
 } from "xstate";
 import { isWithAgent } from "../src/notes/note";
 import {
+  SEND_MS,
   sessionMachine,
   stepNoteId,
   treeShown,
@@ -292,7 +294,11 @@ describe("the review session", () => {
     });
     expect(sent.context.notes.some((n) => n.id === "p1")).toBe(false);
     expect(sent.context.notes.find((n) => n.id === stepNoteId("b"))?.state).toBe("waiting");
-    expect(actions.some((a) => a.type === "xstate.spawnChild")).toBe(true);
+    // It waits before it goes, and goes once its time comes.
+    expect(actions.some((a) => a.type === "xstate.spawnChild")).toBe(false);
+    const id = sent.context.pending[0]?.id ?? "";
+    const [, due] = transition(sessionMachine, sent, { type: "due", id });
+    expect(due.some((a) => a.type === "xstate.spawnChild")).toBe(true);
   });
 
   it("sends the pointed notes alone as a message with no words, and keeps the step's draft", () => {
@@ -324,7 +330,8 @@ describe("the review session", () => {
       },
     });
     const input = { kept: { ...START, journey: "prep" }, journeys: JOURNEYS, now: 0 };
-    const actor = createActor(machine, { input }).start();
+    const clock = new SimulatedClock();
+    const actor = createActor(machine, { input, clock }).start();
     for (const event of [
       { type: "choose" },
       { type: "entered" },
@@ -332,6 +339,7 @@ describe("the review session", () => {
       { type: "send", id: "x", step: "a", at: 1 },
     ] satisfies Event[])
       actor.send(event);
+    clock.increment(SEND_MS);
     expect(posts).toBe(1);
     const again = createActor(machine, { input, snapshot: actor.getPersistedSnapshot() }).start();
     expect(posts).toBe(1);
@@ -682,7 +690,9 @@ describe("the review's end", () => {
         }),
       },
     });
+    const clock = new SimulatedClock();
     const actor = createActor(machine, {
+      clock,
       input: {
         kept: {
           ...START,
@@ -700,6 +710,7 @@ describe("the review's end", () => {
     actor.send({ type: "entered" });
     actor.send({ type: "settle" });
     actor.send({ type: "finish", at: 5 });
+    clock.increment(SEND_MS);
     expect(sent.map((p) => [p.step, p.handoff])).toEqual([
       ["b", undefined],
       ["c", handoffId("prep", 5)],
@@ -774,7 +785,12 @@ describe("the review's end", () => {
   it("goes back to the step from the page when u takes the last settle back", () => {
     const s = after(lastOpen(), { type: "go", by: -1 }, { type: "entered" }, { type: "settle" });
     const done = after(s, { type: "entered" }, { type: "settle" }, { type: "finish" });
-    const undone = after(done, { type: "undo" });
+    // The first u takes the Finish back while it waits: the finish shows again.
+    const finishing = after(done, { type: "undo" });
+    expect(finishing.context.finish).not.toBeNull();
+    expect(finishing.context.handoff).toBeNull();
+    expect(finishing.context).toMatchObject({ active: true, at: 2 });
+    const undone = after(finishing, { type: "undo" });
     expect(undone.context.feedback["c"]?.settled).toBeUndefined();
     expect(undone.matches({ review: "on" })).toBe(true);
     expect(undone.context).toMatchObject({ active: true, at: 2 });
@@ -1310,13 +1326,20 @@ describe("what the agent hears of the settles", () => {
       Object.fromEntries(Object.entries(f?.parts ?? {}).map(([p, v]) => [p, v.kept])),
       f?.variant,
     );
+  /** A pause in the events, in ms, on the session's clock. */
+  type Wait = { readonly wait: number };
   /**
-   * Runs the events on a live session and keeps the agent's view: each settle line it reads
-   * says whether its step is settled now, what it keeps, and how many steps are left open.
-   * After every event, that view must match the session, but for the last settle, which
-   * waits for Finish. Each line's `left` must match the steps open in the agent's view.
+   * Runs the events on a live session, on a clock of its own, and keeps the agent's view:
+   * each settle line it reads says whether its step is settled now, what it keeps, and how
+   * many steps are left open. After every event, that view must match the session, but for
+   * the last settle, which waits for Finish, and while a send waits to be written. Each line's
+   * `left` must match the steps open in the agent's view. `lines` gets every line written.
    */
-  const heard = (kept: Partial<typeof START>, events: readonly Event[], lines: unknown[] = []) => {
+  const heard = (
+    kept: Partial<typeof START>,
+    events: readonly (Event | Wait)[],
+    lines: unknown[] = [],
+  ) => {
     const view: Record<string, string> = {};
     const wrong: string[] = [];
     const ids = JOURNEYS[0]?.steps.map((st) => st.id) ?? [];
@@ -1324,9 +1347,9 @@ describe("what the agent hears of the settles", () => {
       actors: {
         post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
           for (let post: Post | undefined = input; post !== undefined; post = post.next) {
-            if (post.kind !== "settle" || post.step === undefined) continue;
             const line = postedLine(DEV, post, "now");
             lines.push(line);
+            if (post.kind !== "settle" || post.step === undefined) continue;
             if (!("left" in line)) continue;
             const parts = "parts" in line ? line.parts : undefined;
             view[post.step] = keptKey(
@@ -1344,20 +1367,24 @@ describe("what the agent hears of the settles", () => {
         }),
       },
     });
+    const clock = new SimulatedClock();
     const actor = createActor(machine, {
+      clock,
       input: { kept: { ...START, journey: "prep", ...kept }, journeys: JOURNEYS, now: 0 },
     }).start();
     for (const id of ids) view[id] = keptNow(actor.getSnapshot().context.feedback[id]);
     events.forEach((event, i) => {
-      actor.send(event);
-      const { feedback, finish } = actor.getSnapshot().context;
+      if ("wait" in event) clock.increment(event.wait);
+      else actor.send(event);
+      const { feedback, finish, pending } = actor.getSnapshot().context;
+      if (pending.length > 0) return;
       for (const id of ids) {
         const now = keptNow(feedback[id]);
         if (id !== finish?.step && view[id] !== now)
           wrong.push(
             `after ${events
               .slice(0, i + 1)
-              .map((e) => e.type)
+              .map((e) => ("wait" in e ? "wait" : e.type))
               .join(" > ")}: ${id} is ${now}, the agent heard ${view[id] ?? "nothing"}`,
           );
       }
@@ -1403,6 +1430,7 @@ describe("what the agent hears of the settles", () => {
         entered,
         { type: "write", id: stepNoteId("a"), step: "a", draft: "Not yet" },
         { type: "send", id: stepNoteId("a"), step: "a", at: 1 },
+        { wait: SEND_MS },
       ]),
     ).toEqual([]);
   });
@@ -1517,7 +1545,7 @@ describe("what the agent hears of the settles", () => {
     expect(
       heard(
         { active: true, at: 2, feedback: two },
-        [entered, settle, keep("Cards", 0), undo, redo, { type: "finish" }],
+        [entered, settle, keep("Cards", 0), undo, redo, { type: "finish" }, { wait: SEND_MS }],
         lines,
       ),
     ).toEqual([]);
@@ -1532,7 +1560,7 @@ describe("what the agent hears of the settles", () => {
     expect(
       heard(
         { active: true, at: 2, feedback: two },
-        [entered, keep("Dense list"), keep("Cards"), { type: "finish" }],
+        [entered, keep("Dense list"), keep("Cards"), { type: "finish" }, { wait: SEND_MS }],
         lines,
       ),
     ).toEqual([]);
@@ -1578,8 +1606,188 @@ describe("what the agent hears of the settles", () => {
         entered,
         settle,
         { type: "finish" },
+        { wait: SEND_MS },
         undo,
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("a send that waits, so the reviewer can take it back", () => {
+  /** A live session on a clock of its own, which keeps every line written, in its order. */
+  const live = (kept: Partial<typeof START> = {}, now = 0) => {
+    const lines: Post[] = [];
+    const machine = sessionMachine.provide({
+      actors: {
+        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+          for (let post: Post | undefined = input; post !== undefined; post = post.next)
+            lines.push(post);
+          sendBack({ type: "posted", child: self.id });
+        }),
+      },
+    });
+    const clock = new SimulatedClock();
+    const actor = createActor(machine, {
+      clock,
+      input: {
+        kept: { ...START, journey: "prep", active: true, ...kept },
+        journeys: JOURNEYS,
+        now,
+      },
+    }).start();
+    actor.send({ type: "entered" });
+    return { actor, clock, lines, machine };
+  };
+  const chat = stepNoteId("a");
+  const write = (draft: string): Event => ({ type: "write", id: chat, step: "a", draft });
+  const send = (at: number): Event => ({ type: "send", id: chat, step: "a", at });
+  const thread = (actor: ReturnType<typeof live>["actor"]) =>
+    actor.getSnapshot().context.notes.find((n) => n.id === chat)?.thread ?? [];
+
+  it("writes nothing while it waits, and one line once the time is up", () => {
+    const { actor, clock, lines } = live();
+    actor.send(write("Make it bold"));
+    actor.send(send(1));
+    // The chat shows it at once.
+    expect(thread(actor).map((m) => m.text)).toEqual(["Make it bold"]);
+    expect(actor.getSnapshot().context.pending).toHaveLength(1);
+    clock.increment(SEND_MS - 1);
+    expect(lines).toEqual([]);
+    clock.increment(1);
+    expect(lines.map((p) => p.kind)).toEqual(["note"]);
+    expect(actor.getSnapshot().context.pending).toEqual([]);
+    clock.increment(SEND_MS * 3);
+    expect(lines).toHaveLength(1);
+    actor.stop();
+  });
+
+  it("writes nothing once u takes it back, and puts its words back in the field", () => {
+    const { actor, clock, lines } = live();
+    actor.send(write("Make it bold"));
+    actor.send(send(1));
+    actor.send({ type: "undo" });
+    clock.increment(SEND_MS * 2);
+    expect(lines).toEqual([]);
+    const note = actor.getSnapshot().context.notes.find((n) => n.id === chat);
+    expect(note?.thread).toEqual([]);
+    expect(note?.draft).toBe("Make it bold");
+    expect(actor.getSnapshot().context.pending).toEqual([]);
+    actor.stop();
+  });
+
+  it("puts a pin's note back on its pin, with its card open, when its send is taken back", () => {
+    const { actor, clock, lines } = live();
+    const pinned = { what: "the field", selector: "#f" };
+    actor.send({ type: "point", id: "p1", pin: pinned });
+    actor.send({ type: "write", id: "p1", step: "a", pin: pinned, draft: "Wider" });
+    actor.send({ type: "close" });
+    actor.send({ type: "send", id: chat, step: "a", at: 2, text: "", card: "p1" });
+    expect(actor.getSnapshot().context.notes.some((n) => n.id === "p1")).toBe(false);
+    actor.send({ type: "undo" });
+    const back = actor.getSnapshot().context;
+    expect(back.notes.find((n) => n.id === "p1")?.draft).toBe("Wider");
+    expect(back.opened).toBe("p1");
+    expect(back.notes.find((n) => n.id === chat)).toBeUndefined();
+    clock.increment(SEND_MS);
+    expect(lines).toEqual([]);
+    actor.stop();
+  });
+
+  it("gives each send its own wait and its own undo", () => {
+    const { actor, clock, lines } = live();
+    actor.send(write("One"));
+    actor.send(send(1));
+    clock.increment(2000);
+    actor.send(write("Two"));
+    actor.send(send(2));
+    const [first] = actor.getSnapshot().context.pending;
+    actor.send({ type: "unsend", id: first?.id ?? "" });
+    expect(thread(actor).map((m) => m.text)).toEqual(["Two"]);
+    expect(actor.getSnapshot().context.notes.find((n) => n.id === chat)?.draft).toBe("One");
+    clock.increment(SEND_MS);
+    expect(
+      lines.map((p) => p.session.notes.find((n) => n.id === chat)?.thread.at(-1)?.text),
+    ).toEqual(["Two"]);
+    actor.stop();
+  });
+
+  it("sends the waiting message first when a settle writes its line", () => {
+    const { actor, lines } = live();
+    actor.send(write("Make it bold"));
+    actor.send(send(1));
+    actor.send({ type: "settle" });
+    expect(lines.map((p) => p.kind)).toEqual(["note", "settle"]);
+    expect(actor.getSnapshot().context.pending).toEqual([]);
+    actor.stop();
+  });
+
+  it("holds Finish too: undo shows the finish again and writes nothing", () => {
+    const two = { a: { settled: true }, b: { settled: true } };
+    const { actor, clock, lines } = live({ at: 2, feedback: two });
+    actor.send({ type: "settle" });
+    actor.send({ type: "finish", at: 10 });
+    expect(actor.getSnapshot().context).toMatchObject({ active: false, finish: null });
+    expect(actor.getSnapshot().context.pending[0]?.handoff).toBe(handoffId("prep", 10));
+    actor.send({ type: "undo" });
+    const back = actor.getSnapshot().context;
+    expect(back).toMatchObject({ active: true, at: 2, handoff: null });
+    expect(back.finish).toMatchObject({ step: "c" });
+    expect(back.notes.some((n) => n.id === handoffId("prep", 10))).toBe(false);
+    clock.increment(SEND_MS);
+    expect(lines).toEqual([]);
+    actor.send({ type: "finish", at: 20 });
+    clock.increment(SEND_MS);
+    expect(lines.map((p) => [p.step, p.handoff])).toEqual([["c", handoffId("prep", 20)]]);
+    actor.stop();
+  });
+
+  it("keeps a waiting send through a reload: it goes at once when its time passed", () => {
+    const { actor, lines } = live({}, 0);
+    actor.send(write("Make it bold"));
+    actor.send(send(1000));
+    const kept = keptOf(actor.getSnapshot().context);
+    actor.stop();
+    expect(kept.pending).toHaveLength(1);
+    const late = live(kept, 1000 + SEND_MS + 1);
+    late.clock.increment(0);
+    expect(late.lines.map((p) => p.kind)).toEqual(["note"]);
+    expect(late.actor.getSnapshot().context.pending).toEqual([]);
+    late.actor.stop();
+    expect(lines).toEqual([]);
+  });
+
+  it("keeps a waiting send through a reload: it waits the time left", () => {
+    const { actor } = live({}, 0);
+    actor.send(write("Make it bold"));
+    actor.send(send(1000));
+    const kept = keptOf(actor.getSnapshot().context);
+    actor.stop();
+    const soon = live(kept, 3000);
+    soon.clock.increment(2999);
+    expect(soon.lines).toEqual([]);
+    soon.clock.increment(1);
+    expect(soon.lines.map((p) => p.kind)).toEqual(["note"]);
+    soon.actor.stop();
+  });
+
+  it("is heard as one line after the wait, and as none after an undo", () => {
+    const sendNote: readonly Event[] = [
+      { type: "entered" },
+      { type: "settle" },
+      { type: "go", by: -1 },
+      { type: "entered" },
+      write("Not yet"),
+      send(1),
+    ];
+    const kept = (events: readonly Event[], wait: boolean) => {
+      const { actor, clock, lines } = live();
+      for (const e of events) actor.send(e);
+      if (wait) clock.increment(SEND_MS);
+      actor.stop();
+      return lines.map((p) => p.kind);
+    };
+    // The settle, then the step opened again and the message, after the wait.
+    expect(kept(sendNote, true)).toEqual(["settle", "settle", "note"]);
+    expect(kept([...sendNote, { type: "undo" }], true)).toEqual(["settle"]);
   });
 });

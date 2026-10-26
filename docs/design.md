@@ -355,6 +355,29 @@ quiet **Settled** heading; a finished journey moves there with a short motion, a
 the same way for another pass. The hand-off replaces the "Review done" line that the tree's
 foot had before, so the review's end has one place.
 
+### Undo a send
+
+Agreed with Henrik on 2026-10-26. Each send waits five seconds (`SEND_MS`) before its lines
+are written: a message from the message field, with its notes, a pin's note sent from its
+card, and Finish review. The page shows the send at once. A message is faint in its chat,
+with a small ring that empties, **Sending** and **Undo**. The hand-off says "Sending to the
+agent" with Undo in place of "Sent to the agent".
+
+- Undo, `u`, Ctrl+Z or Cmd+Z takes the send back as the newest change. Nothing is written.
+  The words and screenshots go back to the message field, and the notes back to their pins.
+  A pin's note sent from its card goes back to that card, which opens. Undo after Finish
+  shows the finish again, on the last step.
+- When the time is up, the lines go as before, and the look turns normal.
+- Each send waits on its own, with its own Undo. A held Enter sends once.
+- The session keeps each send that waits, with its time and its lines, in its saved state
+  (`pending`). A reload writes at once a send whose time passed, and waits the time left for
+  the others.
+- A line that goes at once, as a settle's, writes the sends that wait first, so the agent
+  reads the lines in their order. Their Undo then goes.
+
+The session runs the wait as a delayed event of its own, so a test steps a simulated clock.
+The settle itself does not wait: it goes on at once, and `u` takes it back with a line.
+
 ## Requirements from the dev dashboard review
 
 Henrik's second review of the dev dashboard, on 2026-10-25, found these problems. The move

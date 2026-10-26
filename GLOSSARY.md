@@ -35,7 +35,8 @@ _Avoid_: Approve, accept, done
 
 **Finish**:
 The reviewer's statement that a journey's review is over, once every step is settled. It
-sends the last settle to the agent, and the panel shows the hand-off.
+sends the last settle to the agent after five seconds, as a message goes, and the panel shows
+the hand-off.
 _Avoid_: Submit, complete, done
 
 **Hand-off**:
@@ -74,7 +75,8 @@ A numbered mark on an element of the page, which a note is about.
 _Avoid_: Marker, anchor
 
 **Message**:
-Words or notes that the reviewer sends to the agent in a chat. A message sends at once.
+Words or notes that the reviewer sends to the agent in a chat. A message shows at once, and
+goes to the agent after five seconds. Until then, Undo takes it back.
 _Avoid_: Post
 
 **Chat**:

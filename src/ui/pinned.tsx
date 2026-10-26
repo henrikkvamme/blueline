@@ -109,7 +109,7 @@ export function NoteCard({ note, number }: { readonly note: Note; readonly numbe
           onDone={(how) => {
             actor.send({ type: "close" });
             // Later, or Cmd+Enter, keeps it on its pin: it goes with the next message.
-            if (how === "enter" && !joins && isKept(note)) sendPins(actor, note.step);
+            if (how === "enter" && !joins && isKept(note)) sendPins(actor, note.step, note.id);
           }}
         />
       </div>

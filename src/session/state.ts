@@ -115,6 +115,61 @@ export function stepBy(
   return to;
 }
 
+const FinishSchema = Schema.NullOr(
+  Schema.Struct({ step: Schema.String, ids: Schema.Array(Schema.String) }),
+);
+
+/** What a line is written from: the parts of the session that `postedLine` (lines.ts) reads. */
+const PostSessionSchema = Schema.Struct({
+  journey: Schema.String,
+  variants: Schema.Record(Schema.String, Schema.Finite),
+  feedback: Schema.Record(Schema.String, FeedbackSchema),
+  notes: Schema.Array(NoteSchema),
+  finish: FinishSchema,
+});
+export type PostSession = typeof PostSessionSchema.Type;
+
+/** One line to write, as the post actor writes it: a chat's message, or a settle. */
+const PostDataSchema = Schema.Struct({
+  kind: Schema.Literals(["note", "settle"]),
+  /** The chat whose newest message goes, for a note. */
+  ids: Schema.Array(Schema.String),
+  /** The step, for a settle. */
+  step: Schema.optional(Schema.String),
+  /** For the settle that Finish sends: the hand-off's ID, which the agent answers. */
+  handoff: Schema.optional(Schema.String),
+  session: PostSessionSchema,
+});
+export type PostData = typeof PostDataSchema.Type;
+
+/**
+ * A send that waits before its lines are written, so the reviewer can take it back: a
+ * message, a pin's note sent from its card, or Finish. The page shows it at once, in a
+ * waiting look with Undo. Once `due` passes, its lines go, in their order.
+ */
+const PendingSchema = Schema.Struct({
+  /** Its ID, also the post's once it goes. */
+  id: Schema.String,
+  /** When its lines go, in ms. */
+  due: Schema.Finite,
+  posts: Schema.Array(PostDataSchema),
+  /** The chat and the time of the message it sends, for its look and its undo. */
+  chat: Schema.optional(Schema.Struct({ id: Schema.String, at: Schema.Finite })),
+  /** The pin whose card sent it: its undo opens the card again. */
+  card: Schema.optional(Schema.String),
+  /** The hand-off of the Finish it sends. */
+  handoff: Schema.optional(Schema.String),
+  /** What its undo puts back: the notes and feedback as they were before it, and for a
+   * Finish, the finish and the step it was on. */
+  before: Schema.Struct({
+    notes: Schema.Array(Schema.Tuple([Schema.String, Schema.NullOr(NoteSchema)])),
+    feedback: Schema.Array(Schema.Tuple([Schema.String, Schema.NullOr(FeedbackSchema)])),
+    finish: Schema.optional(FinishSchema),
+    at: Schema.optional(Schema.Finite),
+  }),
+});
+export type Pending = typeof PendingSchema.Type;
+
 export const KeptSchema = Schema.Struct({
   journey: Schema.String,
   active: Schema.Boolean,
@@ -135,10 +190,13 @@ export const KeptSchema = Schema.Struct({
   /** The last open step's settle, which waits for the reviewer to finish the review: its
    * step, and the chats whose notes went with it. Only Finish sends it, so the agent wakes
    * once. Null while nothing waits. */
-  finish: Schema.NullOr(Schema.Struct({ step: Schema.String, ids: Schema.Array(Schema.String) })),
+  finish: FinishSchema,
   /** The hand-off the panel shows after Finish (notes/handoff.ts), by its note's ID: what the
    * agent does with the review. Null while the panel shows the tree or a step. */
   handoff: Schema.NullOr(Schema.String),
+  /** The sends that wait to be written, the oldest first. A reload keeps them, and writes at
+   * once each one whose time passed. */
+  pending: Schema.Array(PendingSchema),
 });
 export type Kept = typeof KeptSchema.Type;
 
@@ -155,6 +213,7 @@ export const START: Kept = {
   folds: {},
   finish: null,
   handoff: null,
+  pending: [],
 };
 
 /** A journey as the machine needs it: its steps' IDs, groups and variant counts. */
