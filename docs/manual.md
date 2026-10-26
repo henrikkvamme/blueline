@@ -249,6 +249,11 @@ app has the focus: on the app's button, link or field, Enter is the app's, so a 
 clicks it. A button of the tools' that a click left the focus on does not take Enter; one
 that Tab went to does. A held `y` or Enter settles once: its repeats do nothing.
 
+On a step, on the finish, on the hand-off, in the lift and in the preview, these keys are
+Blueline's first: the app does not see them. So are the key after `g`, and Escape while `m`
+aims. Off a step, the app has its keys first, and Blueline gets a key only when the app
+leaves it. Escape on the hand-off leaves it, also in an app that uses Escape itself.
+
 ## Variants of a part
 
 Wrap a part that has more than one design in `variants`. The result is the part's

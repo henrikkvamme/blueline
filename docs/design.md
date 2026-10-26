@@ -241,9 +241,32 @@ and Ctrl+B and `p` only hide.
 
 Agreed with Henrik on 2026-10-26.
 
-Blueline takes a key in the capture phase while its panel or one of its fields has the
-focus. Ctrl combinations always belong to Blueline. Other keys go to the app first. No key
-needs AltGr or Option on a Norwegian Mac, so no key is `[ ] { } \ | @ $ ~` or a backtick.
+Rule changed on 2026-10-26, so that an app with its own keys needs no code.
+
+One rule decides who gets a key. While Blueline owns the page's keys, it takes each key that
+it binds in the capture phase on `window`, and stops it there: the app's handlers never see
+it. Blueline owns the page's keys on a step, on the finish, on the hand-off, in the lift, in
+the preview, while `m` aims and while a menu of Blueline's is open. Off a step, on the page
+with the tree, the app gets each key first, and Blueline takes only what the app leaves.
+`keymap.ts` `captured` holds the rule, and its tests check it.
+
+| Mode                     | Focus                                  | Who gets the key                                      |
+| ------------------------ | -------------------------------------- | ----------------------------------------------------- |
+| any                      | a field, select or editable, the app's | the app, but Ctrl+B on a step                         |
+| any                      | a field or open list of Blueline's     | that field or list                                    |
+| any                      | Blueline's tree                        | Blueline, first                                       |
+| Blueline owns the keys   | the page                               | Blueline, first, for each key it binds                |
+| Blueline owns the keys   | a control of the app's                 | the control for Enter, Space and arrows; else as page |
+| the lift                 | the page or a control                  | the lift, first, for every key                        |
+| off a step, nothing open | the page or a control                  | the app first; Blueline after, as before              |
+| any                      | any                                    | the app, for a key Blueline does not bind             |
+
+A key with Ctrl, Cmd or Alt that Blueline does not bind is the app's. Ctrl+B, Ctrl+R,
+Ctrl+Z, Cmd+Z, Ctrl+Shift+Z and Cmd+Shift+Z are Blueline's while it owns the keys. A control
+of the app's is a button, a link, a slider, tabs or another element that uses the key
+(`zoneOf` and `isControl`). An app that listens on `window` in the capture phase, and adds its
+listener before Blueline, still sees the keys first. No key needs AltGr or Option on a
+Norwegian Mac, so no key is `[ ] { } \ | @ $ ~` or a backtick.
 
 The keys move the way things stand on the screen, and each arrow key does what its vim key
 does. On a step, the panel's foot goes across: the step before, Settle and the step after.

@@ -39,6 +39,8 @@ export interface View {
   readonly finishing?: boolean | undefined;
   /** Whether the panel shows the hand-off: the review went to the agent. */
   readonly handoff?: boolean | undefined;
+  /** Whether a part is lifted: the lift takes every key while it is up (part/lift.tsx). */
+  readonly lifting?: boolean | undefined;
 }
 
 /** What a key does: a session event, or something on the page. */
@@ -526,6 +528,46 @@ export function firstAction(view: View, key: Key, owner?: Owner): Action | undef
   if (owner === "picker") return undefined;
   if (!view.active && owner !== "tools") return undefined;
   return { kind: "panel" };
+}
+
+/** What the walk does, as `data-blueline` on the page's root element tells the app: on a step,
+ * on the finish, on the hand-off, in the lift or in the preview. Undefined while the tools are
+ * idle or show the page with the tree. */
+export type Walk = "step" | "finish" | "handoff" | "lift" | "preview";
+
+export function walkOf(view: View): Walk | undefined {
+  if (view.lifting === true) return "lift";
+  if (view.preview) return "preview";
+  if (view.handoff === true) return "handoff";
+  if (view.finishing === true) return "finish";
+  return view.active ? "step" : undefined;
+}
+
+/** Whether the tools own the page's keys: during a walk, and while a menu of theirs is open
+ * or the reviewer points with `m`. Then their keys come before the app's. */
+export const ownsKeys = (view: View): boolean =>
+  walkOf(view) !== undefined || view.aiming === true || view.layer !== "none";
+
+/**
+ * What a key does before the app sees it, in the capture phase; undefined leaves it to the app
+ * first. The tools' first keys, as Ctrl+B, come first; the tree's keys are the tools' always.
+ * While the tools own the page's keys, each key they bind is theirs, but in a field or an open
+ * list, which keep their keys, and in the lift, which takes its own. On a control of the app's,
+ * Enter, Space and the arrows stay the control's (`bindingsFor`). A key they do not bind, as
+ * `o`, Cmd+K or any key with Alt, goes to the app.
+ */
+export function captured(
+  bindings: readonly Binding[],
+  view: View,
+  zone: Zone,
+  key: Key,
+  owner?: Owner,
+): Action | undefined {
+  const first = firstAction(view, key, owner);
+  if (first !== undefined) return first;
+  if (view.lifting === true) return undefined;
+  const takes = zone === "panel" || (ownsKeys(view) && zone !== "field" && zone !== "list");
+  return takes ? dispatch(bindings, view, zone, key) : undefined;
 }
 
 /**

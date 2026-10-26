@@ -3,6 +3,7 @@ import { holdToggle } from "../src/keys/hold";
 import {
   BINDINGS,
   bindingsFor,
+  captured,
   commandBindings,
   dispatch,
   firstAction,
@@ -10,6 +11,7 @@ import {
   keyName,
   nameOf,
   rowAction,
+  ownsKeys,
   type Key,
   type View,
   type Zone,
@@ -585,5 +587,157 @@ describe("the keys", () => {
     expect(press(view, "panel", "G")).toEqual({ kind: "row", by: Infinity });
     // From the tree, i goes back to the message, as from the page.
     expect(press(view, "panel", "i")).toEqual({ kind: "focus", to: "note" });
+  });
+});
+
+/** What the tools take before the app sees the key, in the capture phase. */
+const first = (view: View, zone: Zone, key: string, more: Omit<Key, "key"> = {}) =>
+  captured(bindings, view, zone, { key, ...more });
+
+const idle: View = {
+  layer: "none",
+  active: false,
+  panel: true,
+  variants: 3,
+  people: true,
+  preview: false,
+};
+const onStep: View = { ...idle, active: true };
+
+/** Every key the dev dashboard binds for itself: none of them is the tools' off a step. */
+const APP_KEYS = ["h", "j", "k", "l", "1", "9", "Enter", "Escape", "o", "t", "b", "/", "J"];
+
+describe("the keys first", () => {
+  it("own the page's keys during a walk, with a menu of theirs open, and while m aims", () => {
+    for (const view of [onStep, { ...onStep, finishing: true }, { ...idle, handoff: true }])
+      expect(ownsKeys(view)).toBe(true);
+    expect(ownsKeys({ ...idle, preview: true })).toBe(true);
+    expect(ownsKeys({ ...idle, layer: "go" })).toBe(true);
+    expect(ownsKeys({ ...idle, aiming: true })).toBe(true);
+    expect(ownsKeys(idle)).toBe(false);
+  });
+
+  it("take every key of a step's before the app, in the capture phase", () => {
+    const keys: readonly [string, Omit<Key, "key">][] = [
+      ..."hjklHLyvmpuigGR0?123456789".split("").map((k) => [k, {}] as [string, Omit<Key, "key">]),
+      ["Enter", {}],
+      ["Escape", {}],
+      [" ", {}],
+      ["Tab", {}],
+      ...ARROWS.map((k) => [k, {}] as [string, Omit<Key, "key">]),
+      ["ArrowLeft", { shift: true }],
+      ["b", { ctrl: true }],
+      ["r", { ctrl: true }],
+      ["z", { ctrl: true }],
+      ["z", { meta: true }],
+      ["Z", { ctrl: true, shift: true }],
+      ["z", { meta: true, shift: true }],
+    ];
+    for (const [key, more] of keys) {
+      const shift = more.shift ?? /^[A-Z]$/.test(key);
+      expect(first(onStep, "page", key, { ...more, shift }), key).toEqual(
+        press(onStep, "page", key, { ...more, shift }),
+      );
+      expect(first(onStep, "page", key, { ...more, shift }), key).toBeDefined();
+    }
+  });
+
+  it("leave the app every key the tools do not bind, on a step too", () => {
+    for (const view of [idle, onStep])
+      for (const zone of ["page", "control"] as const) {
+        for (const key of ["o", "t", "b", "/", "J", "x", "F1", "Home", "PageDown"])
+          expect(first(view, zone, key), key).toBeUndefined();
+        // Ctrl, Cmd and Alt keys the tools do not bind.
+        for (const key of ["k", "f", "l", "s", "p"]) {
+          expect(first(view, zone, key, { ctrl: true }), key).toBeUndefined();
+          expect(first(view, zone, key, { meta: true }), key).toBeUndefined();
+        }
+        for (const key of ["h", "y", "z", "b", "2"])
+          expect(first(view, zone, key, { alt: true }), key).toBeUndefined();
+      }
+  });
+
+  it("leave the app its own keys off a step, where the app has them first", () => {
+    for (const key of APP_KEYS) {
+      expect(first(idle, "page", key), key).toBeUndefined();
+      expect(first(idle, "control", key), key).toBeUndefined();
+    }
+    // The tools' other keys on the page come after the app's, as before.
+    for (const key of ["i", "m", "p", "u", "g", "?", "R"])
+      expect(first(idle, "page", key), key).toBeUndefined();
+    expect(first(idle, "page", "b", { ctrl: true })).toBeUndefined();
+  });
+
+  it("keep every key of the app's field, select or slider for it, on a step too", () => {
+    for (const view of [idle, onStep, { ...onStep, finishing: true }, { ...onStep, preview: true }])
+      for (const key of KEYS) {
+        expect(first(view, "field", key), key).toBeUndefined();
+        expect(first(view, "list", key), key).toBeUndefined();
+      }
+  });
+
+  it("leave Enter, Space and the arrows to the app's control on a step, and take its other keys", () => {
+    for (const key of ["Enter", " ", ...ARROWS])
+      expect(first(onStep, "control", key)).toBeUndefined();
+    expect(first(onStep, "control", "ArrowLeft", { shift: true })).toBeUndefined();
+    expect(first(onStep, "control", "y")).toEqual({ kind: "event", event: { type: "settle" } });
+    expect(first(onStep, "control", "l")).toEqual(go(1));
+  });
+
+  it("take the tree's keys always, as before", () => {
+    for (const view of [idle, onStep]) {
+      expect(first(view, "panel", "j")).toEqual({ kind: "row", by: 1 });
+      expect(first(view, "panel", "j", { ctrl: true })).toEqual({
+        kind: "event",
+        event: { type: "cursorOpen", by: 1 },
+      });
+    }
+  });
+
+  it("take the finish's keys: Enter finishes, and Escape and u go back", () => {
+    const view: View = { ...onStep, finishing: true };
+    expect(first(view, "page", "Enter")).toEqual({ kind: "event", event: { type: "finish" } });
+    expect(first(view, "page", "Escape")).toEqual({ kind: "event", event: { type: "back" } });
+    expect(first(view, "page", "u")).toEqual({ kind: "event", event: { type: "back" } });
+    // The walk waits on the finish: h and l are the app's.
+    expect(first(view, "page", "h")).toBeUndefined();
+  });
+
+  it("leave the hand-off with Escape before the app sees it", () => {
+    const view: View = { ...idle, handoff: true };
+    expect(first(view, "page", "Escape")).toEqual({
+      kind: "event",
+      event: { type: "handoff", id: null },
+    });
+    expect(first(view, "page", "o")).toBeUndefined();
+  });
+
+  it("show the tools again with p and Escape in the preview, on a step and off one", () => {
+    for (const view of [
+      { ...idle, preview: true, panel: false },
+      { ...onStep, preview: true, panel: false },
+    ]) {
+      expect(first(view, "page", "p")).toEqual(preview);
+      expect(first(view, "page", "Escape")).toEqual(preview);
+    }
+  });
+
+  it("take the key after g, and Escape while the reviewer points, off a step too", () => {
+    expect(first({ ...idle, layer: "go" }, "page", "j")).toEqual({
+      kind: "event",
+      event: { type: "open", layer: "journeys" },
+    });
+    expect(first({ ...idle, layer: "go" }, "page", "o")).toEqual({
+      kind: "event",
+      event: { type: "escape" },
+    });
+    for (const zone of ZONES)
+      expect(first({ ...idle, aiming: true }, zone, "Escape")).toEqual({ kind: "aim", on: false });
+  });
+
+  it("leave every key to the lift while it is up, which takes its own", () => {
+    for (const zone of ZONES)
+      for (const key of ["h", "l", "v", " ", "Escape", "Enter", "u"])
+        expect(first({ ...onStep, lifting: true }, zone, key), key).toBeUndefined();
   });
 });

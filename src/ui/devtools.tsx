@@ -6,10 +6,10 @@ import { linkedReview } from "../io/link";
 import { keptOf, loadKept, saveKept } from "../io/storage";
 import {
   BINDINGS,
+  captured,
   commandBindings,
   dispatch,
   ownerOf,
-  firstAction,
   nameOf,
   zoneOf,
   type Action,
@@ -159,6 +159,7 @@ const viewOf = (s: Snapshot, adapter: DevInfo): View => {
     aiming: aim.current(),
     finishing: s.context.finish !== null,
     handoff: !s.context.active && s.context.handoff !== null,
+    lifting: parts.current().lifting !== undefined,
   };
 };
 
@@ -703,29 +704,32 @@ function TreeFocus() {
   return null;
 }
 
-/** The keys, read on the window after the page's own handlers, but in the tree before them,
- * and Alt to point. */
+/** The keys, read on the window: in the capture phase, before the app's own handlers, while
+ * the tools own the page's keys (keymap.ts `captured`), and after them at other times; and Alt
+ * to point. */
 function Keys() {
   const { actor, adapter, perform } = useTools();
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing) return;
+    const bindings = () => {
       const commands = [...(adapter.commands ?? []), ...registry.current().commands];
-      const key = keyOf(e);
-      const action = dispatch(
-        [...BINDINGS, ...commandBindings(commands)],
-        viewOf(actor.getSnapshot(), adapter),
-        zoneOf(document.activeElement),
-        key,
-      );
-      if (action === undefined) return;
-      e.preventDefault();
+      return [...BINDINGS, ...commandBindings(commands)];
+    };
+    const view = () => viewOf(actor.getSnapshot(), adapter);
+    const run = (action: Action, key: Key) => {
       // Enter finishes only once it was let go after the finish showed.
       if (action.kind === "event" && action.event.type === "finish" && !enter.free()) return;
       perform(action);
       // p held shows the page only while it is down: its release shows the tools again.
       if (action.kind === "event" && action.event.type === "preview" && nameOf(key) === "p")
         peek.down(performance.now());
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      const key = keyOf(e);
+      const action = dispatch(bindings(), view(), zoneOf(document.activeElement), key);
+      if (action === undefined) return;
+      e.preventDefault();
+      run(action, key);
     };
     const peek = holdToggle();
     const peeked = () => {
@@ -749,26 +753,16 @@ function Keys() {
       if (now && !finishing) enter.shows();
       finishing = now;
     });
-    // The tools' own keys go first, before the page and a field's handlers see them.
+    // The tools' own keys go first, and the app never sees them.
     const onFirstKey = (e: KeyboardEvent) => {
       if (e.isComposing) return;
-      const action = firstAction(
-        viewOf(actor.getSnapshot(), adapter),
-        keyOf(e),
-        ownerOf(document.activeElement),
-      );
-      if (action === undefined) {
-        // The tree is the tools' own, so its keys, as Ctrl+K, do not reach the page.
-        // The lift takes every key while it is up.
-        if (zoneOf(document.activeElement) !== "panel" || parts.current().lifting !== undefined)
-          return;
-        onKey(e);
-        if (e.defaultPrevented) e.stopImmediatePropagation();
-        return;
-      }
+      const at = document.activeElement;
+      const key = keyOf(e);
+      const action = captured(bindings(), view(), zoneOf(at), key, ownerOf(at));
+      if (action === undefined) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      perform(action);
+      run(action, key);
     };
     window.addEventListener("keydown", down, true);
     window.addEventListener("keyup", up, true);
@@ -980,7 +974,8 @@ const sameView = (a: View, b: View) =>
   a.preview === b.preview &&
   a.aiming === b.aiming &&
   a.finishing === b.finishing &&
-  a.handoff === b.handoff;
+  a.handoff === b.handoff &&
+  a.lifting === b.lifting;
 
 /** Starts the review from the app's own dev parts, as a link or another tool asks. */
 export function useReviewControl() {
