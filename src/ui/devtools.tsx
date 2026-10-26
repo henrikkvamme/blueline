@@ -30,7 +30,7 @@ import {
 import type { DevAdapter, DevInfo, DevShift, JourneyInfo, StepInfo } from "../types";
 import { Bar } from "./bar";
 import { firstOpen, lastOpen } from "../session/state";
-import { describe, pathTo } from "./geometry";
+import { describe, PANEL, pathTo } from "./geometry";
 import { Layer } from "./layers";
 import { AimHint, Flash, Pins, Pointer, Shift, Light, toTop, useBox } from "./overlays";
 import { NoteCard } from "./pinned";
@@ -475,7 +475,9 @@ export function DevTools<C>({
               : { type: "unvaried" },
           );
 
+        const { panel, preview } = actor.getSnapshot().context;
         parts.lift(part.id, {
+          docked: panel && !preview && !isPhone() ? PANEL : 0,
           drop: (variant) => actor.send({ type: "drop", part: part.name, variant }),
           undo: () => actor.send({ type: "undo" }),
           note: (shown) => noteOn(part.name, shown),

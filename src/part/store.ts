@@ -40,6 +40,9 @@ export interface Judge {
   readonly note?: (shown: Shown & { readonly variant: string }) => void;
   /** The open note, to show in the lift. */
   readonly panel?: ReactNode;
+  /** How wide the tools' panel is, docked at the window's right: the lift stands in the room
+   * beside it. None on a phone, or while the panel is hidden. */
+  readonly docked?: number;
 }
 
 export interface Lifting {

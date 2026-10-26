@@ -117,6 +117,7 @@ export function variants<P extends object>(
                 }
                 where={() => (node.current === null ? undefined : rectOf(node.current))}
                 onDone={parts.land}
+                docked={lifting.judge.docked}
               />
             </Suspense>,
             document.body,

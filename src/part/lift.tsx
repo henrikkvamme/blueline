@@ -8,6 +8,7 @@ import {
   type TouchEvent,
 } from "react";
 import { cx } from "../ui/cx";
+import { lineShift, liftRoom } from "../ui/geometry";
 import { swipeOf, swipeStarts, type Point } from "../ui/swipe";
 
 /*
@@ -47,10 +48,6 @@ const COLUMN_GAP = 80;
 const same = (a: readonly number[], b: readonly number[]) =>
   a.length === b.length && a.every((x, i) => x === b[i]);
 
-/** How far a line of options moves so that option `index` stands at the middle. */
-const shiftTo = (sizes: readonly number[], index: number, whole: number, gap: number) =>
-  whole / 2 - sizes.slice(0, index).reduce((sum, s) => sum + s + gap, 0) - (sizes[index] ?? 0) / 2;
-
 export function Lift({
   title,
   variants,
@@ -67,6 +64,7 @@ export function Lift({
   onPut,
   where,
   onDone,
+  docked = 0,
 }: {
   /** What the part is, as "the Submit button". */
   readonly title: string;
@@ -96,6 +94,8 @@ export function Lift({
   readonly where: () => DOMRect | undefined;
   /** The part is down on the page, and the lift ends. */
   readonly onDone: () => void;
+  /** How wide the tools' panel is, docked at the window's right; none when it is not. */
+  readonly docked?: number | undefined;
 }) {
   const [at, setAt] = useState(start);
   // Where the variant shown stands in the row: a deleted one's place, until another shows.
@@ -112,10 +112,12 @@ export function Lift({
   const [leaving, setLeaving] = useState(false);
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  // The stage stands in the page's room beside the docked panel, so no variant goes under it.
+  const room = liftRoom(vw, docked);
   // A big part shrinks to fit the stage; a small one keeps its true size. z zooms: a shrunk
   // part to its true size, a part at its true size to twice that.
   const [zoomed, setZoomed] = useState(false);
-  const fit = Math.min(1, (vw * 0.56) / from.width, (vh * 0.62) / from.height);
+  const fit = Math.min(1, (room * 0.56) / from.width, (vh * 0.62) / from.height);
   const scale = zoomed ? (fit < 1 ? 1 : 2) : fit;
   // A zoom draws the stage at the new scale at once, then grows it there from the old one
   // around the part, so nothing jumps; the lines do not slide meanwhile.
@@ -435,93 +437,99 @@ export function Lift({
           "bg-black/55",
           leaving && "opacity-0",
         )}
-        onClick={() => finish(undefined)}
+        onClick={() => {
+          if (asking === undefined) finish(undefined);
+        }}
         {...swipe}
       />
-      {/* Before the sizes are measured, the stage waits unseen, so it does not jump. */}
-      <div
-        ref={stage}
-        className="pointer-events-none absolute inset-0 touch-none"
-        style={{ opacity: measured ? 1 : 0 }}
-        {...swipe}
-      >
-        <div className={cx("absolute inset-x-0 top-1/2 -translate-y-1/2", row && "z-10")}>
-          <div
-            className="flex items-center"
-            style={{
-              gap: GAP,
-              transform: `translateX(${String(shiftTo(widths, index, vw, GAP))}px)`,
-              transition:
-                down === undefined && !zooming ? `transform ${String(MS)}ms ${EASE}` : "none",
-            }}
-          >
-            {variants.map((_, i) => option("variant", i))}
+      {/* The room beside the docked panel: the stage, its bar, the note and the question
+          stand in its middle. The dim covers the panel too. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: room }}>
+        {/* Before the sizes are measured, the stage waits unseen, so it does not jump. */}
+        <div
+          ref={stage}
+          className="pointer-events-none absolute inset-0 touch-none"
+          style={{ opacity: measured ? 1 : 0 }}
+          {...swipe}
+        >
+          <div className={cx("absolute inset-x-0 top-1/2 -translate-y-1/2", row && "z-10")}>
+            <div
+              className="flex items-center"
+              style={{
+                gap: GAP,
+                transform: `translateX(${String(lineShift(widths, index, room, GAP))}px)`,
+                transition:
+                  down === undefined && !zooming ? `transform ${String(MS)}ms ${EASE}` : "none",
+              }}
+            >
+              {variants.map((_, i) => option("variant", i))}
+            </div>
+          </div>
+          <div className={cx("absolute inset-y-0 left-1/2 -translate-x-1/2", !row && "z-10")}>
+            <div
+              className="flex flex-col items-center"
+              style={{
+                gap: COLUMN_GAP,
+                transform: `translateY(${String(lineShift(heights, at.state, vh, COLUMN_GAP))}px)`,
+                transition:
+                  down === undefined && !zooming ? `transform ${String(MS)}ms ${EASE}` : "none",
+              }}
+            >
+              {states.map((_, i) => option("state", i))}
+            </div>
           </div>
         </div>
-        <div className={cx("absolute inset-y-0 left-1/2 -translate-x-1/2", !row && "z-10")}>
-          <div
-            className="flex flex-col items-center"
-            style={{
-              gap: COLUMN_GAP,
-              transform: `translateY(${String(shiftTo(heights, at.state, vh, COLUMN_GAP))}px)`,
-              transition:
-                down === undefined && !zooming ? `transform ${String(MS)}ms ${EASE}` : "none",
-            }}
-          >
-            {states.map((_, i) => option("state", i))}
-          </div>
-        </div>
-      </div>
-      <div
-        className={cx(
-          "absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel px-2 py-1.5 text-[12px] whitespace-nowrap text-dt-muted shadow-dt-float duration-200 fade-in slide-in-from-bottom-2",
-          "max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+8px)] max-sm:translate-x-0 max-sm:flex-wrap max-sm:justify-center max-sm:rounded-dt-panel max-sm:text-[14px]",
-          leaving && "opacity-0",
-        )}
-      >
-        <span className="px-2 font-medium text-dt-text first-letter:uppercase max-sm:w-full max-sm:truncate max-sm:py-1 max-sm:text-center">
-          {title}
-        </span>
-        <Way
-          on={row}
-          name="Variant"
-          value={at.variant}
-          place={`${String(index + 1)} of ${String(variants.length)}`}
-          across
-          onMove={(by) => move("variant", by)}
-        />
-        {states.length > 1 && (
+        <div
+          className={cx(
+            "pointer-events-auto absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 animate-in items-center gap-1 rounded-full bg-dt-panel px-2 py-1.5 text-[12px] whitespace-nowrap text-dt-muted shadow-dt-float duration-200 fade-in slide-in-from-bottom-2",
+            "max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+8px)] max-sm:translate-x-0 max-sm:flex-wrap max-sm:justify-center max-sm:rounded-dt-panel max-sm:text-[14px]",
+            leaving && "opacity-0",
+          )}
+        >
+          <span className="px-2 font-medium text-dt-text first-letter:uppercase max-sm:w-full max-sm:truncate max-sm:py-1 max-sm:text-center">
+            {title}
+          </span>
           <Way
-            on={!row}
-            name="State"
-            value={states[at.state]}
-            place={`${String(at.state + 1)} of ${String(states.length)}`}
-            across={false}
-            onMove={(by) => move("state", by)}
+            on={row}
+            name="Variant"
+            value={at.variant}
+            place={`${String(index + 1)} of ${String(variants.length)}`}
+            across
+            onMove={(by) => move("variant", by)}
+          />
+          {states.length > 1 && (
+            <Way
+              on={!row}
+              name="State"
+              value={states[at.state]}
+              place={`${String(at.state + 1)} of ${String(states.length)}`}
+              across={false}
+              onMove={(by) => move("state", by)}
+            />
+          )}
+          {variants.length > 1 && <Act onClick={ask}>Delete</Act>}
+          {onNote !== undefined && <Act onClick={() => onNote(at)}>Note</Act>}
+          {hasNotes && <Act onClick={nextNote}>Next note</Act>}
+          <Act onClick={onUndo}>Undo</Act>
+          <Act onClick={zoom} on={zoomed}>
+            {zoomed ? "True size" : "Zoom"}
+          </Act>
+          <Act onClick={() => finish(at)}>Use</Act>
+          <Act onClick={() => finish(undefined)}>Put back</Act>
+        </div>
+        {note !== undefined && note !== null && (
+          <div className="pointer-events-auto absolute bottom-20 left-1/2 z-30 -translate-x-1/2 max-sm:top-[calc(env(safe-area-inset-top)+8px)] max-sm:bottom-auto">
+            {note}
+          </div>
+        )}
+        {asking !== undefined && (
+          <Confirm
+            label={asking}
+            onDelete={() => drop(asking)}
+            onCancel={() => setAsking(undefined)}
           />
         )}
-        {variants.length > 1 && <Act onClick={ask}>Delete</Act>}
-        {onNote !== undefined && <Act onClick={() => onNote(at)}>Note</Act>}
-        {hasNotes && <Act onClick={nextNote}>Next note</Act>}
-        <Act onClick={onUndo}>Undo</Act>
-        <Act onClick={zoom} on={zoomed}>
-          {zoomed ? "True size" : "Zoom"}
-        </Act>
-        <Act onClick={() => finish(at)}>Use</Act>
-        <Act onClick={() => finish(undefined)}>Put back</Act>
       </div>
-      {note !== undefined && note !== null && (
-        <div className="absolute bottom-20 left-1/2 z-30 -translate-x-1/2 max-sm:top-[calc(env(safe-area-inset-top)+8px)] max-sm:bottom-auto">
-          {note}
-        </div>
-      )}
-      {asking !== undefined && (
-        <Confirm
-          label={asking}
-          onDelete={() => drop(asking)}
-          onCancel={() => setAsking(undefined)}
-        />
-      )}
     </div>
   );
 }
@@ -537,7 +545,7 @@ function Confirm({
   readonly onCancel: () => void;
 }) {
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center">
+    <div className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center">
       <div
         role="alertdialog"
         aria-label={`Delete ${label}`}

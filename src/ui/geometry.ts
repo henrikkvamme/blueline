@@ -29,6 +29,16 @@ export const BAR = 60;
 /** The panel's width, docked at the right: the page narrows by as much. */
 export const PANEL = 360;
 
+/** How wide the lift's room is: the page beside the docked panel, from the window's left
+ * edge, so the variants at the sides stay in view. With no panel docked, as on a phone or with
+ * the panel hidden, it is the whole window. */
+export const liftRoom = (window: number, docked: number): number =>
+  docked > 0 && docked < window ? window - docked : window;
+
+/** How far a line of options moves so that option `index` stands at the middle of `whole`. */
+export const lineShift = (sizes: readonly number[], index: number, whole: number, gap: number) =>
+  whole / 2 - sizes.slice(0, index).reduce((sum, s) => sum + s + gap, 0) - (sizes[index] ?? 0) / 2;
+
 /** The box around the first element of each selector, or nothing when none shows. */
 /** An element's rect; one that shows its children only, as a part's, takes theirs. */
 function rectOf(element: Element): DOMRect {
