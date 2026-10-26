@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -8,7 +9,7 @@ import { claimedBy, cursorAtByte, freshFor, NO_CLAIMS } from "../bin/claims";
 import { takeLines, type Line } from "../bin/lines";
 import { listenerPick } from "../bin/listen";
 import { reply } from "../bin/reply";
-import { claim, feedbackLines } from "../bin/wire";
+import { claim, feedbackLines, withLock } from "../bin/wire";
 import { stamped } from "../src/vite";
 
 const line = (fields: object) => `${JSON.stringify(fields)}\n`;
@@ -29,9 +30,13 @@ describe("a line's identity", () => {
     expect(stamped("not json", "L4")).toBeUndefined();
   });
 
-  it("is its place in bytes for a line from before the stamp", () => {
+  it("is its place in bytes and its hash for a line from before the stamp", () => {
     const text = line({ kind: "note", text: "Gjør" }) + line({ kind: "settle", line: "S" });
-    expect(ids(linesOf(text))).toEqual(["@0", "S"]);
+    const [old, stamp] = ids(linesOf(text));
+    expect(old).toMatch(/^@0:[0-9a-z]+$/);
+    expect(stamp).toBe("S");
+    // Another line in the same place, as in a file started again, has another ID.
+    expect(ids(linesOf(line({ kind: "note", text: "Ny" })))[0]).not.toBe(old);
   });
 });
 
@@ -120,5 +125,99 @@ describe("the files at once", () => {
     );
     const written: Record<string, unknown> = JSON.parse(readFileSync(status, "utf8"));
     expect(Object.keys(written).sort()).toEqual([...notes].sort());
+  });
+
+  /** A lock folder as another process left it, with its owner file. */
+  const lockOf = (file: string, pid: number) => {
+    mkdirSync(`${file}.lock`, { recursive: true });
+    writeFileSync(path.join(`${file}.lock`, "owner"), `${String(pid)} other`);
+  };
+  /** A process ID that no process has: a process that ran and ended. */
+  const deadPid = () => spawnSync("true").pid ?? 0;
+
+  it("breaks a dead process's lock once, with many waiting at once", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const file = path.join(dir, "status.json");
+    lockOf(file, deadPid());
+    let holding = 0;
+    let most = 0;
+    const use = Effect.gen(function* () {
+      holding += 1;
+      most = Math.max(most, holding);
+      yield* Effect.sleep("5 millis");
+      holding -= 1;
+    });
+    await run(
+      Effect.forEach(Array.from({ length: 8 }), () => withLock(file, use), {
+        concurrency: "unbounded",
+      }),
+    );
+    expect(most).toBe(1);
+  });
+
+  it("lets one process at a time hold it, also when they break a dead lock at once", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const file = path.join(dir, "status.json");
+    const log = path.join(dir, "log");
+    lockOf(file, deadPid());
+    const script = path.join(import.meta.dirname, "fixtures", "hold-lock.ts");
+    await Promise.all(
+      Array.from(
+        { length: 6 },
+        () =>
+          new Promise<void>((done, fail) =>
+            spawn(process.execPath, [script, file, log], { stdio: "inherit" }).on("exit", (code) =>
+              code === 0 ? done() : fail(new Error(`exit ${String(code)}`)),
+            ),
+          ),
+      ),
+    );
+    const marks = readFileSync(log, "utf8").trim().split("\n");
+    expect(marks).toHaveLength(60);
+    // Each holder goes out before the next goes in.
+    marks.forEach((m, i) => {
+      if (i % 2 === 1) expect(m).toBe(`-${(marks[i - 1] ?? "").slice(1)}`);
+    });
+  }, 30_000);
+
+  it("keeps a live process's lock, however long it holds it", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const file = path.join(dir, "status.json");
+    // The test runner's parent runs as long as the test does.
+    lockOf(file, process.ppid);
+    const got = await run(
+      withLock(file, Effect.succeed("took it")).pipe(
+        Effect.timeoutOrElse({ duration: "300 millis", orElse: () => Effect.succeed("waits") }),
+      ),
+    );
+    expect(got).toBe("waits");
+  });
+
+  it("starts at a read mark from before the claims, and at the top when the mark is past the end", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    const first = line({ line: "a", kind: "note" });
+    writeFileSync(feedback, first + line({ line: "b", kind: "note" }));
+    const takeAll = (reader: string) =>
+      claim(feedback, reader, (fresh) => ({ take: fresh, through: fresh.at(-1)?.id }));
+    writeFileSync(`${feedback}.read.json`, JSON.stringify({ old: first.length, far: 10_000 }));
+    expect(ids(await run(takeAll("old")))).toEqual(["b"]);
+    writeFileSync(`${feedback}.claims.json`, JSON.stringify({ cursors: {}, claimed: {} }));
+    expect(ids(await run(takeAll("far")))).toEqual(["a", "b"]);
+  });
+
+  it("fails on a read that fails, rather than take it for an empty file", async () => {
+    dir = mkdtempSync(path.join(tmpdir(), "blueline-wire-"));
+    const feedback = path.join(dir, "feedback.jsonl");
+    mkdirSync(feedback);
+    const read = claim(feedback, "me", (fresh) => ({ take: fresh, through: undefined }));
+    expect(
+      await run(
+        read.pipe(
+          Effect.as("read"),
+          Effect.orElseSucceed(() => "failed"),
+        ),
+      ),
+    ).toBe("failed");
   });
 });

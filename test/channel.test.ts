@@ -10,7 +10,7 @@ describe("the agent's side of the channel", () => {
     expect(lines).toEqual([
       {
         raw: one.trim(),
-        id: "@0",
+        id: expect.stringMatching(/^@0:[0-9a-z]+$/),
         start: 0,
         journey: "preparation",
         sentAt: "2026-10-20T19:13:10.380Z",

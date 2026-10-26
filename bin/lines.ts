@@ -95,8 +95,9 @@ export function commandOf(args: readonly string[]): Command | undefined {
 /** A note line from the feedback file, with the fields the listener reads. */
 export interface Line {
   readonly raw: string;
-  /** The line's ID, which the server gives it (src/vite.ts `stamped`); a line from before
-   * that has its place in bytes, as `@120`, which stays as the file only grows. */
+  /** The line's ID, which the server gives it (src/vite.ts `stamped`). A line from before
+   * that has its place in bytes and a hash of its words, as `@120:1a2b3c`: the place stays as
+   * the file only grows, and the hash tells a line of a file started again from the old one. */
   readonly id: string;
   /** Where the line starts, in bytes from the start of the file, or of the read. */
   readonly start: number;
@@ -123,6 +124,16 @@ const LineSchema = Schema.fromJsonString(
 );
 const decodeLine = Schema.decodeUnknownOption(LineSchema);
 
+/** A short hash of a line's words: 32-bit FNV-1a, in base 36. */
+function hashOf(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
 /** The whole lines in `bytes`, and how many bytes they use: a line the server is still
  *  writing stays for the next read. A line that is not JSON is skipped. `base` is where the
  *  bytes start in the file. */
@@ -135,7 +146,8 @@ export function takeLines(bytes: Uint8Array, base = 0): { lines: Line[]; used: n
     const decoded = decodeLine(raw);
     if (Option.isSome(decoded)) {
       const { line, ...fields } = decoded.value;
-      lines.push({ raw, id: line ?? `@${String(base + start)}`, start: base + start, ...fields });
+      const id = line ?? `@${String(base + start)}:${hashOf(raw)}`;
+      lines.push({ raw, id, start: base + start, ...fields });
     }
     start += encoder.encode(raw).length + 1;
   }
