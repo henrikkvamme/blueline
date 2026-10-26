@@ -123,23 +123,38 @@ export function release(): Release {
 }
 
 /**
- * The words on Settle, which name the variant the settle keeps: "Keep Cards" on a step that
- * lists variants, as the reviewer goes through them, and "Kept Cards" once settled. A step
- * with no variants, and a settled step that kept none, read "Settle" and "Settled". `label`
- * says the same for a screen reader, with what a press does.
+ * The words on Settle, which name the variant the settle keeps, and its look. On an open step
+ * that lists variants it reads "Keep Cards", as the reviewer goes through them, and "Settle" on
+ * a step with none. On a settled step that shows the variant it kept, it reads "Kept Cards", or
+ * "Settled", in green: a press goes on. On a settled step that shows another variant, it reads
+ * "Keep Table" in blue again: a press keeps that one in place of the old. `label` says the same
+ * for a screen reader, with what a press does.
  */
-export function settleWords(
-  settled: boolean,
+export function settleWords(step: {
+  readonly settled: boolean;
   /** The variant the page shows, on a step that lists variants. */
-  shown: string | undefined,
+  readonly shown: string | undefined;
   /** The variant the settle kept, on a settled step. */
-  kept: string | undefined,
-): { readonly text: string; readonly label: string } {
-  if (settled)
+  readonly kept: string | undefined;
+  /** Whether the page shows another variant than the one the settle kept. */
+  readonly another: boolean;
+}): { readonly text: string; readonly label: string; readonly kept: boolean } {
+  const { settled, shown, kept, another } = step;
+  if (settled && !another)
     return kept === undefined
-      ? { text: "Settled", label: "Settled: open the step again" }
-      : { text: `Kept ${kept}`, label: `Settled, kept ${kept}: open the step again` };
-  return shown === undefined
-    ? { text: "Settle", label: "Settle the step" }
-    : { text: `Keep ${shown}`, label: `Settle the step and keep ${shown}` };
+      ? { text: "Settled", label: "Settled: go on to the next open step", kept: true }
+      : {
+          text: `Kept ${kept}`,
+          label: `Settled, kept ${kept}: go on to the next open step`,
+          kept: true,
+        };
+  if (shown === undefined) return { text: "Settle", label: "Settle the step", kept: false };
+  return {
+    text: `Keep ${shown}`,
+    label:
+      settled && kept !== undefined
+        ? `Keep ${shown} in place of ${kept}`
+        : `Settle the step and keep ${shown}`,
+    kept: false,
+  };
 }

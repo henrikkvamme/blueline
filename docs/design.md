@@ -180,8 +180,10 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   after, as a left and a right chevron. Settle is the one primary button, as wide as the room
   between the chevrons. On a step that lists variants it names the variant it keeps, as
   **Keep Cards**, and the name changes as the reviewer goes through the variants. On a settled
-  step it reads **Kept Cards**, or **Settled** on a step with no variants, in green, and opens
-  the step again. Its width never changes: a long name ends in an ellipsis. The
+  step that shows its kept variant it reads **Kept Cards**, or **Settled** on a step with no
+  variants, in green, and a press goes on. On a settled step that shows another variant it
+  turns blue again and reads **Keep Table**. Its width never changes: a long name ends in an
+  ellipsis. The
   foot does not move from step to step. A click on a step control leaves the focus where it
   was, so Enter still settles.
 - **Off a step**, the panel shows the tree and the page's chat, with the same top line, type
@@ -242,7 +244,7 @@ The variants stand in a list down the panel.
 | `1` to `9`                        | the variant with that number                              |
 | `H`, `L`, Shift+←, Shift+→        | the open step before, after: settled steps are skipped    |
 | `g g`, `G`                        | the first, the last open step                             |
-| `y`, Enter                        | settle the step and go on to the next open step           |
+| `y`, Enter                        | settle the step, or keep the variant shown; then go on    |
 | `v`, Space                        | lift the part; again, close the lift                      |
 | `i`                               | write a message                                           |
 | `m`, then a click                 | pin a note on the element clicked; Esc stops              |
@@ -276,6 +278,25 @@ moves: the green outline and the check only fade, and the light fades in on the 
 a phone, the same motion shows above the sheet. A settled step keeps its green light, so a
 walk back to it shows that it is settled. Undo runs the motion backwards: the light comes
 back to the step green, and turns blue as its check draws out.
+
+The primary action has one meaning everywhere: this is right, go on. It reads the step and
+the variant the page shows:
+
+| The step                        | Settle reads           | A press                                    |
+| ------------------------------- | ---------------------- | ------------------------------------------ |
+| open                            | Keep Cards, or Settle  | settles it with Cards, and goes on         |
+| settled, shows its kept variant | Kept Cards, or Settled | goes on, with no line and no change        |
+| settled, shows another variant  | Keep Table, in blue    | keeps Table in place of Cards, and goes on |
+
+A settled step that keeps another variant keeps only that one. The old variant is kept no
+more, as if it never was, and it is not deleted: the step's `parts` verdict has
+`kept: ["Table"]`, as a first settle writes it. One settle line goes with the new `parts`, the
+green motion plays, and undo takes the step back to the old variant with its own line. The
+walk comes to a settled step with its kept variant on the page, so Settle starts green. In the
+panel's list of variants, a small green check marks the kept variant, apart from the radio of
+the variant shown. Settle never opens a step again. `u` right after a settle does, and so does
+**Open the step again** in the panel's ⋯ menu on a settled step. In the tree, `y` on a
+settled step still opens it again.
 
 A settle never lands on a step the reviewer has not seen: a key's auto-repeat does nothing,
 and until the next step's light is in place, another settle does nothing. So a held `y`, or
@@ -311,10 +332,15 @@ the hand-off and not another pass. Done after a reply settles the hand-off, so t
 counts as news no more. A toast tells of a reply that comes while the hand-off is not in
 view, and opens it.
 
-Each change of a step's settled state writes the step's settle line: a settle, Settle on a
-settled step, undo, redo, another pass over a settled journey, and a message on a settled
-step. Each line counts the steps left after it. So the agent never keeps a settle that the
-page took back. Only the last settle waits, for Finish, and has no line until then.
+Each change of a step's settled state, or of the variant a settled step keeps, writes the
+step's settle line: a settle, a settle that keeps another variant, Open the step again, undo,
+redo, another pass over a settled journey, and a message on a settled step. Each line counts
+the steps left after it. So the agent never keeps a settle that the page took back. Only the
+last settle waits, for Finish, and has no line until then. While it waits, its step counts as
+open in every other line, so no line but Finish's says `left: 0`. A held step that keeps
+another variant still waits, and Finish sends the new one. After Finish, a settled step that
+keeps another variant writes its line with `left: 0`, as every step is settled: the agent
+applies the new variant.
 
 The page review is one more journey, **This page**, with a step for each part that the page
 shows. It is first under the journeys, and it starts open. It walks its parts with the same

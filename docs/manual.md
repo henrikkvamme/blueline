@@ -65,8 +65,9 @@ The raised row is the variant that the page shows. A click on a row shows that v
 foot are the step before, **Settle** and the step after, as a left and a right chevron. On a
 step that lists variants, Settle names the variant that it keeps, as **Keep Cards**, and the
 name changes with the variant shown. A settled step's button reads **Kept Cards**, or
-**Settled** with no variants, in green, and a press opens the step again. The button keeps
-its width: a long name ends in an ellipsis. The foot stays in one place from
+**Settled** with no variants, in green, and a press goes on. A small green check in the list
+marks the kept variant. When you show another variant on a settled step, the button turns
+blue and reads **Keep Table**. The button keeps its width: a long name ends in an ellipsis. The foot stays in one place from
 step to step. A click on a variant row, Lift, a chevron or Settle leaves the focus where it
 was, so Enter settles next. Off a step, the panel shows the tree and, past one quiet line,
 the page's chat. The message field's words name the chat: "A message on this page" or "A
@@ -105,6 +106,15 @@ the check only fade, and the light fades in on the new part.
 Until the next step shows with its light in place, another `y`, Enter or check does
 nothing, so a held or quick key never settles a step you have not seen.
 
+Settle always means "this is right, go on". A walk back to a settled step shows its kept
+variant, and the button is green. Enter there goes on to the next open step and writes
+nothing. To change your mind, show another variant: the button turns blue, as **Keep
+Table**. Enter keeps Table in place of the old variant, writes one settle line, plays the
+green motion and goes on. The old variant is kept no more, and it is not deleted. `u` takes
+the change back. To open a settled step again, press `u` right after the settle, or choose
+**Open the step again** in the panel's ⋯ menu. In the tree, `y` on a settled step opens it
+again too.
+
 When the last open step settles, the review does not end at once. The panel shows the
 finish in place of the step: how many steps are settled, the variant kept of each part, and
 how many notes went to the agent. **Finish review**, or Enter, ends the review: the light goes
@@ -112,8 +122,10 @@ off, the journey goes down to **Settled**, and the panel shows the **hand-off** 
 finish. The back chevron, where the step before was, Escape or `u` opens the last step
 again. The Enter that settled the
 last step does not also finish: Finish takes only an Enter pressed after the finish shows.
-A reload keeps the finish. Each change of a step's settled state, undo and redo too, writes
-the step's settle line, so the agent always knows which steps are settled.
+A reload keeps the finish. Each change of a step's settled state or kept variant, undo and
+redo too, writes the step's settle line, so the agent always knows which steps are settled
+and what they keep. The last settle waits for Finish, so until then its step counts as open
+in each line.
 
 The hand-off says "Sent to the agent" over the same rows as the finish. Under them you see
 what the agent does with the review, in place: a pulsing dot while it waits for the agent,
@@ -182,7 +194,8 @@ its message in the chat has it.
 - Enter does what a click on the row does, and opens the row too: a page goes to that page
   and opens its chat, a journey starts, a step opens on its page, and a note opens where it
   is.
-- `y` settles the selected step and goes on to the next open step, as on the page. The
+- `y` settles the selected step and goes on to the next open step, as on the page. On a
+  settled step it opens the step again. The
   page's other keys, as `v`, `H` and `L`, work as on the page too. The arrows scroll the
   tree.
 - On a step, a click on the folded line unfolds the tree, and so does a key of the tree's

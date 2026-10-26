@@ -182,7 +182,7 @@ export const BINDINGS: readonly Binding[] = [
     // Enter is a control's own key: on the app's button, link or field it is the app's
     // (zoneOf gives "control"), so a press there still clicks.
     keys: ["y", "Enter"],
-    label: "Settle the step: it is right, as it shows; then the next. Or open it again",
+    label: "Settle the step: it is right as it shows; then the next open one",
     group: "Review",
     zone: "page",
     once: true,
@@ -289,7 +289,7 @@ export const BINDINGS: readonly Binding[] = [
   },
   {
     keys: ["y"],
-    label: "Settle the selected step, or open it again; then go on to the next open one",
+    label: "Settle the selected step and go on to the next open one, or open a settled one again",
     group: "Panel",
     zone: "panel",
     once: true,

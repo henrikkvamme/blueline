@@ -356,8 +356,8 @@ export function DevTools<C>({
         },
       });
     };
-    /** The settle of the step at `at`, or its opening again. A settle keeps the variant the
-     * step's part shows on the page, and sends the step's notes not sent yet at this time. */
+    /** The settle of the step at `at`. A settle keeps the variant the step's part shows on
+     * the page, and sends the step's notes not sent yet at this time. */
     const settleOf = (at: number) => {
       const s = actor.getSnapshot();
       const journey = journeyIn(s, info);
@@ -367,31 +367,31 @@ export function DevTools<C>({
       const shown = parts.current().shown[part.name] ?? parts.shown(part.name);
       return { keep: { part: part.name, variant: variantOf(part.labels, shown, verdicts) } };
     };
-    /** Settles the step at `at`, or opens it again. The walk goes on at once, and the light
-     * shows the settle on the part it leaves (Light's `left`). Until the next step shows,
-     * another settle does nothing (settle.ts). A step the tree selected is named when the
-     * page shows another. */
+    /** Settles the step at `at`. The walk goes on at once, and the light shows the settle on
+     * the part it leaves (Light's `left`). Until the next step shows, another settle does
+     * nothing (settle.ts). A step the tree selected is named when the page shows another. On
+     * a settled step that shows its kept variant, nothing changes: the walk only goes on,
+     * with no settle to show. */
     const settle = (at: number) => {
       const s = actor.getSnapshot();
       const was = s.context;
       const step = journeyIn(s, info)?.steps[at];
-      if (step === undefined) return;
+      if (step === undefined || !settling.free()) return;
       const here = at === was.at;
-      const again = was.feedback[step.id]?.settled === true;
-      if (!again && !settling.free()) return;
+      const before = was.feedback[step.id];
       // The variant the reviewer sees as they settle.
       actor.send({ type: "settle", ...(here ? {} : { step: at }), ...settleOf(at), at: now() });
-      // Opening a settled step again stays on it; its light turns back where it is.
-      if (again) return;
       const then = actor.getSnapshot().context;
+      const changed = then.feedback[step.id] !== before;
       // The walk stayed, as on the last settle, or ended: nothing is left to wait for. The
       // light turns green where it stands, so on a phone the part goes above the sheet.
       if (!then.active || (then.at === was.at && then.run === was.run)) {
         settling.reset();
-        if (then.active && here) keepLit(step.target?.[0]);
+        if (then.active && here && changed) keepLit(step.target?.[0]);
         return;
       }
-      settling.sent(`${String(was.run)}-${String(was.at)}`, here ? step.id : undefined);
+      // The part left shows the settle only when the settle changed the step.
+      settling.sent(`${String(was.run)}-${String(was.at)}`, here && changed ? step.id : undefined);
     };
     const noteOpen = () => actor.getSnapshot().context.opened !== undefined;
     const act = (action: Action) => {
@@ -443,10 +443,14 @@ export function DevTools<C>({
         selectRow(actor, parent);
         return fold(parent, false);
       }
-      // y in the tree settles the step selected there; on any other row it does nothing.
+      // y in the tree settles the step selected there, or opens a settled one again; on any
+      // other row it does nothing.
       if (action.kind === "settleSelected") {
-        const { active, row, cursor } = actor.getSnapshot().context;
-        if (active && row === undefined) settle(cursor);
+        const { active, row, cursor, feedback } = actor.getSnapshot().context;
+        if (!active || row !== undefined) return;
+        const id = journeyIn(actor.getSnapshot(), info)?.steps[cursor]?.id ?? "";
+        if (feedback[id]?.settled === true) return actor.send({ type: "reopen", step: cursor });
+        settle(cursor);
         return;
       }
       // A variant by its number in the panel's list: of the step's part, else the step's own.

@@ -64,23 +64,37 @@ describe("a settle", () => {
 });
 
 describe("the words on Settle", () => {
-  it("name the variant the page shows on a step that lists variants", () => {
-    expect(settleWords(false, "Cards", undefined)).toEqual({
+  const words = (settled: boolean, shown?: string, kept?: string, another = false) =>
+    settleWords({ settled, shown, kept, another });
+
+  it("name the variant the settle keeps", () => {
+    expect(words(false, "Cards")).toEqual({
       text: "Keep Cards",
       label: "Settle the step and keep Cards",
+      kept: false,
     });
-    expect(settleWords(false, "Table", undefined).text).toBe("Keep Table");
+    expect(words(false, "Table").text).toBe("Keep Table");
   });
 
   it("say Settle on a step with no variants", () => {
-    expect(settleWords(false, undefined, undefined).text).toBe("Settle");
+    expect(words(false).text).toBe("Settle");
   });
 
-  it("name the variant kept once settled, else say Settled", () => {
-    expect(settleWords(true, "Table", "Cards")).toEqual({
+  it("name the variant kept once settled, in green, else say Settled", () => {
+    expect(words(true, "Cards", "Cards")).toEqual({
       text: "Kept Cards",
-      label: "Settled, kept Cards: open the step again",
+      label: "Settled, kept Cards: go on to the next open step",
+      kept: true,
     });
-    expect(settleWords(true, undefined, undefined).text).toBe("Settled");
+    expect(words(true).text).toBe("Settled");
+    expect(words(true).kept).toBe(true);
+  });
+
+  it("name the variant shown on a settled step that shows another, as the one to keep", () => {
+    expect(words(true, "Cards", "Dense list", true)).toEqual({
+      text: "Keep Cards",
+      label: "Keep Cards in place of Dense list",
+      kept: false,
+    });
   });
 });

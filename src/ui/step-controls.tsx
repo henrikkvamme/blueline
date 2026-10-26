@@ -1,6 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, Layers } from "lucide-react";
 import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
-import { NO_VERDICTS, partOn, parts, variantRows, varietyOf } from "../part/store";
+import { NO_VERDICTS, partOn, parts, variantOf, variantRows, varietyOf } from "../part/store";
+import { keepsAnother } from "../session/state";
 import { cx } from "./cx";
 import { settleWords } from "./settle";
 import { useSession, useStep, useTools, useVariant } from "./session";
@@ -32,18 +33,23 @@ export function useVariety():
 const NOTHING = { variant: undefined, state: undefined };
 
 /** The variants the step lists, and the one it shows: its part's variants not deleted, else
- * the step's own; none with fewer than two. */
+ * the step's own; none with fewer than two. `kept` is the one listed that the step's settle
+ * kept, while the step is settled. */
 export function useVariantPlace():
   | {
       readonly at: number;
       readonly of: number;
       readonly label: string;
       readonly labels: readonly string[];
+      readonly kept: string | undefined;
     }
   | undefined {
   const { journey, step } = useStep();
   const now = useSyncExternalStore(parts.subscribe, parts.current);
   const own = useVariant(step);
+  const feedback = useSession((s) =>
+    step === undefined ? undefined : s.context.feedback[step.id],
+  );
   if (step === undefined) return undefined;
   const part = partOn(step, journey);
   const rows = variantRows(
@@ -53,7 +59,48 @@ export function useVariantPlace():
     { labels: step.variants?.map((v) => v.label) ?? [], at: own?.index ?? 0 },
   );
   if (rows === undefined) return undefined;
-  return { ...rows, of: rows.labels.length, label: rows.labels[rows.at] ?? "" };
+  const kept =
+    feedback?.settled !== true
+      ? undefined
+      : rows.from === "part"
+        ? feedback.parts?.[part?.name ?? ""]?.kept.at(-1)
+        : feedback.variant;
+  return {
+    labels: rows.labels,
+    at: rows.at,
+    of: rows.labels.length,
+    label: rows.labels[rows.at] ?? "",
+    kept: kept !== undefined && rows.labels.includes(kept) ? kept : undefined,
+  };
+}
+
+/**
+ * Whether the page shows another variant than the one the step's settle kept, so a settle
+ * keeps the one shown: of the step's part, as the dev tools' settle reads it, and of the
+ * step's own. False on a step that is open.
+ */
+function useKeepsAnother(): boolean {
+  const { journey, step } = useStep();
+  const now = useSyncExternalStore(parts.subscribe, parts.current);
+  const own = useVariant(step);
+  const feedback = useSession((s) =>
+    step === undefined ? undefined : s.context.feedback[step.id],
+  );
+  if (step === undefined || feedback?.settled !== true) return false;
+  const part = partOn(step, journey);
+  const keep =
+    part === undefined || part.labels.length <= 1
+      ? undefined
+      : {
+          part: part.name,
+          variant: variantOf(
+            part.labels,
+            now.shown[part.name] ?? parts.shown(part.name),
+            now.verdicts[part.name] ?? NO_VERDICTS,
+          ),
+        };
+  const ownLabel = (step.variants?.length ?? 0) > 1 ? own?.label : undefined;
+  return keepsAnother(feedback, keep, ownLabel);
 }
 
 /** A click on a step control leaves the focus where it was, as on the page, so the walk's
@@ -92,12 +139,13 @@ export function StepArrow({ by, foot = false }: { readonly by: -1 | 1; readonly 
 }
 
 /** Settles the step: it is right as it shows, with the variant the page shows; the walk then
- * goes on to the next open step. Pressed on a settled step, which a press opens again. On a
- * step that lists variants it names the one it keeps, "Keep Cards", and once settled the one
- * it kept, "Kept Cards" (settle.ts). Its width stays the same whatever it says, so nothing
- * beside it moves: a long name ends in an ellipsis. In the panel's foot it is the one primary
- * action, as wide as the room between the step arrows; in the bar, `wide` gives it a fixed
- * room for a name. */
+ * goes on to the next open step. On a step that lists variants it names the one it keeps,
+ * "Keep Cards", and once settled the one it kept, "Kept Cards", in green: a press then only
+ * goes on. On a settled step that shows another variant it turns blue again, "Keep Table": a
+ * press keeps that one in place of the old (settle.ts). Its width stays the same whatever it
+ * says, so nothing beside it moves: a long name ends in an ellipsis. In the panel's foot it is
+ * the one primary action, as wide as the room between the step arrows; in the bar, `wide`
+ * gives it a fixed room for a name. */
 export function SettleButton({
   compact = false,
   foot = false,
@@ -115,10 +163,13 @@ export function SettleButton({
   );
   const settled = feedback?.settled === true;
   const kept =
+    place?.kept ??
     Object.values(feedback?.parts ?? {})
       .flatMap((v) => v.kept)
-      .at(-1) ?? feedback?.variant;
-  const words = settleWords(settled, place?.label, kept);
+      .at(-1) ??
+    feedback?.variant;
+  const another = useKeepsAnother();
+  const words = settleWords({ settled, shown: place?.label, kept, another });
   // Settle and Settled share one room, so a step with no variants keeps its width too.
   const plain = !wide && !foot;
   return (
@@ -126,7 +177,7 @@ export function SettleButton({
       type="button"
       {...KEEP_FOCUS}
       data-dt-settle=""
-      aria-pressed={settled}
+      aria-pressed={words.kept}
       aria-label={words.label}
       title={words.label}
       onClick={() => perform({ kind: "event", event: { type: "settle" } })}
@@ -137,7 +188,7 @@ export function SettleButton({
           : "h-8 px-2.5 text-[12px] max-sm:h-11 max-sm:px-4 max-sm:text-[15px]",
         wide && "w-40",
         compact && "max-sm:w-11 max-sm:justify-center max-sm:px-0",
-        settled
+        words.kept
           ? "bg-dt-good/15 text-dt-good hover:bg-dt-good/25"
           : "bg-dt-accent text-white hover:bg-dt-accent/85",
       )}
@@ -145,8 +196,8 @@ export function SettleButton({
       <Check className="size-4 shrink-0" aria-hidden />
       {plain && place === undefined && kept === undefined ? (
         <span className={cx("grid text-left", compact && "max-sm:hidden")} aria-hidden>
-          <span className={cx("col-start-1 row-start-1", settled && "invisible")}>Settle</span>
-          <span className={cx("col-start-1 row-start-1", !settled && "invisible")}>Settled</span>
+          <span className={cx("col-start-1 row-start-1", words.kept && "invisible")}>Settle</span>
+          <span className={cx("col-start-1 row-start-1", !words.kept && "invisible")}>Settled</span>
         </span>
       ) : (
         <span className={cx("min-w-0 truncate", compact && "max-sm:hidden")} aria-hidden>
@@ -160,8 +211,10 @@ export function SettleButton({
 /**
  * The step's variants, under its words: a quiet Lift at the right, and a row for each variant
  * that is left, as radios. The row of the variant shown is raised. A click shows that variant
- * on the page, as j and k, or its number, do. A part with one variant and some states has no
- * rows: its states show in the lift only.
+ * on the page, as j and k, or its number, do. On a settled step, a small green check at the
+ * row's right marks the variant its settle kept, apart from the radio of the one shown, so
+ * shown and kept never look the same. A part with one variant and some states has no rows:
+ * its states show in the lift only.
  */
 export function StepVariants() {
   const { perform } = useTools();
@@ -219,7 +272,10 @@ export function StepVariants() {
                       : "border-dt-faint/70",
                   )}
                 />
-                <span className="min-w-0 truncate">{label}</span>
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+                {label === place.kept && (
+                  <Check className="size-3.5 shrink-0 text-dt-good" aria-label="Kept" />
+                )}
               </button>
             );
           })}
