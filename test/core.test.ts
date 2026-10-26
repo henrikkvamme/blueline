@@ -101,6 +101,26 @@ describe("a session", () => {
     expect(opened).toEqual(["a"]);
   });
 
+  it("keeps the kept review for a link to a journey the app does not have", () => {
+    kept.set("test", JSON.stringify({ journey: "prep", active: true, at: 1 }));
+    address = "http://localhost/?review=missing";
+    session = start();
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 1 });
+  });
+
+  it("follows a link the app goes to after the session started", () => {
+    address = "http://localhost/";
+    session = startSession({
+      adapter,
+      storageKey: "test",
+      path: () => new URL(address).pathname,
+    });
+    address = "http://localhost/other?review=prep&step=b";
+    session.moved();
+    expect(session.actor.getSnapshot().context).toMatchObject({ active: true, at: 1 });
+    expect(address).toBe("http://localhost/other");
+  });
+
   it("starts idle with no link, and keeps the review in the browser's storage", () => {
     address = "http://localhost/";
     session = start();

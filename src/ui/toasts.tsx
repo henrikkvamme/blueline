@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { STORED } from "../io/stored";
 import { UI } from "./geometry";
 import { placePath } from "../part/page";
@@ -29,11 +29,11 @@ const PREVIEW_TOLD = `${STORED}:preview-told`;
 export function Toasts() {
   const { actor } = useTools();
   const [toasts, setToasts] = useState<readonly Toast[]>([]);
+  const next = useRef(0);
   useEffect(() => {
-    let next = 0;
     const timers = new Set<number>();
     const show = (text: string, open?: () => void) => {
-      const id = (next += 1);
+      const id = (next.current += 1);
       setToasts((all) => [{ id, text, open }, ...all].slice(0, SHOWN));
       const timer = window.setTimeout(() => {
         timers.delete(timer);
@@ -85,6 +85,8 @@ export function Toasts() {
     return () => {
       for (const s of subs) s.unsubscribe();
       for (const t of timers) window.clearTimeout(t);
+      // Their timers are gone, so another session's messages start afresh.
+      setToasts([]);
     };
   }, [actor]);
   const gone = (id: number) => setToasts((all) => all.filter((t) => t.id !== id));

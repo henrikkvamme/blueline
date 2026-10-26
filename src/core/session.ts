@@ -3,7 +3,7 @@ import { createActor, type SnapshotFrom } from "xstate";
 import { linkedReview } from "../io/link";
 import { keptOf, loadKept, saveKept } from "../io/storage";
 import { isKept } from "../notes/note";
-import { pageJourney, pageParts, placeId } from "../part/page";
+import { PAGE_JOURNEY, pageJourney, pageParts, placeId } from "../part/page";
 import { parts, type Verdicts } from "../part/store";
 import { liveMachine, shapesOf } from "../session/actors";
 import type { SessionActor, sessionMachine } from "../session/machine";
@@ -96,12 +96,16 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
 
   // A link from the agent starts its review, on its step. It is read before the machine
   // starts: the kept review's step would open its own page first, and the link would go with
-  // the address it had. While the link waits, the kept review opens no step.
+  // the address it had. While a link to a journey the app has waits, the kept review opens no
+  // step; the page's own journey waits for its parts.
   let linked = linkedReview(location.href);
+  const waits =
+    linked !== undefined &&
+    (linked.journey === PAGE_JOURNEY || adapter.journeys.some((j) => j.id === linked?.journey));
   const stored = loadKept(storageKey);
   const actor = createActor(liveMachine({ adapter, shift, path }), {
     input: {
-      kept: linked === undefined ? stored : { ...stored, active: false },
+      kept: waits ? { ...stored, active: false } : stored,
       journeys: shapesOf(info.journeys),
       now: now(),
       place: placeId(path()),
@@ -120,9 +124,9 @@ export function startSession<C>({ adapter, storageKey, path }: SessionOptions<C>
   };
 
   // The link's journey may be the page's own, whose parts come after the session starts. Once
-  // it starts, the address is clean.
+  // it starts, the address is clean. The app can also go to a page with a link.
   const followLink = () => {
-    const link = linked;
+    const link = linked ?? linkedReview(location.href);
     if (link === undefined || !info.journeys.some((j) => j.id === link.journey)) return;
     linked = undefined;
     history.replaceState(history.state, "", link.rest);
