@@ -9,8 +9,8 @@ const PRIVATE =
 
 /** Where the browser tests take the package from: its source, or the built `dist`. */
 const ENTRIES = {
-  source: { main: "src/index.ts", variants: "src/part/variants.tsx" },
-  packed: { main: "dist/index.js", variants: "dist/variants.js" },
+  source: { main: "src/index.ts", react: "src/react.ts", variants: "src/part/variants.tsx" },
+  packed: { main: "dist/index.js", react: "dist/react.js", variants: "dist/variants.js" },
 };
 
 /*
@@ -25,6 +25,7 @@ function browser(from: keyof typeof ENTRIES) {
     resolve: {
       alias: [
         { find: /^@henrikkvamme\/blueline$/u, replacement: at(ENTRIES[from].main) },
+        { find: /^@henrikkvamme\/blueline\/react$/u, replacement: at(ENTRIES[from].react) },
         { find: /^@henrikkvamme\/blueline\/variants$/u, replacement: at(ENTRIES[from].variants) },
       ],
     },

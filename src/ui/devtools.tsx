@@ -41,7 +41,7 @@ import { useVariantPlace } from "./step-controls";
 import { release, settleGate, TURN_MS, TURN_WAIT } from "./settle";
 import { holdToggle } from "../keys/hold";
 import { openHost, type Host } from "./host";
-import { claim, owner } from "../core/owner";
+import { claim, startReview } from "../core/owner";
 import { LiftLayer } from "../part/lift-layer";
 import { Toasts } from "./toasts";
 import { finished } from "./tree";
@@ -199,12 +199,15 @@ export function DevTools<C>({
   where.current = given;
   const goTo = useRef(navigate);
   goTo.current = navigate;
-  // A newer overlay took the page (core/owner.ts): these tools stay off it.
+  // A newer overlay took the page (core/owner.ts): these tools stay off it. The ref says so
+  // at once, so an effect that React runs again before the state changes does not claim the
+  // page back, as in StrictMode.
   const [yielded, setYielded] = useState(false);
+  const gone = useRef(false);
   // The tools stand in a shadow root of their own (host.ts); the app's dev parts stay here.
   const [host, setHost] = useState<Host>();
   useLayoutEffect(() => {
-    if (yielded) return;
+    if (yielded || gone.current) return;
     const opened = openHost();
     setHost(opened);
     return () => {
@@ -216,7 +219,7 @@ export function DevTools<C>({
   // when they go or the adapter changes.
   const [session, setSession] = useState<Session>();
   useEffect(() => {
-    if (yielded) return;
+    if (yielded || gone.current) return;
     const started = startSession({
       adapter,
       storageKey,
@@ -225,7 +228,10 @@ export function DevTools<C>({
     setSession(started);
     const release = claim({
       start: (journey, at, fresh) => started.actor.send({ type: "start", journey, at, fresh }),
-      yield: () => setYielded(true),
+      yield: () => {
+        gone.current = true;
+        setYielded(true);
+      },
     });
     return () => {
       release();
@@ -949,11 +955,12 @@ const sameView = (a: View, b: View) =>
   a.lifting === b.lifting;
 
 /** Starts the review from the app's own dev parts, as a link or another tool asks, on the
- * overlay that has the page. */
+ * overlay that has the page, or on the next one, as a part's first effect runs before the
+ * overlay's. */
 export function useReviewControl() {
   return useMemo(
     () => ({
-      start: (journey: string, at: number, fresh: boolean) => owner()?.start(journey, at, fresh),
+      start: (journey: string, at: number, fresh: boolean) => startReview(journey, at, fresh),
     }),
     [],
   );
