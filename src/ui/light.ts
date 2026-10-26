@@ -65,11 +65,18 @@ export interface Frame {
   readonly drawn: { readonly box: Box; readonly page: string } | undefined;
 }
 
+/** Since when the step `at` names has its world open and its part does not show. Each step
+ * has its own wait: one that follows a step with no part does not take over its time. */
+export interface Missing {
+  readonly at: string;
+  readonly since: number;
+}
+
 /** What a frame does: the light's next motion, and what the light must tell or draw. */
 export interface Next {
   readonly motion: Motion;
   /** Since when the step's world is open and its part does not show. */
-  readonly missing: number | undefined;
+  readonly missing: Missing | undefined;
   /** The step whose light now stands in place. */
   readonly placed?: string | undefined;
   /** Whether a new light fades in. */
@@ -81,9 +88,10 @@ export interface Next {
 }
 
 /** The light's next frame, from its motion and since when its part is missing. */
-export function lightFrame(m: Motion, missingSince: number | undefined, f: Frame): Next {
+export function lightFrame(m: Motion, was: Missing | undefined, f: Frame): Next {
   const { box, at, ready, left, now, page, drawn } = f;
-  const missing = ready && box === undefined ? (missingSince ?? now) : undefined;
+  const missing =
+    ready && box === undefined ? (was?.at === at ? was : { at, since: now }) : undefined;
   const stay: Next = { motion: m, missing };
   if (box !== undefined && (m.at !== at || m.kind === "gone")) {
     // A light that fades out ends its fade first, so it fades in as a new one.
@@ -109,13 +117,16 @@ export function lightFrame(m: Motion, missingSince: number | undefined, f: Frame
     if (now - m.start < GLIDE_MS) return { ...stay, redraw: true };
     return { motion: { kind: "on", at: m.at }, missing, placed: m.at, pulse: true };
   }
-  if (m.kind === "gone" || box !== undefined) return stay;
+  if (box !== undefined) return stay;
   // The walk went to another page, or reduced motion is on: the light fades out, and in on
   // the next part.
-  if (drawn !== undefined && (drawn.page !== page || f.reduced()))
+  if (m.kind !== "gone" && drawn !== undefined && (drawn.page !== page || f.reduced()))
     return { motion: { kind: "gone", at: m.at, since: now }, missing };
-  // The step's world is open, and its part does not show.
-  if (missing !== undefined && now - missing > PART_WAIT)
+  // The step's world is open, and its part does not show: the light leaves it, and stands in
+  // place all the same, so a settle can start again. A light that left another step, as one
+  // with no part either, does so too.
+  if (m.kind === "gone" && m.at === at) return stay;
+  if (missing !== undefined && now - missing.since > PART_WAIT)
     return { motion: { kind: "gone", at, since: now }, missing, placed: at };
   return stay;
 }

@@ -10,7 +10,7 @@ import { isKept, type Note } from "../notes/note";
 import type { DevShift } from "../types";
 import { cx } from "./cx";
 import { useSession } from "./session";
-import { GLIDE_MS, lightFrame, type Motion } from "./light";
+import { GLIDE_MS, lightFrame, type Missing, type Motion } from "./light";
 import { isPhone } from "./touch";
 import {
   BAR,
@@ -290,7 +290,7 @@ export function Light({
   latest.current = { box, at, ready, motion, left, onPlaced };
   // The box the light last drew round a part that showed, and on which page.
   const drawn = useRef<{ readonly box: Box; readonly page: string } | undefined>(undefined);
-  const missing = useRef<number | undefined>(undefined);
+  const missing = useRef<Missing | undefined>(undefined);
   useFrames(true, () => {
     const { box, at, ready, motion: m, left, onPlaced } = latest.current;
     const next = lightFrame(m, missing.current, {
