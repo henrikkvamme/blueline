@@ -98,6 +98,11 @@ export interface Binding {
 }
 
 const event = (e: Event): Action => ({ kind: "event", event: e });
+
+/** Cmd+Shift+P, or Ctrl+Shift+P: the preview, as p, but also from a field, so the
+ * reviewer goes from writing to the page at once (Henrik 2026-10-27). */
+const PREVIEW_KEYS = ["Cmd+P", "Ctrl+P"];
+
 // While the panel asks to finish the review, the walk waits: Enter finishes, and Escape and
 // u go back.
 const active = (v: View) => v.active && v.finishing !== true;
@@ -361,6 +366,13 @@ export const BINDINGS: readonly Binding[] = [
     does: event({ type: "preview" }),
   },
   {
+    keys: PREVIEW_KEYS,
+    label: "Preview from anywhere, a field too: hide the tools, or show them again",
+    group: "Tools",
+    zone: "page",
+    does: event({ type: "preview" }),
+  },
+  {
     keys: ["Ctrl+b"],
     label: "Hide the panel, or show it again",
     group: "Tools",
@@ -550,7 +562,8 @@ export type Owner = "tools" | "page" | "picker";
 
 /**
  * What a key does before anything else on the page sees it: Ctrl+B hides the panel and shows
- * it again, from a field too. While a step is open it is the tools' alone, so the page's own
+ * it again, from a field too, and Cmd+Shift+P or Ctrl+Shift+P hides the tools or shows them
+ * again, as p does. While a step is open it is the tools' alone, so the page's own
  * Ctrl+B waits until the step closes; the tools' own fields and the panel's tree have it
  * always. With no step open, the page has it first, and the page's bindings take it after.
  * On a Mac, a field loses Ctrl+B for back a letter.
@@ -559,10 +572,13 @@ export function firstAction(view: View, key: Key, owner?: Owner): Action | undef
   // Escape stops pointing, wherever the keys are, a field and the palette too.
   if (view.aiming === true && key.key === "Escape" && !key.ctrl && !key.alt && !key.meta)
     return { kind: "aim", on: false };
-  if (nameOf(key) !== "Ctrl+b") return undefined;
+  const name = nameOf(key);
+  const preview = name !== undefined && PREVIEW_KEYS.includes(name);
+  if (name !== "Ctrl+b" && !preview) return undefined;
   if (owner === "picker") return undefined;
-  if (!view.active && owner !== "tools") return undefined;
-  return { kind: "panel" };
+  // The preview's keys also end it, as p does, where Ctrl+B would wait for the step.
+  if (!view.active && owner !== "tools" && !(preview && view.preview)) return undefined;
+  return preview ? event({ type: "preview" }) : { kind: "panel" };
 }
 
 /** What the walk does, as `data-blueline` on the page's root element tells the app: on a step,

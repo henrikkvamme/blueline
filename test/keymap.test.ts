@@ -473,6 +473,21 @@ describe("the keys", () => {
     }
   });
 
+  it("preview with Cmd+Shift+P or Ctrl+Shift+P from a field too, in a review", () => {
+    const preview = { kind: "event", event: { type: "preview" } };
+    for (const view of VIEWS)
+      for (const more of [{ meta: true }, { ctrl: true }]) {
+        // The key comes as P or p: with Cmd on a Mac, Shift does not always raise it.
+        for (const key of ["P", "p"]) {
+          const p = (owner: "tools" | "page") =>
+            firstAction(view, { key, shift: true, ...more }, owner);
+          expect(p("tools")).toEqual(preview);
+          expect(p("page")).toEqual(view.active || view.preview ? preview : undefined);
+        }
+        // Without Shift it stays the page's, as Cmd+P prints.
+        expect(firstAction(view, { key: "p", ...more }, "tools")).toBeUndefined();
+      }
+  });
   it("leave Ctrl+P, Ctrl+N and Ctrl+B to a picker, which moves with them", () => {
     for (const view of VIEWS)
       for (const key of ["p", "n", "b"])

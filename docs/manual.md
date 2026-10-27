@@ -365,7 +365,8 @@ Ctrl+B hides the panel and shows it again, from a field too. A field in the pane
 the keys gets them back when the panel shows again, in its mode and at its place.
 
 `p` is the **preview**, on a step and off one: it hides the tools, the panel too, and
-leaves only an eye that shows them again. Hide the tools in More does the same, and so does
+leaves only an eye that shows them again. Cmd+Shift+P, or Ctrl+Shift+P, does the same from a
+field too, so you go from writing to the page at once, and back. Hide the tools in More does the same, and so does
 Escape in the tree off a step, so the panel and the annotation card come back together. A second
 `p`, Escape or `i` shows them with the panel as it was, and comes back to the field, in its
 mode and at its place; Ctrl+B shows them with the panel shown. Hold `p` to peek: the tools
@@ -434,7 +435,9 @@ export const SuggestionView = variants<SuggestionProps>(
   prop's object; anything else takes the prop's place.
 - Give each part one name. Two parts with the same name are one design choice.
 - A review step finds the part in its `target`. When the target holds more than one part,
-  name it with the step's `part`.
+  name it with the step's `part`. A step that names no part never takes a part that a step
+  of any journey names, so a part that another journey reviews does not show its variants
+  on this step.
 
 On the step, `v` or Space lifts the part: variants in a row, states in a column. `h` and
 `l`, or ← and →, go through the variants, and `j` and `k`, or ↓ and ↑, through the states.
