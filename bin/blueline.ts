@@ -5,9 +5,9 @@
  * each command runs from its own file, and this file only sends it there.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Stdio } from "effect";
+import { Console, Effect, Runtime, Stdio } from "effect";
 import { applyCommand } from "./apply-run.ts";
-import { dev } from "./dev.ts";
+import { dev, signalExit } from "./dev.ts";
 import { commandOf, USAGE } from "./lines.ts";
 import { listen, review } from "./listen.ts";
 import { mcp } from "./mcp.ts";
@@ -49,4 +49,14 @@ const program = Effect.gen(function* () {
   }
 });
 
-program.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+program.pipe(
+  Effect.provide(NodeServices.layer),
+  // `blueline dev` stopped by a signal exits as its command does: 128 plus its number.
+  NodeRuntime.runMain({
+    teardown: (exit, onExit) => {
+      const code = signalExit();
+      if (code === undefined) Runtime.defaultTeardown(exit, onExit);
+      else onExit(code);
+    },
+  }),
+);

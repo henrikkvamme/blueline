@@ -152,8 +152,10 @@ export function devCommandOf(
   const servers: DevServer[] = [];
   let refused: string | undefined;
   let nodeOptions = false;
-  const visit = (part: readonly string[], depth: number) => {
-    const run = runOf(part);
+  /** `env`: the `NAME=value` words of the scripts that run this part, which it inherits. */
+  const visit = (part: readonly string[], depth: number, env: Readonly<Record<string, string>>) => {
+    const own = runOf(part);
+    const run = { ...own, env: { ...env, ...own.env } };
     if ("NODE_OPTIONS" in run.env) nodeOptions = true;
     const script = scriptOf(run.words, scripts);
     if (script !== undefined && "refused" in script) refused ??= script.refused;
@@ -162,13 +164,13 @@ export function devCommandOf(
       const parts = wordsOf(scripts[script.name] ?? "");
       // The package manager puts the words after the script at the end of its text.
       parts.at(-1)?.push(...script.extra);
-      for (const each of parts) visit(each, depth + 1);
+      for (const each of parts) visit(each, depth + 1, run.env);
     } else {
       const server = serverOf(run);
       if (server !== undefined) servers.push(server);
     }
   };
-  visit(words, 0);
+  visit(words, 0, {});
   if (nodeOptions)
     return {
       kind: "refused",

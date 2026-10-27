@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { createServer as createNetServer } from "node:net";
+import { constants } from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -186,7 +187,7 @@ async function stopsWith(each: Running, port: number, signal: NodeJS.Signals) {
   expect(ports.length).toBeGreaterThan(1);
   each.child.kill(signal);
   const exited = await each.exited;
-  if (signal !== "SIGKILL") expect(exited.code).toBe(130);
+  if (signal !== "SIGKILL") expect(exited.code).toBe(128 + (constants.signals[signal] ?? 0));
   await until(async () => (await left(pids, groups)).length === 0, 10_000, "The group's end");
   for (const each of ports) expect(await listening(each)).toBe(false);
 }
@@ -389,6 +390,26 @@ describe("starting and stopping", () => {
     expect(each.output()).toContain("NODE_OPTIONS");
   }, 30_000);
 
+  it.each(["SIGINT", "SIGTERM", "SIGHUP"] as const)(
+    "exits with 128 plus the number of %s, and leaves nothing",
+    async (signal) => {
+      const port = await freePort();
+      const fixture = path.join(import.meta.dirname, "fixtures", "dev-server.ts");
+      const each = start(plain("signal"), [
+        "dev",
+        "--port",
+        String(port),
+        "--",
+        process.execPath,
+        fixture,
+        String(port),
+      ]);
+      await page(each, port);
+      await stopsWith(each, port, signal);
+    },
+    30_000,
+  );
+
   it("keeps the app's own preloads, and still moves the page's port", async () => {
     const port = await freePort();
     const root = plain("preloads", {
@@ -415,14 +436,14 @@ describe("the guard", () => {
   const GUARD = path.join(import.meta.dirname, "..", "src", "server", "guard.ts");
 
   /** The guard, with a command that waits, and what the guard says. */
-  function guard() {
+  function guard(command = [process.execPath, "-e", "setInterval(() => {}, 1000)"]) {
     const root = plain("guard");
     const child = spawn(
       process.execPath,
       [
         GUARD,
         JSON.stringify({
-          command: [process.execPath, "-e", "setInterval(() => {}, 1000)"],
+          command,
           cwd: root,
           env: {},
         }),
@@ -454,4 +475,29 @@ describe("the guard", () => {
     expect(said.at(-1)?.stopped).toBe(true);
     expect(await left([pid ?? 0], [pid ?? 0])).toEqual([]);
   });
+
+  it("stops the whole group when blueline dev is gone, also a process that ignores SIGTERM", async () => {
+    // The command ends on SIGTERM, and leaves a child that ignores it.
+    const stubborn = `process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)`;
+    const { child, ended } = guard([
+      process.execPath,
+      "-e",
+      `require("child_process").spawn(process.execPath, ["-e", ${JSON.stringify(stubborn)}], { stdio: "ignore" }); setInterval(() => {}, 1000)`,
+    ]);
+    const events = child.stdio[3];
+    child.stdin?.write("go\n");
+    const started = await new Promise<number>((done) =>
+      events?.on("data", (chunk: Buffer) => {
+        const pid = /"started":(\d+)/.exec(chunk.toString())?.[1];
+        if (pid !== undefined) done(Number(pid));
+      }),
+    );
+    await until(async () => (await left([], [started])).length === 2, 5000, "The child's start");
+    // As when blueline dev got SIGKILL: both of its pipes close.
+    events?.destroy();
+    child.stdin?.destroy();
+    await ended;
+    expect(child.exitCode).toBe(0);
+    expect(await left([], [started])).toEqual([]);
+  }, 15_000);
 });

@@ -53,6 +53,14 @@ describe("the dev server in a command", () => {
     });
   });
 
+  it("carries a script's NAME=value words into the scripts it runs", () => {
+    const scripts = { dev: "PORT=4567 A=1 pnpm run web", web: "A=2 next dev" };
+    expect(found(["pnpm", "dev"], scripts).env).toEqual({ PORT: "4567", A: "2" });
+    expect(reason(["pnpm", "dev"], { dev: "NODE_OPTIONS=x pnpm run web", web: "vite" })).toMatch(
+      /NODE_OPTIONS/,
+    );
+  });
+
   it("finds the dev server's part after others, and its env and wrappers", () => {
     expect(found(["pnpm", "dev"], { dev: "tsc -b && PORT=4100 cross-env A=b next dev" })).toEqual({
       kind: "next",

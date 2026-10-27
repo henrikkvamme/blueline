@@ -25,7 +25,12 @@ interface Given {
 
 const given = JSON.parse(process.argv[2] ?? "{}") as Given;
 const said = createWriteStream("", { fd: 3 });
-const say = (event: Record<string, unknown>) => said.write(`${JSON.stringify(event)}\n`);
+// With `blueline dev` gone, no one reads what the guard says, and the group still stops.
+let deaf = false;
+said.on("error", () => (deaf = true));
+const say = (event: Record<string, unknown>) => {
+  if (!deaf) said.write(`${JSON.stringify(event)}\n`);
+};
 
 let child: ChildProcess | undefined;
 let stopping: Promise<void> | undefined;
@@ -68,7 +73,9 @@ function stop() {
       }
     }
     say({ stopped: true });
+    if (deaf) process.exit(0);
     said.end(() => process.exit(0));
+    said.once("error", () => process.exit(0));
   })();
 }
 

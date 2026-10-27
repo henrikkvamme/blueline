@@ -518,11 +518,16 @@ export async function startDev(options: DevOptions): Promise<Dev> {
         socket.once("close", () => upSocket.destroy());
         upSocket.once("close", () => socket.destroy());
       });
-      // The dev server did not take the websocket: its answer goes back as it is.
+      // The dev server did not take the websocket: its answer goes back, decoded from its
+      // chunks, and the socket's end ends the body.
       sent.on("response", (answer) => {
         const lines = [`HTTP/1.1 ${String(answer.statusCode)} ${answer.statusMessage ?? ""}`];
-        for (let i = 0; i < answer.rawHeaders.length; i += 2)
-          lines.push(`${answer.rawHeaders[i] ?? ""}: ${answer.rawHeaders[i + 1] ?? ""}`);
+        const kept = hopless(answer.headers);
+        for (let i = 0; i < answer.rawHeaders.length; i += 2) {
+          const name = answer.rawHeaders[i] ?? "";
+          if (name.toLowerCase() in kept) lines.push(`${name}: ${answer.rawHeaders[i + 1] ?? ""}`);
+        }
+        lines.push("Connection: close");
         socket.write(`${lines.join("\r\n")}\r\n\r\n`);
         answer.pipe(socket);
       });

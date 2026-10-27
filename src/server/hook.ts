@@ -25,21 +25,31 @@ function askedPort(first: unknown): number | undefined {
 }
 
 if (Number.isInteger(page) && page > 0 && report !== undefined) {
+  /** Each moved server's own `address()`, kept once, so a second listen reports its port. */
+  const real = new WeakMap<net.Server, () => ReturnType<net.Server["address"]>>();
   const listen = Reflect.get(net.Server.prototype, "listen") as (...args: unknown[]) => net.Server;
   const moved = function (this: net.Server, ...args: unknown[]) {
     if (askedPort(args[0]) !== page) return Reflect.apply(listen, this, args) as net.Server;
     const [first] = args;
     args[0] = typeof first === "object" && first !== null ? { ...first, port: 0 } : 0;
-    const real = this.address.bind(this);
-    this.address = () => {
-      const address = real();
-      return typeof address === "object" && address !== null ? { ...address, port: page } : address;
-    };
+    let own = real.get(this);
+    if (own === undefined) {
+      own = this.address.bind(this);
+      real.set(this, own);
+      const kept = own;
+      this.address = () => {
+        const address = kept();
+        return typeof address === "object" && address !== null
+          ? { ...address, port: page }
+          : address;
+      };
+    }
+    const address = own;
     this.once("listening", () => {
-      const address = real();
-      if (typeof address !== "object" || address === null) return;
+      const at = address();
+      if (typeof at !== "object" || at === null) return;
       const next = `${report}.${String(process.pid)}`;
-      writeFileSync(next, JSON.stringify({ pid: process.pid, ...address }));
+      writeFileSync(next, JSON.stringify({ pid: process.pid, ...at }));
       renameSync(next, report);
     });
     return Reflect.apply(listen, this, args) as net.Server;

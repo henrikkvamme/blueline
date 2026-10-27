@@ -1,3 +1,4 @@
+import { constants } from "node:os";
 import { Console, Effect, Runtime } from "effect";
 import { startDev } from "../src/server/dev.ts";
 import type { Command } from "./lines.ts";
@@ -19,20 +20,37 @@ class Ended {
   }
 }
 
-/** A terminal that closes stops `blueline dev` as Ctrl+C does, and its command with it. */
-const onHangUp = Effect.acquireRelease(
+/** The first signal that stopped `blueline dev`, for its exit code. */
+let stoppedBy: NodeJS.Signals | undefined;
+
+/** The exit code a signal gives, as a shell gives it: 128 plus its number. */
+export const signalExit = () =>
+  stoppedBy === undefined ? undefined : 128 + (constants.signals[stoppedBy] ?? 0);
+
+/**
+ * Keeps the signal that stops `blueline dev`; the runtime stops the program on SIGINT and
+ * SIGTERM. A terminal that closes (SIGHUP) stops it in the same way, and its command with it.
+ */
+const onSignals = Effect.acquireRelease(
   Effect.sync(() => {
-    const hangUp = () => void process.kill(process.pid, "SIGTERM");
-    process.once("SIGHUP", hangUp);
-    return hangUp;
+    const kept = (signal: NodeJS.Signals) => {
+      stoppedBy ??= signal;
+      if (signal === "SIGHUP") process.kill(process.pid, "SIGTERM");
+    };
+    for (const signal of SIGNALS) process.on(signal, kept);
+    return kept;
   }),
-  (hangUp) => Effect.sync(() => void process.off("SIGHUP", hangUp)),
+  (kept) =>
+    Effect.sync(() => {
+      for (const signal of SIGNALS) process.off(signal, kept);
+    }),
 );
+const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 export const dev = (command: Extract<Command, { kind: "dev" }>) =>
   Effect.gen(function* () {
     const place = yield* PLACE;
-    yield* onHangUp;
+    yield* onSignals;
     const running = yield* Effect.acquireRelease(
       plain(() =>
         startDev({

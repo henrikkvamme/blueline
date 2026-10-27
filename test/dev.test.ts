@@ -184,6 +184,36 @@ describe("the proxy", () => {
     socket.close();
   });
 
+  it("gives back a websocket that the dev server refuses, as a whole answer", async () => {
+    const answer = await new Promise<Answer>((done, fail) => {
+      const sent = request(`${dev.url}/reject`, {
+        headers: {
+          connection: "Upgrade",
+          upgrade: "websocket",
+          "sec-websocket-version": "13",
+          "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+        },
+      });
+      sent.on("response", (reply) => {
+        const chunks: Buffer[] = [];
+        reply.on("data", (chunk: Buffer) => chunks.push(chunk));
+        reply.on("end", () =>
+          done({
+            status: reply.statusCode ?? 0,
+            headers: reply.headers,
+            body: Buffer.concat(chunks),
+          }),
+        );
+        reply.on("error", fail);
+      });
+      sent.on("upgrade", () => fail(new Error("Upgraded")));
+      sent.on("error", fail);
+      sent.end();
+    });
+    expect(answer.status).toBe(403);
+    expect(answer.body.toString()).toBe("nope");
+  });
+
   it("holds a request until the dev server listens", async () => {
     const late = await devOn(400);
     try {

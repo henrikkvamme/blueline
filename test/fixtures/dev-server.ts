@@ -80,6 +80,10 @@ const server = createServer((request, response) => {
 const frame = (text: Buffer) => Buffer.concat([Buffer.from([0x81, text.length]), text]);
 
 server.on("upgrade", (request, socket: Duplex) => {
+  if (request.url === "/reject")
+    return void socket.end(
+      "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nnope\r\n0\r\n\r\n",
+    );
   const key = String(request.headers["sec-websocket-key"]);
   const accept = createHash("sha1")
     .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
