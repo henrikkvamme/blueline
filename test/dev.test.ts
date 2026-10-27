@@ -214,6 +214,24 @@ describe("the proxy", () => {
     expect(answer.body.toString()).toBe("nope");
   });
 
+  it("names the page by the host it listens on", async () => {
+    const port = await freePort();
+    const on = await startDev({
+      root,
+      command: [process.execPath, FIXTURE, String(port)],
+      port,
+      host: "127.0.0.1",
+      place: serve,
+      say: (line) => said.push(line),
+    });
+    try {
+      expect(on.url).toBe(`http://127.0.0.1:${String(port)}`);
+      expect((await raw(`${on.url}/json`)).status).toBe(200);
+    } finally {
+      await on.stop();
+    }
+  });
+
   it("holds a request until the dev server listens", async () => {
     const late = await devOn(400);
     try {

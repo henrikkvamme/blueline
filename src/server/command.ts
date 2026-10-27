@@ -119,7 +119,10 @@ function serverOf(run: Run): DevServer | undefined {
 function scriptOf(
   words: readonly string[],
   scripts: Readonly<Record<string, string>>,
-): { name: string; extra: readonly string[] } | { refused: string } | undefined {
+):
+  | { name: string; extra: readonly string[] }
+  | { refused: string; needsPort: boolean }
+  | undefined {
   const [manager = "", ...rest] = words;
   if (!MANAGERS.has(manager)) return undefined;
   let i = 0;
@@ -127,7 +130,8 @@ function scriptOf(
     const flag = rest[i] ?? "";
     if (!QUIET.has(flag))
       return {
-        refused: `blueline dev reads the scripts of the root's own package.json, and does not know ${manager} ${flag}. Run it in the package's own folder.`,
+        refused: `blueline dev reads the scripts of the root's own package.json, and does not know ${manager} ${flag}. Run it in the package's own folder, or name the page's port: blueline dev --port <port> -- <command>.`,
+        needsPort: true,
       };
     i += 1;
   }
@@ -139,7 +143,8 @@ function scriptOf(
   // program of the package's, as `pnpm vite`.
   if (!run && manager === "npm") return undefined;
   if (!run && !(name in scripts) && ["vite", "vp", "next"].includes(name)) return undefined;
-  if (!(name in scripts)) return { refused: `The root's package.json has no script ${name}.` };
+  if (!(name in scripts))
+    return { refused: `The root's package.json has no script ${name}.`, needsPort: false };
   const extra = rest.slice(i + (run ? 2 : 1));
   return { name, extra: extra[0] === "--" ? extra.slice(1) : extra };
 }
@@ -150,7 +155,7 @@ export function devCommandOf(
   scripts: Readonly<Record<string, string>>,
 ): DevCommand {
   const servers: DevServer[] = [];
-  let refused: string | undefined;
+  let refused: { reason: string; needsPort: boolean } | undefined;
   let nodeOptions = false;
   /** `env`: the `NAME=value` words of the scripts that run this part, which it inherits. */
   const visit = (part: readonly string[], depth: number, env: Readonly<Record<string, string>>) => {
@@ -158,9 +163,14 @@ export function devCommandOf(
     const run = { ...own, env: { ...env, ...own.env } };
     if ("NODE_OPTIONS" in run.env) nodeOptions = true;
     const script = scriptOf(run.words, scripts);
-    if (script !== undefined && "refused" in script) refused ??= script.refused;
+    if (script !== undefined && "refused" in script)
+      refused ??= { reason: script.refused, needsPort: script.needsPort };
     else if (script !== undefined) {
-      if (depth > 8) return void (refused ??= `The script ${script.name} runs itself.`);
+      if (depth > 8)
+        return void (refused ??= {
+          reason: `The script ${script.name} runs itself.`,
+          needsPort: false,
+        });
       const parts = wordsOf(scripts[script.name] ?? "");
       // The package manager puts the words after the script at the end of its text.
       parts.at(-1)?.push(...script.extra);
@@ -178,7 +188,7 @@ export function devCommandOf(
         "The command sets NODE_OPTIONS itself, which would drop the preload blueline dev needs. Set NODE_OPTIONS in the environment instead, where blueline dev adds to it.",
       needsPort: false,
     };
-  if (refused !== undefined) return { kind: "refused", reason: refused, needsPort: false };
+  if (refused !== undefined) return { kind: "refused", ...refused };
   const [server, other] = servers;
   if (server === undefined)
     return {

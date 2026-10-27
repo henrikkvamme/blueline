@@ -86,6 +86,17 @@ describe("the dev server in a command", () => {
     expect(reason(["pnpm", "--filter", "web", "dev"], { dev: "vite" })).toMatch(/--filter/);
   });
 
+  it("lets --port run what it cannot read, but not a command that sets NODE_OPTIONS", () => {
+    const needsPort = (words: string[], scripts: Record<string, string>) => {
+      const command = devCommandOf(words, scripts);
+      return command.kind === "refused" && command.needsPort;
+    };
+    expect(needsPort(["pnpm", "--filter", "web", "dev"], {})).toBe(true);
+    expect(needsPort(["pnpm", "dev"], { dev: "vite & next dev" })).toBe(true);
+    expect(needsPort(["astro", "dev"], {})).toBe(true);
+    expect(needsPort(["pnpm", "dev"], { dev: "NODE_OPTIONS=x vite" })).toBe(false);
+  });
+
   it("refuses a command that sets NODE_OPTIONS itself", () => {
     for (const script of [
       "NODE_OPTIONS=--max-old-space-size=4096 next dev",

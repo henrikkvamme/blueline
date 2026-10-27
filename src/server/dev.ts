@@ -322,7 +322,12 @@ export async function startDev(options: DevOptions): Promise<Dev> {
     throw new Error(`blueline dev cannot listen on ${String(listen.host)}.`);
   const address = servers[0]?.address();
   const port = typeof address === "object" && address !== null ? address.port : listen.port;
-  const url = `http://localhost:${String(port)}`;
+  // The page's address: `localhost` for the loopback and every address, else the host.
+  const named =
+    listen.host === true || ["localhost", "0.0.0.0", "::"].includes(listen.host)
+      ? "localhost"
+      : listen.host;
+  const url = `http://${isIP(named) === 6 ? `[${named}]` : named}:${String(port)}`;
 
   // Where the dev server listens, once the preload reports it.
   const folder = mkdtempSync(path.join(tmpdir(), "blueline-dev-"));
