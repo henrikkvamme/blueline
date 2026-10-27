@@ -142,10 +142,10 @@ export function settleWords(step: {
   const { settled, shown, kept, another } = step;
   if (settled && !another)
     return kept === undefined
-      ? { text: "Settled", label: "Settled: go on to the next open step", kept: true }
+      ? { text: "Settled", label: "Settled: open the step again", kept: true }
       : {
           text: `Kept ${kept}`,
-          label: `Settled, kept ${kept}: go on to the next open step`,
+          label: `Settled, kept ${kept}: open the step again`,
           kept: true,
         };
   if (shown === undefined) return { text: "Settle", label: "Settle the step", kept: false };

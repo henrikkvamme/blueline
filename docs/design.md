@@ -191,7 +191,8 @@ Agreed on 2026-10-25, after Henrik's first review of the demo app.
   between the chevrons. On a step that lists variants it names the variant it keeps, as
   **Keep Cards**, and the name changes as the reviewer goes through the variants. On a settled
   step that shows its kept variant it reads **Kept Cards**, or **Settled** on a step with no
-  variants, in green, and a press goes on. On a settled step that shows another variant it
+  variants, in green. Under the pointer or the focus it reads **Open again**, and a press
+  opens the step again and stays on it. On a settled step that shows another variant it
   turns blue again and reads **Keep Table**. Its width never changes: a long name ends in an
   ellipsis. The
   foot does not move from step to step. A click on a step control leaves the focus where it
@@ -324,7 +325,7 @@ the variant the page shows:
 | The step                        | Settle reads           | A press                                    |
 | ------------------------------- | ---------------------- | ------------------------------------------ |
 | open                            | Keep Cards, or Settle  | settles it with Cards, and goes on         |
-| settled, shows its kept variant | Kept Cards, or Settled | goes on, with no line and no change        |
+| settled, shows its kept variant | Kept Cards, or Settled | opens it again; `y` and Enter go on        |
 | settled, shows another variant  | Keep Table, in blue    | keeps Table in place of Cards, and goes on |
 
 A settled step that keeps another variant keeps only that one. The old variant is kept no
@@ -333,9 +334,15 @@ more, as if it never was, and it is not deleted: the step's `parts` verdict has
 green motion plays, and undo takes the step back to the old variant with its own line. The
 walk comes to a settled step with its kept variant on the page, so Settle starts green. In the
 panel's list of variants, a small green check marks the kept variant, apart from the radio of
-the variant shown. Settle never opens a step again. `u` right after a settle does, and so does
-**Open the step again** in the panel's ⋯ menu on a settled step. In the tree, `y` on a
-settled step still opens it again.
+the variant shown. A press on the green button opens the step again and stays on it: under the
+pointer or the focus it reads **Open again**, so the press says what it does (Henrik
+2026-10-27). `y` and Enter on a settled step still go on, so a burst of keys never opens one.
+`u` right after a settle, **Open the step again** in the panel's ⋯ menu, and `y` on a settled
+step in the tree open it again too.
+
+The tree's selection follows the walk: a step the walk goes to is the one selected, so the
+tree never shows the row clicked before as active. A row has no hover tint of its own, and
+only a pointer that moves selects the row it is on.
 
 A settle never lands on a step the reviewer has not seen: a key's auto-repeat does nothing,
 and until the next step's light is in place, another settle does nothing. So a held `y`, or

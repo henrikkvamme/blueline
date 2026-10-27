@@ -208,7 +208,8 @@ and the buttons move to a row under them. At the
 foot are the step before, **Settle** and the step after, as a left and a right chevron. On a
 step that lists variants, Settle names the variant that it keeps, as **Keep Cards**, and the
 name changes with the variant shown. A settled step's button reads **Kept Cards**, or
-**Settled** with no variants, in green, and a press goes on. A small green check in the list
+**Settled** with no variants, in green. Under the pointer or the focus it reads **Open
+again**, and a press opens the step again and stays on it. A small green check in the list
 marks the kept variant. When you show another variant on a settled step, the button turns
 blue and reads **Keep Table**. The button keeps its width: a long name ends in an ellipsis. The foot stays in one place from
 step to step. A click on a variant row, Lift, a chevron or Settle leaves the focus where it
@@ -255,9 +256,13 @@ variant, and the button is green. Enter there goes on to the next open step and 
 nothing. To change your mind, show another variant: the button turns blue, as **Keep
 Table**. Enter keeps Table in place of the old variant, writes one settle line, plays the
 green motion and goes on. The old variant is kept no more, and it is not deleted. `u` takes
-the change back. To open a settled step again, press `u` right after the settle, or choose
-**Open the step again** in the panel's ⋯ menu. In the tree, `y` on a settled step opens it
-again too.
+the change back. To open a settled step again, press its green button, which reads **Open
+again** under the pointer. You stay on the step. `u` right after the settle, **Open the step
+again** in the panel's ⋯ menu, and `y` on a settled step in the tree open it again too.
+
+The tree selects the step the walk is on. When you go to another step, by a key, a chevron
+or a settle, the tree selects that step, also when the pointer rests on the row you clicked
+before. The pointer selects a row only when it moves.
 
 When the last open step settles, the review does not end at once. The panel shows the
 finish in place of the step: how many steps are settled, the variant kept of each part, and

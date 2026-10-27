@@ -54,8 +54,11 @@ export function TreeZone({
   readonly className?: string;
 }) {
   const { actor } = useTools();
-  // The pointer selects the row it is on, so the keys, as y and Enter, act on that row.
+  // The pointer selects the row it is on, so the keys, as y and Enter, act on that row. Only
+  // a pointer that moves does: a tree that opens again under a still pointer keeps the step
+  // the walk is on selected, not the row clicked before.
   const hover = (e: PointerEvent) => {
+    if (e.movementX === 0 && e.movementY === 0) return;
     const el = elementOf(e)?.closest<HTMLElement>("[data-dt-row]") ?? null;
     if (el === null) return;
     const { cursor: now, row: was } = actor.getSnapshot().context;
@@ -179,7 +182,9 @@ function TreeRow({
       aria-current={current === true ? "page" : undefined}
       className={cx(
         // The selection shows where the keys are, so a row the pointer clicked shows no ring.
-        "flex min-h-9 w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted outline-none hover:bg-dt-raised max-sm:min-h-11 max-sm:text-[15px]",
+        // A moving pointer selects the row it is on, so the row needs no hover tint of its own,
+        // which would look selected under a still pointer.
+        "flex min-h-9 w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted outline-none max-sm:min-h-11 max-sm:text-[15px]",
         tall ? "items-start" : "items-center",
         DEPTH[depth],
         selected && "bg-dt-raised",

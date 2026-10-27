@@ -1,4 +1,11 @@
-import { Check, ChevronLeft, ChevronRight, Layers, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleDashed,
+  Layers,
+  TriangleAlert,
+} from "lucide-react";
 import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { NO_VERDICTS, partOn, parts, variantOf, variantRows, varietyOf } from "../part/store";
 import { keepsAnother } from "../session/state";
@@ -138,10 +145,16 @@ export function StepArrow({ by, foot = false }: { readonly by: -1 | 1; readonly 
   );
 }
 
+/** On a settled step's button, what hides and what shows under the pointer or the focus. */
+const AWAY = "group-hover:invisible group-focus-visible:invisible";
+const AGAIN = "group-hover:visible group-focus-visible:visible";
+
 /** Settles the step: it is right as it shows, with the variant the page shows; the walk then
  * goes on to the next open step. On a step that lists variants it names the one it keeps,
- * "Keep Cards", and once settled the one it kept, "Kept Cards", in green: a press then only
- * goes on. On a settled step that shows another variant it turns blue again, "Keep Table": a
+ * "Keep Cards", and once settled the one it kept, "Kept Cards", in green. Under the pointer or
+ * the focus a settled step's button says "Open again", and a press opens the step again and
+ * stays on it, as y keeps going on. On a settled step that shows another variant it turns blue
+ * again, "Keep Table": a
  * press keeps that one in place of the old (settle.ts). Its width stays the same whatever it
  * says, so nothing beside it moves: a long name ends in an ellipsis. In the panel's foot it is
  * the one primary action, as wide as the room between the step arrows; in the bar, `wide`
@@ -180,9 +193,9 @@ export function SettleButton({
       aria-pressed={words.kept}
       aria-label={words.label}
       title={words.label}
-      onClick={() => perform({ kind: "event", event: { type: "settle" } })}
+      onClick={() => perform({ kind: "event", event: { type: words.kept ? "reopen" : "settle" } })}
       className={cx(
-        "flex shrink-0 items-center justify-center gap-1.5 rounded-dt-control font-medium transition-colors duration-150 motion-reduce:transition-none",
+        "group flex shrink-0 items-center justify-center gap-1.5 rounded-dt-control font-medium transition-colors duration-150 motion-reduce:transition-none",
         foot
           ? "h-10 min-w-0 flex-1 px-3 text-[14px] max-sm:h-11 max-sm:text-[15px]"
           : "h-8 px-2.5 text-[12px] max-sm:h-11 max-sm:px-4 max-sm:text-[15px]",
@@ -193,15 +206,30 @@ export function SettleButton({
           : "bg-dt-accent text-white hover:bg-dt-accent/85",
       )}
     >
-      <Check className="size-4 shrink-0" aria-hidden />
+      <span className="grid shrink-0" aria-hidden>
+        <Check className={cx("col-start-1 row-start-1 size-4", words.kept && AWAY)} />
+        <CircleDashed
+          className={cx("col-start-1 row-start-1 size-4 invisible", words.kept && AGAIN)}
+        />
+      </span>
       {plain && place === undefined && kept === undefined ? (
         <span className={cx("grid text-left", compact && "max-sm:hidden")} aria-hidden>
           <span className={cx("col-start-1 row-start-1", words.kept && "invisible")}>Settle</span>
-          <span className={cx("col-start-1 row-start-1", !words.kept && "invisible")}>Settled</span>
+          <span className={cx("col-start-1 row-start-1", words.kept ? AWAY : "invisible")}>
+            Settled
+          </span>
+          <span className={cx("col-start-1 row-start-1 invisible", words.kept && AGAIN)}>
+            Open again
+          </span>
         </span>
       ) : (
-        <span className={cx("min-w-0 truncate", compact && "max-sm:hidden")} aria-hidden>
-          {words.text}
+        <span className={cx("grid min-w-0", compact && "max-sm:hidden")} aria-hidden>
+          <span className={cx("col-start-1 row-start-1 truncate", words.kept && AWAY)}>
+            {words.text}
+          </span>
+          <span className={cx("col-start-1 row-start-1 invisible truncate", words.kept && AGAIN)}>
+            Open again
+          </span>
         </span>
       )}
     </button>

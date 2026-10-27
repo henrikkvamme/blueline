@@ -83,7 +83,7 @@ describe("the words on Settle", () => {
   it("name the variant kept once settled, in green, else say Settled", () => {
     expect(words(true, "Cards", "Cards")).toEqual({
       text: "Kept Cards",
-      label: "Settled, kept Cards: go on to the next open step",
+      label: "Settled, kept Cards: open the step again",
       kept: true,
     });
     expect(words(true).text).toBe("Settled");

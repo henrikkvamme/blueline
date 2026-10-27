@@ -85,6 +85,52 @@ describe("a review of the demo", () => {
     await expect.poll(words).toContain("The status tabs");
   });
 
+  /** The visible Settle button of the step. */
+  const settle = () =>
+    [...(tools()?.querySelectorAll<HTMLButtonElement>("button[data-dt-settle]") ?? [])].find(
+      (b) => b.getBoundingClientRect().width > 0,
+    ) ?? null;
+
+  it("opens a settled step again from its Settled button, and stays on it", async () => {
+    await startOn("list-tabs", "The status tabs");
+    settle()?.click();
+    await expect.poll(words).toContain("The request's header");
+    await userEvent.keyboard("h");
+    await expect.poll(words).toContain("The status tabs");
+    await expect.poll(() => settle()?.getAttribute("aria-pressed")).toBe("true");
+    expect(settle()?.getAttribute("aria-label")).toMatch(/open the step again/);
+    settle()?.click();
+    await expect.poll(() => settle()?.getAttribute("aria-pressed")).toBe("false");
+    expect(words()).toContain("The status tabs");
+  });
+
+  it("selects the step the walk goes to in the tree, not the row clicked before", async () => {
+    await startOn("list-rows", "The requests");
+    const row = (step: number) =>
+      tools()?.querySelector<HTMLElement>(`nav[data-dt-zone=panel] [data-step="${step}"]`) ?? null;
+    const toTree = async () => {
+      await userEvent.keyboard("i");
+      await expect.poll(focused).toBe(field());
+      await userEvent.keyboard("{Escape}{Escape}");
+      await expect.poll(() => row(0)).not.toBeNull();
+    };
+    await toTree();
+    const tabs = row(1);
+    if (tabs === null) throw new Error("no row for the second step");
+    await userEvent.click(tabs);
+    await expect.poll(words).toContain("The status tabs");
+    await userEvent.keyboard("l");
+    await expect.poll(words).toContain("The request's header");
+    await toTree();
+    // The pointer still rests where it clicked: that row looks as any other.
+    const tint = (step: number) => getComputedStyle(row(step) ?? document.body).backgroundColor;
+    await expect.poll(() => row(2)?.className).toContain("bg-dt-raised");
+    expect(row(1)?.className).not.toContain("bg-dt-raised");
+    expect(tint(1)).not.toBe(tint(2));
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(words).toContain("The request's header");
+  });
+
   it("opens the g menu and chooses in it by its key", async () => {
     await startOn("list-tabs", "The status tabs");
     await userEvent.keyboard("g");

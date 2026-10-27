@@ -139,6 +139,19 @@ describe("the review session, over every path of up to five events", () => {
     }
   });
 
+  it("selects the step in the tree each time the walk goes to another one", () => {
+    for (const { snapshot, path } of reachable(4)) {
+      for (const event of ALPHABET) {
+        const next = after(snapshot, event);
+        if (!next.context.active || next.context.at === snapshot.context.at) continue;
+        expect(
+          { cursor: next.context.cursor, row: next.context.row },
+          why([...path, event]),
+        ).toEqual({ cursor: next.context.at, row: undefined });
+      }
+    }
+  });
+
   it("is ready only when the page shows the step and the variant the session says", () => {
     for (const { snapshot, path } of all) {
       if (!snapshot.matches({ review: { on: "ready" } })) continue;
