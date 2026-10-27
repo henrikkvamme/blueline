@@ -630,6 +630,21 @@ components:
 in its instructions, so an agent on MCP has them from the start, and `blueline review` and
 `blueline listen` say once that they are there. `src/notes/blocks.ts` has every field.
 
+### Asking for a change to Blueline
+
+An agent that finds Blueline wrong, or missing something it needs, asks for the change
+itself:
+
+```sh
+blueline request "<title>" [--body "<what happened, what was expected>"]
+```
+
+It files an issue on Blueline's repository with `gh`, and adds the Blueline, Node and system
+that run. An open issue with the same title stops a second one: the command prints the
+first. Without a working `gh`, it fails and prints a link that opens the issue, filled in.
+The repository is public, so the words describe Blueline's behaviour only, not the app, its
+company or its data. `blueline mcp` says this in its instructions.
+
 A settle does not wake the agent. The listener holds it and prints it, tagged `status`,
 with the next message, so the agent reads where the review is without a turn of its own. The
 last settle, which leaves no step open, wakes the agent: the review is done, and the agent
@@ -664,6 +679,12 @@ cache.
 `BLUELINE_PORT`. The Vite plugin and `blueline add` start it when none runs, as a process of
 its own that writes to `serve.log` in its state folder. A second `blueline serve` finds the
 first, says so and exits. `blueline serve stop` stops it.
+
+The server sends the panel to every page, so its version is the panel's. When the server that
+runs is of an older Blueline than the dev server's, the dev server stops it and starts its own
+in its place; the other dev servers register again with the new one. A newer server stays, so
+the version only goes up. An app updated to a new Blueline shows the new panel once its dev
+server starts again.
 
 A dev server registers its app's root and its page's origin with `POST /blueline/register`, and the page then reaches the
 app's channel under `/blueline/<app>/`. The app's name is its repository's folder and its

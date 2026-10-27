@@ -6,6 +6,7 @@ import path from "node:path";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/server/apps";
+import pkg from "../package.json" with { type: "json" };
 import { devtoolsChannel, OVERLAY, ROUTES, TAG } from "../src/vite";
 import { folder, registered, startServe, startVite } from "./helpers/dev";
 
@@ -252,11 +253,12 @@ describe("the Vite plugin", () => {
   });
 
   it("ends the page's answer when the server's answer is cut short", async () => {
-    // A server that registers the app, then cuts its answers off after the first bytes.
+    // A server of this Blueline that registers the app, then cuts its answers off after the
+    // first bytes.
     const cut = createHttpServer((request, response) => {
       if (request.url === "/blueline/health")
         return void response.end(
-          JSON.stringify({ blueline: true, protocol: 2, version: "0", pid: 1 }),
+          JSON.stringify({ blueline: true, protocol: 2, version: pkg.version, pid: 1 }),
         );
       response.writeHead(200, { "content-length": "1000" });
       if (request.url === "/blueline/register")

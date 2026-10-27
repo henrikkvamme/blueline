@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { request } from "node:http";
 import path from "node:path";
+import pkg from "../../package.json" with { type: "json" };
 import type { GivenFiles } from "./apps.ts";
 import { commandFile } from "./package.ts";
-import { PORT, probe, type Health, type Registered } from "./serve.ts";
+import { PORT, probe, type Found, type Health, type Registered } from "./serve.ts";
 
 /*
  * The side of a dev server or a command that uses `blueline serve`: it starts the server when
@@ -32,14 +33,32 @@ export function placeOf(env: Readonly<Record<string, string | undefined>>): Plac
   };
 }
 
+/** Whether version `a` comes before version `b`, by major, minor and patch. */
+export function older(a: string, b: string) {
+  const parts = (version: string) => version.split(/[.-]/).slice(0, 3).map(Number);
+  const [x, y] = [parts(a), parts(b)];
+  for (let i = 0; i < 3; i += 1) {
+    const [p, q] = [x[i] ?? 0, y[i] ?? 0];
+    if (p !== q) return p < q;
+  }
+  return false;
+}
+
 /**
  * The running server's health. When none runs, starts one as a process of its own, which
- * outlives this one, with its output in `serve.log`, and waits for it.
+ * outlives this one, with its output in `serve.log`, and waits for it. A server of an older
+ * Blueline stops first, so this one starts in its place: the server sends the panel to every
+ * page, and an older one would send its own. A newer one stays.
  */
-export async function ensureServer({ port, state: given }: Place): Promise<Health> {
+export async function ensureServer(
+  { port, state: given }: Place,
+  version = pkg.version,
+): Promise<Health> {
   // The server runs in its state folder, so a folder from here must be whole first.
   const place = { port, state: path.resolve(given) };
-  const found = await probe(place.port);
+  let found = await probe(place.port);
+  if (found.kind === "blueline" && older(found.health.version, version))
+    found = await stopOlder(place.port, found.health);
   if (found.kind === "blueline") return found.health;
   if (found.kind === "other") throw new Error(found.reason);
   mkdirSync(place.state, { recursive: true });
@@ -81,6 +100,22 @@ export async function ensureServer({ port, state: given }: Place): Promise<Healt
 }
 
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/** Asks an older server to stop, and waits until its port is free or another server has it. */
+async function stopOlder(port: number, health: Health): Promise<Found> {
+  const kept: Found = { kind: "blueline", health };
+  try {
+    (await send(port, "/blueline/stop", {})).resume();
+  } catch {
+    return kept;
+  }
+  for (const until = Date.now() + START_MS; Date.now() < until;) {
+    await wait(100);
+    const now = await probe(port);
+    if (now.kind !== "blueline" || now.health.pid !== health.pid) return now;
+  }
+  return kept;
+}
 
 /** Sends a request to the server with a JSON body; the answer's status and its stream. */
 export function send(port: number, pathname: string, body: unknown) {

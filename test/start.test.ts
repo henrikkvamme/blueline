@@ -4,7 +4,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { ensureServer, stopServer, type Place } from "../src/server/start";
+import { ensureServer, older, stopServer, type Place } from "../src/server/start";
 import { folder } from "./helpers/dev";
 
 /*
@@ -67,6 +67,24 @@ describe("starting blueline serve", () => {
     const at = await place();
     const [one, two] = await Promise.all([ensureServer(at), ensureServer(at)]);
     expect(one.pid).toBe(two.pid);
+  });
+
+  it("stops a server of an older Blueline and starts in its place, and keeps a newer one", async () => {
+    const at = await place();
+    const first = await ensureServer(at);
+    // A newer Blueline asks: the one that runs is older, so it stops.
+    const second = await ensureServer(at, "99.0.0");
+    expect(second.pid).not.toBe(first.pid);
+    // An older Blueline asks: the one that runs is newer, so it stays.
+    expect((await ensureServer(at, "0.0.1")).pid).toBe(second.pid);
+  });
+
+  it("orders versions by major, minor and patch", () => {
+    expect(older("0.1.4", "0.1.6")).toBe(true);
+    expect(older("0.1.10", "0.1.9")).toBe(false);
+    expect(older("0.2.0", "0.1.9")).toBe(false);
+    expect(older("0.1.6", "0.1.6")).toBe(false);
+    expect(older("1.0.0", "0.9.9")).toBe(false);
   });
 
   it("names the log when the server does not start", async () => {
