@@ -649,7 +649,8 @@ path there, such as `shop-apps-web`; a worktree is its own repository. The notes
 app's `.blueline/` folder. A page may use the channel only from an origin that a running dev
 server registered; the agent's tools, which send no origin, always may. The server answers
 only a request to its own address, so another site cannot reach it by a name of its own. It
-keeps its apps in `~/.local/state/blueline/apps.json`, or in `BLUELINE_STATE`.
+keeps its apps in `~/.local/state/blueline/apps.json`, or in `BLUELINE_STATE`. When it starts,
+it forgets an app whose root folder is gone, such as a removed worktree.
 
 `blueline dev` registers its page as the plugin does. A page that no dev server registers
 loads the overlay by a script tag by hand. In the app's root, keep the page's origin and get the tag:

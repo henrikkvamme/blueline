@@ -426,6 +426,13 @@ function appOf(value: unknown): App | undefined {
   return { name, root, repository, files, kept };
 }
 
+/** Whether the app's root folder is still there. */
+const present = (app: App) =>
+  stat(app.root).then(
+    () => true,
+    () => false,
+  );
+
 /** The apps kept before; a file Blueline cannot read stops it, so it overwrites nothing. */
 async function kept(file: string): Promise<readonly App[]> {
   const text = await readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
@@ -505,7 +512,14 @@ export async function serve(options: ServeOptions): Promise<Served> {
     if (failed) save();
     return saving;
   };
-  const apps = makeApps(await kept(file), save);
+  // An app whose folder is gone, such as a removed worktree, is forgotten at the start.
+  const before = await kept(file);
+  const here = await Promise.all(before.map(present));
+  const apps = makeApps(
+    before.filter((_, i) => here[i] === true),
+    save,
+  );
+  if (here.includes(false)) save();
   const overlay = builtFile(options.overlay ?? path.join(packageRoot(), "dist", "index.js"));
   const configBuilt = builtFile(options.config ?? path.join(packageRoot(), "dist", "config.js"));
   const watching = configWatch();

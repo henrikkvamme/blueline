@@ -297,6 +297,20 @@ describe("blueline serve on bad input", () => {
     }
   });
 
+  it("forgets at the start an app whose folder is gone", async () => {
+    await register(repository("stays"), "http://localhost:1");
+    const gone = repository("gone");
+    await register(gone, "http://localhost:2");
+    await served?.close();
+    rmSync(gone, { recursive: true, force: true });
+    await start();
+    const listed = (await (await fetch(`${url}/blueline/apps`)).json()) as { root: string }[];
+    expect(listed.map((a) => path.basename(a.root))).toEqual(["stays"]);
+    await vi.waitFor(() =>
+      expect(readFileSync(path.join(state, "apps.json"), "utf8")).not.toContain(gone),
+    );
+  });
+
   it("does not start where it cannot keep its apps", async () => {
     const taken = path.join(base, "a-file");
     writeFileSync(taken, "");
