@@ -139,17 +139,30 @@ const launch = (
   });
 
 /** The words a fresh agent starts with: they stand alone, as it knows nothing yet. */
-export function startNote(token: string, app: KeptApp, lines: readonly string[]) {
+export function startNote(token: string, app: KeptApp, lines: readonly string[], blueline: string) {
   const { feedback, status } = app.files;
   return [
     tokenLine(token),
     `You are the agent for a Blueline review of the app in ${app.root}. The reviewer wrote the lines below in the review panel.`,
-    `Answer each line with an id: run \`blueline reply ${status} <id> working\` as you start, make the change, then run \`blueline reply ${status} <id> replied "<what you did>"\`. Or use the reply tool of the blueline MCP server.`,
-    `Then wait for the next lines: call wait_for_feedback, or run \`blueline listen ${feedback}\`.`,
+    `Answer each line with an id: run \`${blueline} reply ${status} <id> working\` as you start, make the change, then run \`${blueline} reply ${status} <id> replied "<what you did>"\`. Or use the reply tool of the blueline MCP server.`,
+    `Then wait for the next lines: call wait_for_feedback, or run \`${blueline} listen ${feedback}\`.`,
     "",
     ...lines,
   ].join("\n");
 }
+
+/** The \`blueline\` command as a fresh agent's shell runs it: the app's own, or the
+ * repository's, as no \`blueline\` may be on its PATH; else this command. */
+const bluelineIn = Effect.fn(function* (app: KeptApp) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  for (const folder of [app.root, app.repository]) {
+    const local = path.join(folder, "node_modules", ".bin", "blueline");
+    if (yield* fs.exists(local)) return local;
+  }
+  const script = process.argv[1];
+  return script === undefined ? "blueline" : `${process.execPath} ${script}`;
+});
 
 /** The words that wake an agent that knows the review. */
 export const wakeNote = (token: string, lines: readonly string[]) =>
@@ -312,7 +325,7 @@ const act = Effect.fn(function* (
   }
   if (wake.kind !== "start") return false;
   if (start === undefined) return yield* undo(app, name, decided, "no start adapter is set");
-  const note = startNote(token, app, lines);
+  const note = startNote(token, app, lines, yield* bluelineIn(app));
   if (start.adapter === "t3") {
     const t3 = yield* t3Command;
     const options = [

@@ -258,6 +258,8 @@ describe("the server's wake", () => {
     expect(await until(() => starts().length === 1, 15_000)).toBe(true);
     const [first] = starts();
     expect(first?.note).toContain('"line":"N1"');
+    // The note names a command that the agent's shell runs, with no \`blueline\` on its PATH.
+    expect(first?.note).toContain(`\`${process.execPath} ${COMMAND} reply `);
     const token = tokenIn(first?.note);
     expect(token).toBeDefined();
     // It joined by its token: the reservation is gone, and its session is busy.

@@ -1618,6 +1618,15 @@ proofs.
       with no server running. Its `blueline wait` hook woke the session, and the reply was
       there 5 s after the line. A `claude -p` process stays while its `wait` runs, up to
       the warm time, and serves each line that comes.
+    - Case 3, with T3: start adapter `t3` with Sonnet 5.5. N1 started a thread, which
+      joined by its token and replied in 27 s; the session kept the thread's ID. It then
+      waited by `wait_for_feedback`, which took N2.
+    - Case 2, with T3: N3 asked the thread to end its turn and not wait again. N4 came 15 s
+      after the session went idle, and the `blueline wait` hook woke the T3 thread, with no
+      send from the server: `asyncRewake` works under T3, so a T3 session waits as Claude
+      does.
+    - The T3 thread found no `blueline` on its PATH. The start note now names the app's or
+      the repository's `node_modules/.bin/blueline`, or this command.
     - The proof found that the start note asked for a plan after `working`, which
       `blueline reply` does not take; the note now says to send `working` as the agent
       starts.
