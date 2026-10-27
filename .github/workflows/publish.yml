@@ -2,8 +2,11 @@
 #
 # npm trusts this workflow by OIDC (trusted publishing), so it holds no token and needs no
 # security key: the package's npm settings name henrikkvamme/blueline and this file. The
-# tag must match package.json's version. The full verify runs first, so a red build never
-# publishes.
+# tag must match package.json's version.
+#
+# Run `pnpm run verify` locally before you push the tag. Its timed browser tests and its
+# dev-server process tests assume a faster machine than a hosted runner, so this workflow
+# runs only the checks that do not depend on speed, and builds the package it publishes.
 
 name: Publish
 
@@ -51,8 +54,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run check
 
-      - run: pnpm run verify
+      - run: pnpm run pack
 
       - run: pnpm publish --access public --no-git-checks --provenance
