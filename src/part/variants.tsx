@@ -32,7 +32,9 @@ export function variants<P extends object>(
 ): (props: P) => ReactNode {
   const first = Object.values(options)[0];
   if (first === undefined) throw new Error(`The part "${name}" has no variants.`);
-  if (!import.meta.env.DEV) return first;
+  // Plain Node, as in an app's unit tests, sets no `import.meta.env`: act as a build.
+  const env: Partial<ImportMetaEnv> | undefined = import.meta.env;
+  if (env?.DEV !== true) return first;
   const labels = Object.keys(options);
   parts.declare(name, labels);
   const names = Object.keys(states);
