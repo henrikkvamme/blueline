@@ -36,8 +36,11 @@
   --dt-raised: #24242a;
   --dt-line: #2c2c33;
   --dt-text: #f2f2f4;
-  --dt-muted: #a3a3ad;
-  --dt-faint: #6b6b75;
+  /* Muted is for the panel's quieter words, faint for numbers, labels and hints; both keep
+     4.5:1 on the panel and on a raised row (Henrik 2026-10-27: the sidebar was too dark to
+     read). */
+  --dt-muted: #c8c8d0;
+  --dt-faint: #8e8e98;
   --dt-accent: #4a6cf7;
   --dt-good: #3fb27f;
   --dt-warn: #e0a43b;

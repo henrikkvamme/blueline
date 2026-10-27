@@ -183,8 +183,9 @@ function TreeRow({
       className={cx(
         // The selection shows where the keys are, so a row the pointer clicked shows no ring.
         // A moving pointer selects the row it is on, so the row needs no hover tint of its own,
-        // which would look selected under a still pointer.
-        "flex min-h-9 w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-muted outline-none max-sm:min-h-11 max-sm:text-[15px]",
+        // which would look selected under a still pointer. Every row's words are full white, so
+        // no row looks off; its number, count and labels stay faint.
+        "flex min-h-9 w-full gap-1.5 rounded-dt-control py-1.5 pr-2.5 text-left text-[13px] text-dt-text outline-none max-sm:min-h-11 max-sm:text-[15px]",
         tall ? "items-start" : "items-center",
         DEPTH[depth],
         selected && "bg-dt-raised",
