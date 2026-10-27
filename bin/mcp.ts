@@ -14,6 +14,7 @@ import { applyCommand } from "./apply-run.ts";
 import type { Command, Line } from "./lines.ts";
 import { listenerPick, tagged } from "./listen.ts";
 import { answer } from "./reply.ts";
+import { markedAbove } from "./agents.ts";
 import { changeOf, claim, unclaim } from "./wire.ts";
 
 /*
@@ -160,8 +161,12 @@ export const waitHandler =
     const delivery: Delivery = { sent: false };
     waiting.watched.set(id, delivery);
     let receipt: readonly Line[] = [];
+    // The session waits while the call runs, so no wake starts another agent beside it.
     const done = waiting.run(
-      pull(waiting, signal, (taken) => (receipt = taken)),
+      markedAbove(waiting.feedback, "waiting").pipe(
+        Effect.andThen(pull(waiting, signal, (taken) => (receipt = taken))),
+        Effect.ensuring(markedAbove(waiting.feedback, "busy")),
+      ),
       { signal },
     );
     signal.addEventListener(
@@ -214,6 +219,7 @@ function serverFor(command: McpCommand, waiting: Waiting, status: string) {
     async (reply) => {
       const wrong = wrongIn(reply);
       if (wrong !== undefined) return text(wrong, true);
+      await waiting.run(markedAbove(waiting.feedback));
       const exit = await waiting.run(
         answer(
           {

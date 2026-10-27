@@ -1,23 +1,19 @@
-import { Config, Console, Effect, Option } from "effect";
+import { Console, Effect } from "effect";
 import { serve as start } from "../src/server/serve.ts";
-import { addOrigin, placeOf, removeOrigin, stopServer, tagFor } from "../src/server/start.ts";
+import { addOrigin, removeOrigin, stopServer, tagFor } from "../src/server/start.ts";
+import { deliver } from "./deliver.ts";
+import { PLACE } from "./repository.ts";
 
 /*
  * `blueline serve`: starts the machine's server for every app's channel, or says which one
  * runs. It listens until the command or `blueline serve stop` stops it. `blueline add` keeps
- * an origin for a page that loads the overlay by a script tag by hand.
+ * an origin for a page that loads the overlay by a script tag by hand. The server also runs
+ * the wake (bin/deliver.ts): an idle agent gets the reviewer's lines, and with none, a fresh
+ * one starts.
  */
 
-const env = (name: string) =>
-  Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
-
-/** Where the server runs and keeps its apps, from the environment (src/server/start.ts). */
-export const PLACE = Config.all({
-  BLUELINE_PORT: env("BLUELINE_PORT"),
-  BLUELINE_STATE: env("BLUELINE_STATE"),
-  XDG_STATE_HOME: env("XDG_STATE_HOME"),
-  HOME: env("HOME"),
-}).pipe(Config.map(placeOf));
+/** Where the server runs and keeps its apps (bin/repository.ts). */
+export { PLACE };
 
 /** A promise of src/server, with its error as a plain message. */
 export const plain = <A>(run: () => Promise<A>) =>
@@ -41,6 +37,8 @@ const serveProgram = Effect.gen(function* () {
     );
   }
   yield* Console.log(`Blueline serves every app's channel on http://127.0.0.1:${String(port)}.`);
+  // The wake runs beside the channels, until the server stops (bin/deliver.ts).
+  yield* Effect.forkScoped(deliver);
   yield* Effect.promise(() => asked);
   yield* Console.log("Blueline's server stopped.");
 });

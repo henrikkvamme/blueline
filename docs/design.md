@@ -1516,7 +1516,7 @@ proofs.
    (`wakes`) wait for the reader `agent`, and the file has been quiet for 5 s, it decides by
    the live agents of that file (`src/deliver/wake.ts`, plain):
    - A joined agent is `busy` or `waiting`, or `idle` with a live `waiter`, or a reservation
-     is open, or a listener's entry is fresh: nothing. It takes the lines itself.
+     is open, or a listener's entry other than the server's own `blueline-serve` is fresh: nothing. It takes the lines itself.
    - A joined agent is `idle` and warm, and its harness can be woken from outside: Codex by
      `codex queue --thread <session> --message <text>`; T3 by `t3 thread send <thread> -`.
    - **One order.** The decision, the claim and the reservation happen in one step under the

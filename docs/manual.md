@@ -656,6 +656,40 @@ stays until `blueline remove http://localhost:3000`. A page cannot keep its own 
 When the root has `blueline.config.ts`, the tag loads it from the server at
 `/blueline/<app>/config.js`, and the page loads again when the file changes.
 
+### The agent gets the review by itself
+
+Run setup once in the repository, for each harness that the agent runs in:
+
+```sh
+blueline setup <claude|codex> [--start <t3|claude|codex>] [--model <model>] [--provider <id>] [--cache <minutes>] [--as <name>] [--feedback <feedback.jsonl>]
+```
+
+- For Claude Code, it writes the hooks to `.claude/settings.local.json`, and adds the MCP
+  server in Claude Code's local scope for the project.
+- For Codex, it writes the hooks to `.codex/hooks.json` and the MCP server to
+  `.codex/config.toml`. Codex reads them only once you trust the project.
+
+Setup writes only its own entries. Run again, it changes nothing; `--remove` takes them out.
+
+An agent joins the review when it runs `blueline review`, `listen`, `reply` or `apply`, or
+calls `wait_for_feedback` or `reply`. A session that joined gets each new line once:
+
+- In a turn, the hook after its tool calls gives it the new lines.
+- At the end of a turn, the `Stop` hook keeps the turn going when lines came, up to 8 times
+  in a row, or `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`.
+- Idle in Claude Code, its `blueline wait` hook waits in the background, and wakes the session
+  when a line comes. The server wakes an idle Codex session by `codex queue`, and an idle T3
+  Code thread by `t3 thread send`.
+- With no agent to take a line, the server starts one by `--start`: a T3 Code thread,
+  `claude -p` or `codex exec`. The first line of its note is `Blueline session <token>.`, and
+  the new agent joins by it. When a start ends before its agent joins, the server tries
+  again only when a new line comes.
+
+The server acts once the feedback file has been quiet for 5 seconds, and never while a
+listener reads. It wakes an agent only while the agent's prompt cache is warm, and starts
+a fresh one after that. `--cache` is the cache's lifetime in minutes: 60 for Claude and 30
+for Codex by default. Each time that setup writes follows from it.
+
 ### Answer the review
 
 The last settle, the one that Finish sends, has an `id` and a `reply` hint. The `id` is the

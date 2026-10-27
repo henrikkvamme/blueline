@@ -1,6 +1,7 @@
 import { Option, Schema } from "effect";
 import type { Reply } from "../src/io/replies.ts";
 import type { Block } from "../src/notes/blocks.ts";
+import type { Start } from "./deliver.ts";
 
 /*
  * The plain parts of the `blueline` command (bin/blueline.ts), without files or a clock, so a
@@ -15,6 +16,9 @@ export const USAGE = `Usage:
   blueline reply <status.json> <note id> settled
   blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
   blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
+  blueline hook <claude|codex> [--as <name>] [--warm <minutes>] [--feedback <feedback.jsonl>]
+  blueline wait [--as <name>] [--feedback <feedback.jsonl>]
+  blueline setup <claude|codex> [--as <name>] [--cache <minutes>] [--feedback <feedback.jsonl>] [--start <t3|claude|codex>] [--model <model>] [--provider <id>] [--remove]
   blueline serve [stop]
   blueline add <origin> [--root <dir>]
   blueline remove <origin> [--root <dir>]
@@ -88,7 +92,40 @@ export type Command =
       readonly src: string;
       /** The longest time one wait waits, in ms. */
       readonly waitMs: number;
+    }
+  /** A harness hook (bin/hook.ts): the hook's JSON comes on stdin. */
+  | {
+      readonly kind: "hook";
+      readonly harness: "claude" | "codex";
+      /** The reader's name for the claims, the same as the MCP server's. */
+      readonly name: string;
+      /** How long the agent's prompt cache stays warm after its last request, in ms. */
+      readonly warmMs: number;
+      /** The feedback file, when setup named one; else the repository's apps' files. */
+      readonly feedback: string | undefined;
+    }
+  /** Writes a harness's hooks and MCP server into the repository (bin/setup.ts). */
+  | {
+      readonly kind: "setup";
+      readonly harness: "claude" | "codex";
+      readonly root: string;
+      readonly name: string;
+      /** The harness's prompt cache lifetime, in minutes; its default with none. */
+      readonly cacheMinutes: number | undefined;
+      readonly feedback: string | undefined;
+      /** How the server starts a fresh agent here; the one kept before with none. */
+      readonly start: Start | undefined;
+      readonly remove: boolean;
+    }
+  /** Claude's idle wake (bin/wait.ts): a background `Stop` hook, with the hook's JSON on stdin. */
+  | {
+      readonly kind: "wait";
+      readonly name: string;
+      readonly feedback: string | undefined;
     };
+
+/** The flags that take no value. */
+const SWITCHES = new Set(["--remove"]);
 
 /** The longest wait: below a 1-hour cache's lifetime less 60 s (ADR 0005). */
 const WAIT_MAX_S = 3540;
@@ -103,7 +140,8 @@ export function commandOf(args: readonly string[]): Command | undefined {
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i] ?? "";
     const value = args[i + 1];
-    if (arg.startsWith("--") && value !== undefined) {
+    if (SWITCHES.has(arg)) flags.set(arg.slice(2), "true");
+    else if (arg.startsWith("--") && value !== undefined) {
       flags.set(arg.slice(2), value);
       i += 1;
     } else words.push(arg);
@@ -138,6 +176,47 @@ export function commandOf(args: readonly string[]): Command | undefined {
       waitMs: seconds * 1000,
     };
   }
+  if (kind === "hook" && (file === "claude" || file === "codex") && words.length === 2) {
+    const warm = flags.get("warm") ?? String(file === "claude" ? 59 : 29);
+    if (!/^\d+$/.test(warm) || Number(warm) < 1) return undefined;
+    return {
+      kind,
+      harness: file,
+      name: flags.get("as") ?? "agent",
+      warmMs: Number(warm) * 60_000,
+      feedback: flags.get("feedback"),
+    };
+  }
+  if (kind === "setup" && (file === "claude" || file === "codex") && words.length === 2) {
+    const cache = flags.get("cache");
+    if (cache !== undefined && (!/^\d+$/.test(cache) || Number(cache) < 2)) return undefined;
+    const adapter = flags.get("start");
+    const model = flags.get("model");
+    const provider = flags.get("provider");
+    const start: Start | undefined =
+      adapter === "t3"
+        ? {
+            adapter,
+            ...(provider === undefined ? {} : { provider }),
+            ...(model === undefined ? {} : { model }),
+          }
+        : adapter === "claude" || adapter === "codex"
+          ? { adapter, ...(model === undefined ? {} : { model }) }
+          : undefined;
+    if (adapter !== undefined && start === undefined) return undefined;
+    return {
+      kind,
+      harness: file,
+      root: flags.get("root") ?? ".",
+      name: flags.get("as") ?? "agent",
+      cacheMinutes: cache === undefined ? undefined : Number(cache),
+      feedback: flags.get("feedback"),
+      start,
+      remove: flags.get("remove") === "true",
+    };
+  }
+  if (kind === "wait" && words.length === 1)
+    return { kind, name: flags.get("as") ?? "agent", feedback: flags.get("feedback") };
   const part = flags.get("part");
   if (kind === "apply" && file !== undefined && part !== undefined && words.length === 2)
     return { kind, file, part, keep: flags.get("keep"), src: flags.get("src") ?? "." };

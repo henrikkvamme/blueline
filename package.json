@@ -6,7 +6,8 @@
     "blueline": "./bin/blueline.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs/manual.md"
   ],
   "type": "module",
   "sideEffects": [

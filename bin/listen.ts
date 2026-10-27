@@ -3,6 +3,7 @@ import { FetchHttpClient, HttpClient } from "effect/http";
 import { reviewLink } from "../src/io/link.ts";
 import { HEARTBEAT_MS, ListeningSchema, type Listening } from "../src/io/listening.ts";
 import { ageOf, cameLate, wakes, type Command, type Line } from "./lines.ts";
+import { markedAbove } from "./agents.ts";
 import { changeOf, claim, readFile, writeWhole } from "./wire.ts";
 
 /*
@@ -85,6 +86,9 @@ export const listen = Effect.fn(function* (
   name: string,
 ) {
   const listening = `${feedback}.listening.json`;
+  // It joins its session before it reads a line: it runs until it is stopped, so a hook after
+  // its tool call would come too late.
+  yield* markedAbove(feedback);
   yield* Effect.addFinalizer(() =>
     sayListening(listening, name, journey, undefined).pipe(Effect.ignore),
   );

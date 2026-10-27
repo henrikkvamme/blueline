@@ -1,7 +1,9 @@
 import { Clock, Console, Effect, FileSystem, Schema } from "effect";
 import { ReplySchema } from "../src/io/replies.ts";
 import { BlockSchema, type Block } from "../src/notes/blocks.ts";
+import { markedAbove } from "./agents.ts";
 import { replyAfter, type Command } from "./lines.ts";
+import { feedbackOf, repositoryOf } from "./repository.ts";
 import { readFile, withLock, writeWhole } from "./wire.ts";
 
 /*
@@ -23,6 +25,10 @@ const isReply = Schema.is(ReplySchema);
 const BlocksFile = Schema.fromJsonString(Schema.Array(BlockSchema));
 
 export const reply = Effect.fn(function* (command: Extract<Command, { kind: "reply" }>) {
+  // A reply joins the agent's session to the review, in each of the repository's apps.
+  const repository = yield* repositoryOf(".").pipe(Effect.orElseSucceed(() => undefined));
+  const files = repository === undefined ? [] : yield* feedbackOf(repository);
+  yield* Effect.forEach(files, (feedback) => markedAbove(feedback), { discard: true });
   const blocks =
     command.blocks === undefined
       ? undefined

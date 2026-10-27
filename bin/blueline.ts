@@ -6,11 +6,15 @@
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Runtime, Stdio } from "effect";
+import { markedAbove } from "./agents.ts";
 import { applyCommand } from "./apply-run.ts";
 import { dev, signalExit } from "./dev.ts";
+import { hook } from "./hook.ts";
 import { commandOf, USAGE } from "./lines.ts";
 import { listen, review } from "./listen.ts";
 import { mcp } from "./mcp.ts";
+import { setup } from "./setup.ts";
+import { wait } from "./wait.ts";
 import { reply } from "./reply.ts";
 import { add, remove, serve, stop } from "./serve.ts";
 
@@ -33,12 +37,19 @@ const program = Effect.gen(function* () {
       return yield* add(command.root, command.origin);
     case "remove":
       return yield* remove(command.root, command.origin);
+    case "hook":
+      return yield* hook(command);
+    case "setup":
+      return yield* setup(command);
+    case "wait":
+      return yield* wait(command);
     case "mcp":
       return yield* Effect.scoped(mcp(command));
     case "dev":
       return yield* Effect.scoped(dev(command));
     case "apply":
       // What the agent must decide, as a plain line, and no stack.
+      yield* markedAbove(command.file);
       return yield* applyCommand(command).pipe(
         Effect.flatMap((said) => Console.log(said.join("\n"))),
         Effect.catchIf(
