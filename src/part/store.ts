@@ -304,14 +304,26 @@ export function variantsOn(step: StepInfo, journey: JourneyInfo | undefined): nu
   return step.variants?.length ?? 0;
 }
 
+/** The parts a step of the app's journeys names, as the session gives them (`nameParts`),
+ * shared as the parts are: the copy that runs the session and the one that reads a step's
+ * part may be two. */
+const named = shared("named", (): { parts: readonly string[] } => ({ parts: [] }));
+
+/** Keeps the parts the app's journeys name, so a step that names none leaves them alone. */
+export function nameParts(journeys: readonly JourneyInfo[]) {
+  named.parts = journeys.flatMap((j) =>
+    j.steps.flatMap((s) => (s.part === undefined ? [] : [s.part])),
+  );
+}
+
 /** The part with variants (part/variants.tsx) in the step's target, while it shows. A step
- * that names no part does not take a part another step of its journey names: the part round
- * its target is that step's, as when `apply` took a step's own part away. */
+ * that names no part does not take a part that a step of any journey names: that part is
+ * the other step's, also when it shows in this step's target. The part round its target is
+ * the step's only when no step names it, as when `apply` took a step's own part away. */
 export const partOn = (step: StepInfo | undefined, journey: JourneyInfo | undefined) =>
   step === undefined
     ? undefined
-    : parts.on(
-        step.target ?? [],
-        step.part,
-        (journey?.steps ?? []).flatMap((s) => (s.part === undefined ? [] : [s.part])),
-      );
+    : parts.on(step.target ?? [], step.part, [
+        ...named.parts,
+        ...(journey?.steps ?? []).flatMap((s) => (s.part === undefined ? [] : [s.part])),
+      ]);

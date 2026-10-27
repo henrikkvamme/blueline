@@ -4,7 +4,7 @@ import { linkedReview } from "../io/link";
 import { keptOf, loadKept, saveKept } from "../io/storage";
 import { isKept } from "../notes/note";
 import { PAGE_JOURNEY, pageJourney, pageParts, placeId } from "../part/page";
-import { parts, type Verdicts } from "../part/store";
+import { nameParts, parts, type Verdicts } from "../part/store";
 import { liveMachine, shapesOf } from "../session/actors";
 import type { SessionActor, sessionMachine } from "../session/machine";
 import { placed, withPlace } from "../session/state";
@@ -86,6 +86,8 @@ export function startSession<C>({
   // The page's path, then the parts on it that have variants: the page's own review has a
   // step for each. The machine runs the adapter's code; the view reads `info`.
   const pageOf = () => [path(), ...pageParts(parts.current().instances)].join("\n");
+  // The app's steps that name a part keep it: another step of theirs does not take it.
+  nameParts(adapter.journeys);
   const infoOf = (page: string): DevInfo => {
     const [place, ...names] = page.split("\n");
     return {
