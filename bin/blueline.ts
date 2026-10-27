@@ -17,11 +17,19 @@ const load = <A>(module: () => Promise<A>) => Effect.promise(module);
 /** `blueline dev`'s exit code after a signal, once its file is loaded. */
 let signalExit: () => number | undefined = () => undefined;
 
+/** The exit code of a command line Blueline does not take: the usage, with no error log. */
+let usageExit: number | undefined;
+
+/** Help asked for: the usage on its own. */
+const HELP = new Set(["--help", "-h", "help"]);
+
 const program = Effect.gen(function* () {
-  const command = commandOf(yield* (yield* Stdio.Stdio).args);
+  const args = yield* (yield* Stdio.Stdio).args;
+  if (args.length === 1 && HELP.has(args[0] ?? "")) return yield* Console.log(USAGE);
+  const command = commandOf(args);
   if (command === undefined) {
-    yield* Console.error(USAGE);
-    return yield* Effect.fail("usage");
+    usageExit = 2;
+    return yield* Console.error(USAGE);
   }
   switch (command.kind) {
     case "listen": {
@@ -90,7 +98,7 @@ program.pipe(
   // `blueline dev` stopped by a signal exits as its command does: 128 plus its number.
   NodeRuntime.runMain({
     teardown: (exit, onExit) => {
-      const code = signalExit();
+      const code = signalExit() ?? usageExit;
       if (code === undefined) Runtime.defaultTeardown(exit, onExit);
       else onExit(code);
     },
