@@ -1,7 +1,23 @@
 {
   "name": "@henrikkvamme/blueline",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Review a web app in development with your coding agent: walk it in steps, compare a part's designs and annotate the page.",
+  "keywords": [
+    "coding-agent",
+    "design",
+    "mcp",
+    "react",
+    "review",
+    "vite"
+  ],
+  "homepage": "https://github.com/henrikkvamme/blueline#readme",
+  "bugs": "https://github.com/henrikkvamme/blueline/issues",
+  "license": "MIT",
+  "author": "Henrik Kvamme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henrikkvamme/blueline.git"
+  },
   "bin": {
     "blueline": "./bin/blueline.ts"
   },
