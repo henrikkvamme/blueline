@@ -4,6 +4,9 @@ import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vite-plus";
 import { keep } from "./examples/review-demo/test/packed/serve.setup.ts";
 
+/** The run's temporary folder, which the run removes at its end. */
+const TMP = "test/helpers/tmp.setup.ts";
+
 /** What the overlay's own bundle holds: React, Effect, XState, lucide and what they need. */
 const PRIVATE =
   /^(react|react-dom|scheduler|use-sync-external-store|use-isomorphic-layout-effect|effect|xstate|@xstate\/react|lucide-react)(\/|$)/u;
@@ -77,10 +80,18 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: "node", include: ["test/**/*.test.ts"], exclude: ["test/packed/**"] },
+        test: {
+          name: "node",
+          include: ["test/**/*.test.ts"],
+          exclude: ["test/packed/**"],
+          globalSetup: [TMP],
+        },
       },
       // The plugin and the command as they are published, once `vp pack` built them.
-      { extends: true, test: { name: "node-packed", include: ["test/packed/*.test.ts"] } },
+      {
+        extends: true,
+        test: { name: "node-packed", include: ["test/packed/*.test.ts"], globalSetup: [TMP] },
+      },
       browser("source"),
       browser("packed"),
     ],
