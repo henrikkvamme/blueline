@@ -611,6 +611,25 @@ blocks in place of the last, so the plan changes as the agent goes on; a working
 no `--blocks` takes the plan away. The agent's reply ends it: the plan leaves the chat, and
 the reply shows.
 
+### Blocks in a reply
+
+A reply can show more than words. `--blocks` takes a JSON file with a list of blocks, and the
+MCP `reply` tool takes them as `blocks`. The panel draws each one, in the spirit of OpenUI's
+components:
+
+- `question`: a question with answers to click; the reviewer can always write another.
+- `actions` and `followups`: buttons and suggestions; a click sends its words as the
+  reviewer's next message.
+- `variants`, `changes` and `compare`: designs to choose from, changes on the page, and a
+  before and after of two screenshots.
+- `form`: values the agent needs, sent as one message.
+- `callout`, `table`, `code`, `metrics`, `details` and `images`: what the agent shows.
+- `plan`: the agent's progress while it works.
+
+`blueline blocks` prints when to use each, with its JSON. `blueline mcp` sends the same words
+in its instructions, so an agent on MCP has them from the start, and `blueline review` and
+`blueline listen` say once that they are there. `src/notes/blocks.ts` has every field.
+
 A settle does not wake the agent. The listener holds it and prints it, tagged `status`,
 with the next message, so the agent reads where the review is without a turn of its own. The
 last settle, which leaves no step open, wakes the agent: the review is done, and the agent

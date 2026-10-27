@@ -26,6 +26,10 @@ import { changeOf, claim, readFile, writeWhole } from "./wire.ts";
 /** A new note sent longer ago than this came late: the page or the server held it. */
 const LATE_MS = 5 * 60 * 1000;
 
+/** Said once, as the listener starts: a reply can show more than words. */
+export const BLOCKS_HINT =
+  "[blocks] A reply can ask a question with answers to click, offer actions, show variants, a before and after, a table and more: run `blueline blocks` for each one and its JSON, and pass them with --blocks.";
+
 /** A write the listener can miss: it says so and tries again on its next round. */
 const meanwhile = (what: string) =>
   Effect.catch((error: unknown) =>
@@ -94,6 +98,7 @@ export const listen = Effect.fn(function* (
   );
   let saidAt = 0;
   let backlog = true;
+  let hinted = false;
   // The files at the last round: when they did not change, nothing is new.
   let seen = "";
   for (;;) {
@@ -123,6 +128,10 @@ export const listen = Effect.fn(function* (
             ? ""
             : `; ${held === 1 ? "1 settle waits" : `${String(held)} settles wait`} for the next note`;
         yield* Console.log(`[listening] ${journey ?? "every journey"}, as ${name}${waiting}`);
+        if (!hinted) {
+          hinted = true;
+          yield* Console.log(BLOCKS_HINT);
+        }
       }
     }
     if (now - saidAt >= HEARTBEAT_MS) {

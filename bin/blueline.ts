@@ -44,6 +44,10 @@ const program = Effect.gen(function* () {
       const { reply } = yield* load(() => import("./reply.ts"));
       return yield* reply(command);
     }
+    case "blocks": {
+      const { BLOCKS_GUIDE } = yield* load(() => import("../src/mcp/tools.ts"));
+      return yield* Console.log(BLOCKS_GUIDE);
+    }
     case "serve": {
       const { serve, stop } = yield* load(() => import("./serve.ts"));
       return yield* command.stop ? stop : Effect.scoped(serve);

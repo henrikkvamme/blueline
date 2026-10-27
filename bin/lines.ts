@@ -14,6 +14,7 @@ export const USAGE = `Usage:
   blueline reply <status.json> <note id> working [--blocks <file.json>]
   blueline reply <status.json> <note id> replied <text> [--variant <label>] [--blocks <file.json>]
   blueline reply <status.json> <note id> settled
+  blueline blocks
   blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
   blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
   blueline hook <claude|codex> [--as <name>] [--warm <minutes>] [--feedback <feedback.jsonl>]
@@ -36,6 +37,8 @@ export type Command =
     }
   /** Serves every app's channel on the machine (src/server/serve.ts), or stops it. */
   | { readonly kind: "serve"; readonly stop: boolean }
+  /** Prints how a reply shows more than words: the blocks, by when to use each. */
+  | { readonly kind: "blocks" }
   /** Keeps an origin for a script tag by hand, or removes it. */
   | {
       readonly kind: "add" | "remove";
@@ -147,6 +150,7 @@ export function commandOf(args: readonly string[]): Command | undefined {
     } else words.push(arg);
   }
   const [kind, file, id, state, text] = words;
+  if (kind === "blocks" && flags.size === 0 && words.length === 1) return { kind };
   if (kind === "serve" && flags.size === 0 && (words.length === 1 || file === "stop"))
     return words.length <= 2 ? { kind, stop: file === "stop" } : undefined;
   if ((kind === "add" || kind === "remove") && file !== undefined && words.length === 2)
