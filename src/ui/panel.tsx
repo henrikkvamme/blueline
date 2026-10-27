@@ -1,4 +1,10 @@
-import { ChevronDown, ChevronRight, PanelRightClose, TriangleAlert } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  MousePointerClick,
+  PanelRightClose,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { placePath } from "../part/page";
 import { stepNoteId, treeShown } from "../session/machine";
@@ -331,8 +337,15 @@ function StepView() {
                 {step.title}
               </h2>
               <p className="mt-2 text-[14px] leading-[1.55] text-dt-muted">{step.look}</p>
+              {/* What to try stands out from what to look at: the reviewer's action. */}
               {step.try !== undefined && (
-                <p className="mt-2 text-[14px] leading-[1.55] text-dt-muted">{step.try}</p>
+                <p className="mt-2 flex items-start gap-2 text-[14px] leading-[1.55] text-dt-text">
+                  <MousePointerClick
+                    className="mt-[3px] size-4 shrink-0 text-dt-accent"
+                    aria-hidden
+                  />
+                  {step.try}
+                </p>
               )}
               <StepTrouble step={step.id} />
             </section>

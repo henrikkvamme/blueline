@@ -60,6 +60,14 @@ describe("a review of the demo", () => {
     if (surface) expect(getComputedStyle(surface).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
   });
 
+  it("marks what to try with an icon, apart from what to look at", async () => {
+    await startOn("list-rows", "The requests");
+    const line = [...(tools()?.querySelectorAll("p") ?? [])].find((p) =>
+      p.textContent?.startsWith("Alt+click a row"),
+    );
+    expect(line?.querySelector("svg")).not.toBeNull();
+  });
+
   it("writes in the step's composer, and keeps the keys from the page", async () => {
     await startOn("list-rows", "The requests");
     await userEvent.keyboard("i");
