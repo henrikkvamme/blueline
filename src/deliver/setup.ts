@@ -135,11 +135,15 @@ export function withOurHooks(
   return kept;
 }
 
+/** The table's header as TOML allows it: spaces around the dots, a quoted key and a comment. */
+const OUR_TABLE =
+  /^\s*\[\s*(mcp_servers|"mcp_servers"|'mcp_servers')\s*\.\s*(blueline|"blueline"|'blueline')\s*\]\s*(#.*)?$/;
+
 /** Codex's `config.toml` with the `[mcp_servers.blueline]` table in place of the one it had;
  * with no table given, without it. Other tables stay as they are. */
 export function withMcpTable(toml: string, table: string | undefined): string {
   const lines = toml.split("\n");
-  const start = lines.findIndex((l) => /^\s*\[mcp_servers\.blueline\]\s*$/.test(l));
+  const start = lines.findIndex((l) => OUR_TABLE.test(l));
   let kept = lines;
   if (start >= 0) {
     const after = lines.findIndex((l, i) => i > start && /^\s*\[/.test(l));

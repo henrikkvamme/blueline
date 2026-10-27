@@ -40,6 +40,8 @@ export const AgentSchema = Schema.Struct({
   waiter: Schema.optional(ProcessSchema),
   /** Its T3 thread, once a token gave it. */
   thread: Schema.optional(Schema.String),
+  /** The token it joined by: what the start made, such as its thread, can come after. */
+  token: Schema.optional(Schema.String),
 });
 export type Agent = typeof AgentSchema.Type;
 
@@ -96,6 +98,7 @@ const fresh = (facts: Facts, was: Agent | undefined): Agent => ({
   blocks: was?.blocks ?? 0,
   ...(was?.waiter === undefined ? {} : { waiter: was.waiter }),
   ...(was?.thread === undefined ? {} : { thread: was.thread }),
+  ...(was?.token === undefined ? {} : { token: was.token }),
 });
 
 export const samePlace = (a: Process, b: Process) => a.pid === b.pid && a.started === b.started;
@@ -106,13 +109,19 @@ const withState = (agent: Agent, state: Agent["state"], now: number): Agent =>
 /**
  * The agents after a hook. `joins` says the hook saw the session join: a `blueline` command
  * in its tool calls, or the token of a reservation in its prompt. `blocked` says the `Stop`
- * hook keeps the turn going, as it gives the session lines.
+ * hook keeps the turn going, as it gives the session lines. `before` is the session's blocks
+ * in a row before this `Stop`, in all its feedback files: the harness counts them together.
  */
 export function afterHook(
   agents: Agents,
   event: HookEvent,
   facts: Facts,
-  seen: { readonly joins?: boolean; readonly token?: string; readonly blocked?: boolean } = {},
+  seen: {
+    readonly joins?: boolean;
+    readonly token?: string;
+    readonly blocked?: boolean;
+    readonly before?: number;
+  } = {},
 ): Agents {
   const { session, now } = facts;
   if (event === "end") {
@@ -128,6 +137,7 @@ export function afterHook(
     agent = {
       ...agent,
       joined: true,
+      token: seen.token,
       ...(reserved.thread === undefined ? {} : { thread: reserved.thread }),
     };
   }
@@ -138,7 +148,7 @@ export function afterHook(
   if (event === "stop")
     agent =
       seen.blocked === true
-        ? { ...withState(agent, "busy", now), blocks: agent.blocks + 1 }
+        ? { ...withState(agent, "busy", now), blocks: (seen.before ?? agent.blocks) + 1 }
         : { ...withState(agent, "idle", now), blocks: 0 };
   return { sessions: { ...agents.sessions, [session]: agent }, reservations };
 }
@@ -155,6 +165,24 @@ export function withSessionState(
   if (agent === undefined) return agents;
   const next = { ...withState(agent, state, now), joined: agent.joined || joins, request: now };
   return { ...agents, sessions: { ...agents.sessions, [session]: next } };
+}
+
+/** The agents with what a start made, its thread, kept by its token: in its reservation, or in
+ * the session that joined by the token before the start returned. */
+export function withStarted(agents: Agents, token: string, made: Partial<Reservation>): Agents {
+  const reserved = agents.reservations[token];
+  if (reserved !== undefined)
+    return {
+      ...agents,
+      reservations: { ...agents.reservations, [token]: { ...reserved, ...made } },
+    };
+  const joined = Object.entries(agents.sessions).find(([, a]) => a.token === token);
+  if (joined === undefined || made.thread === undefined) return agents;
+  const [session, agent] = joined;
+  return {
+    ...agents,
+    sessions: { ...agents.sessions, [session]: { ...agent, thread: made.thread } },
+  };
 }
 
 /** The session whose harness is the process, if one is. */

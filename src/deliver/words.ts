@@ -7,4 +7,4 @@
 
 /** The line before the reviewer's lines in a hook's output and a wake. */
 export const HOOK_HEADER =
-  "Blueline: the reviewer's new lines, each after a tag that says when it was sent. Answer each line with an id by reply, on its id: first with state working and your plan, then with state replied.";
+  "Blueline: the reviewer's new lines, each after a tag that says when it was sent. Answer each line with an id by reply, on its id: first with state working as you start, then with state replied and what you did.";

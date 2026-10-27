@@ -60,7 +60,18 @@ function repository() {
 
 /** Runs a hook as the harness does: its JSON on stdin, its answer on stdout. */
 function hook(event: string, more: object = {}, session = "s1", harness = "claude") {
-  const ran = spawnSync(process.execPath, [COMMAND, "hook", harness, "--feedback", feedback], {
+  return hookOn(["--feedback", feedback], event, more, session, harness);
+}
+
+/** A hook with the files `args` name: none takes the repository's apps. */
+function hookOn(
+  args: readonly string[],
+  event: string,
+  more: object = {},
+  session = "s1",
+  harness = "claude",
+) {
+  const ran = spawnSync(process.execPath, [COMMAND, "hook", harness, ...args], {
     input: JSON.stringify({ session_id: session, cwd: dir, hook_event_name: event, ...more }),
     env: env(),
     encoding: "utf8",
@@ -140,6 +151,22 @@ describe("the hooks", { timeout: 30_000 }, () => {
   it("let Codex's Stop say nothing as JSON, as Codex expects", () => {
     repository();
     expect(hook("Stop", {}, "c1", "codex")).toEqual({});
+    // Also in a repository that no app registered yet.
+    expect(hookOn([], "Stop", {}, "c1", "codex")).toEqual({});
+  });
+
+  it("count the Stop blocks of a session across its files, as Claude counts them", () => {
+    repository();
+    const other = path.join(dir, ".blueline", "other.jsonl");
+    writeFileSync(other, "");
+    keepApps([feedback, other]);
+    hookOn([], "PostToolBatch", { tool_calls: [{ tool_input: { command: "blueline listen f" } }] });
+    for (let i = 0; i < 8; i += 1) {
+      appendFileSync(i % 2 === 0 ? feedback : other, note(`N${String(i)}`));
+      expect(hookOn([], "Stop", { stop_hook_active: i > 0 })).toMatchObject({ decision: "block" });
+    }
+    appendFileSync(feedback, note("LAST"));
+    expect(hookOn([], "Stop", { stop_hook_active: true })).toBeUndefined();
   });
 
   it("wait ends with nothing when its session starts a turn", async () => {
@@ -175,26 +202,32 @@ async function freePort() {
   return address.port;
 }
 
-/** `blueline serve` with the app kept, and the fake agent as its start adapter. */
-async function serve(more: Record<string, string>) {
+/** The apps that a dev server keeps in the state folder, one for each feedback file. */
+function keepApps(feedbacks: readonly string[]) {
   const state = path.join(dir, "state");
   mkdirSync(state, { recursive: true });
-  const files = {
-    feedback,
-    status: path.join(dir, ".blueline", "status.json"),
-    images: path.join(dir, ".blueline", "images"),
-    listening: `${feedback}.listening.json`,
-  };
-  writeFileSync(
-    path.join(state, "apps.json"),
-    JSON.stringify({
-      protocol: 2,
-      apps: [{ name: "app", root: dir, repository: dir, files, kept: [] }],
-    }),
-  );
+  const apps = feedbacks.map((file, i) => ({
+    name: `app${String(i)}`,
+    root: dir,
+    repository: dir,
+    files: {
+      feedback: file,
+      status: path.join(dir, ".blueline", `status${String(i)}.json`),
+      images: path.join(dir, ".blueline", "images"),
+      listening: `${file}.listening.json`,
+    },
+    kept: [],
+  }));
+  writeFileSync(path.join(state, "apps.json"), JSON.stringify({ protocol: 2, apps }));
+}
+
+/** `blueline serve` with the app kept, and the fake agent as its start adapter. */
+async function serve(more: Record<string, string>, command = [process.execPath, FAKE]) {
+  const state = path.join(dir, "state");
+  keepApps([feedback]);
   writeFileSync(
     path.join(state, "start.json"),
-    JSON.stringify({ [dir]: { start: { adapter: "command", command: [process.execPath, FAKE] } } }),
+    JSON.stringify({ [dir]: { start: { adapter: "command", command } } }),
   );
   const server = spawn(process.execPath, [COMMAND, "serve"], {
     env: env({
@@ -238,6 +271,20 @@ describe("the server's wake", () => {
     process.kill(first?.pid ?? 0, "SIGKILL");
     expect(await until(() => starts().length === 2, 10_000)).toBe(true);
     expect(starts()[1]?.note).toContain('"line":"N2"');
+  }, 60_000);
+
+  it("does not start again on the same lines when the start itself fails", async () => {
+    repository();
+    const server = await serve({}, [path.join(dir, "no-such-agent")]);
+    let said = "";
+    server.stderr?.on("data", (data: Buffer) => (said += data.toString()));
+    const fails = () => said.split("did not start").length - 1;
+    appendFileSync(feedback, note("N1"));
+    expect(await until(() => fails() === 1, 15_000)).toBe(true);
+    await new Promise((done) => setTimeout(done, 14_000));
+    expect(fails()).toBe(1);
+    appendFileSync(feedback, note("N2"));
+    expect(await until(() => fails() === 2, 15_000)).toBe(true);
   }, 60_000);
 
   it("does not start again on the same lines when an agent ends before it joins", async () => {

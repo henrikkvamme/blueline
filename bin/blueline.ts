@@ -6,17 +6,16 @@
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Runtime, Stdio } from "effect";
-import { markedAbove } from "./agents.ts";
-import { applyCommand } from "./apply-run.ts";
-import { dev, signalExit } from "./dev.ts";
-import { hook } from "./hook.ts";
 import { commandOf, USAGE } from "./lines.ts";
-import { listen, review } from "./listen.ts";
-import { mcp } from "./mcp.ts";
-import { setup } from "./setup.ts";
-import { wait } from "./wait.ts";
-import { reply } from "./reply.ts";
-import { add, remove, serve, stop } from "./serve.ts";
+
+/*
+ * Each command loads its own file only when it runs. A harness runs `blueline hook` at each
+ * tool call, so the hook must not wait for the MCP SDK, the server or TypeScript to load.
+ */
+const load = <A>(module: () => Promise<A>) => Effect.promise(module);
+
+/** `blueline dev`'s exit code after a signal, once its file is loaded. */
+let signalExit: () => number | undefined = () => undefined;
 
 const program = Effect.gen(function* () {
   const command = commandOf(yield* (yield* Stdio.Stdio).args);
@@ -25,29 +24,54 @@ const program = Effect.gen(function* () {
     return yield* Effect.fail("usage");
   }
   switch (command.kind) {
-    case "listen":
+    case "listen": {
+      const { listen } = yield* load(() => import("./listen.ts"));
       return yield* Effect.scoped(listen(command.file, command.journey, command.name));
-    case "review":
+    }
+    case "review": {
+      const { review } = yield* load(() => import("./listen.ts"));
       return yield* review(command);
-    case "reply":
+    }
+    case "reply": {
+      const { reply } = yield* load(() => import("./reply.ts"));
       return yield* reply(command);
-    case "serve":
+    }
+    case "serve": {
+      const { serve, stop } = yield* load(() => import("./serve.ts"));
       return yield* command.stop ? stop : Effect.scoped(serve);
-    case "add":
+    }
+    case "add": {
+      const { add } = yield* load(() => import("./serve.ts"));
       return yield* add(command.root, command.origin);
-    case "remove":
+    }
+    case "remove": {
+      const { remove } = yield* load(() => import("./serve.ts"));
       return yield* remove(command.root, command.origin);
-    case "hook":
+    }
+    case "hook": {
+      const { hook } = yield* load(() => import("./hook.ts"));
       return yield* hook(command);
-    case "setup":
+    }
+    case "setup": {
+      const { setup } = yield* load(() => import("./setup.ts"));
       return yield* setup(command);
-    case "wait":
+    }
+    case "wait": {
+      const { wait } = yield* load(() => import("./wait.ts"));
       return yield* wait(command);
-    case "mcp":
+    }
+    case "mcp": {
+      const { mcp } = yield* load(() => import("./mcp.ts"));
       return yield* Effect.scoped(mcp(command));
-    case "dev":
-      return yield* Effect.scoped(dev(command));
-    case "apply":
+    }
+    case "dev": {
+      const module = yield* load(() => import("./dev.ts"));
+      signalExit = module.signalExit;
+      return yield* Effect.scoped(module.dev(command));
+    }
+    case "apply": {
+      const { markedAbove } = yield* load(() => import("./agents.ts"));
+      const { applyCommand } = yield* load(() => import("./apply-run.ts"));
       // What the agent must decide, as a plain line, and no stack.
       yield* markedAbove(command.file);
       return yield* applyCommand(command).pipe(
@@ -57,6 +81,7 @@ const program = Effect.gen(function* () {
           (message) => Console.error(message).pipe(Effect.andThen(Effect.fail("apply"))),
         ),
       );
+    }
   }
 });
 

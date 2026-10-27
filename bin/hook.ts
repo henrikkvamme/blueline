@@ -2,7 +2,7 @@ import { text } from "node:stream/consumers";
 import { Cause, Clock, Console, Effect, Schema } from "effect";
 import { afterHook, mayBlock, tokenIn, type Facts, type HookEvent } from "../src/deliver/agents.ts";
 import { HOOK_HEADER } from "../src/deliver/words.ts";
-import { harnessOf, processes, withAgents } from "./agents.ts";
+import { harnessOf, processes, readAgents, withAgents } from "./agents.ts";
 import type { Command, Line } from "./lines.ts";
 import { listenerPick, tagged } from "./listen.ts";
 import { feedbackOf, repositoryOf } from "./repository.ts";
@@ -86,7 +86,7 @@ export const hookStep = Effect.fn(function* (command: HookCommand, stdin: string
       : repository === undefined
         ? []
         : yield* feedbackOf(repository);
-  if (files.length === 0) return undefined;
+  if (files.length === 0) return hookOutput(command.harness, event, undefined);
   const table = yield* processes;
   const harness = harnessOf(table, process.pid);
   if (harness === undefined) return yield* Effect.fail("The hook finds no harness above it.");
@@ -109,31 +109,43 @@ export const hookStep = Effect.fn(function* (command: HookCommand, stdin: string
     ...(tokenIn(input.prompt) === undefined ? {} : { token: tokenIn(input.prompt) ?? "" }),
   };
   const cap = blockCap(process.env["CLAUDE_CODE_STOP_HOOK_BLOCK_CAP"]);
+  // The harness counts a session's Stop blocks in a row, not a file's: the most that one of
+  // its files counts is the count.
+  const before = Math.max(
+    0,
+    ...(yield* Effect.forEach(files, readAgents)).map(
+      (agents) => agents.sessions[facts.session]?.blocks ?? 0,
+    ),
+  );
   const taken: Line[] = [];
   for (const feedback of files)
     yield* withAgents(feedback, (agents) =>
       Effect.gen(function* () {
         const joined = afterHook(agents, event, facts, seen);
         const agent = joined.sessions[facts.session];
-        // The blocks in a row so far: `joined` already counts this Stop as one that ends the turn.
-        const blocks = agents.sessions[facts.session]?.blocks ?? 0;
         const reads =
           agent?.joined === true &&
           (event === "prompt" ||
             event === "tool" ||
-            (event === "stop" && mayBlock({ ...agent, blocks }, cap)));
-        if (!reads) return [joined, undefined] as const;
+            (event === "stop" && mayBlock({ ...agent, blocks: before }, cap)));
+        if (!reads) return [event === "stop" ? agents : joined, undefined] as const;
         const lines = yield* claim(feedback, command.name, (fresh) =>
           listenerPick(fresh, undefined),
         );
         taken.push(...lines);
-        const blocked = event === "stop" && lines.length > 0;
-        return [
-          blocked ? afterHook(agents, event, facts, { ...seen, blocked }) : joined,
-          undefined,
-        ] as const;
+        // A Stop's state waits until every file has said whether it gives lines.
+        return [event === "stop" ? agents : joined, undefined] as const;
       }),
     );
+  // The Stop's state in every file: busy when some file gave lines, as the turn goes on.
+  if (event === "stop")
+    for (const feedback of files)
+      yield* withAgents(feedback, (agents) =>
+        Effect.succeed([
+          afterHook(agents, event, facts, { ...seen, blocked: taken.length > 0, before }),
+          undefined,
+        ] as const),
+      );
   if (taken.length === 0) return hookOutput(command.harness, event, undefined);
   return hookOutput(command.harness, event, [HOOK_HEADER, ...tagged(taken, now, false)].join("\n"));
 });

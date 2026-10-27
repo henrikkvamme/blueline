@@ -2,7 +2,13 @@ import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, openSync } from "node:fs";
 import { Cause, Clock, Console, Effect, FileSystem, Path, Schema } from "effect";
-import { liveAgents, tokenLine, type Agents, type Reservation } from "../src/deliver/agents.ts";
+import {
+  liveAgents,
+  tokenLine,
+  withStarted,
+  type Agents,
+  type Reservation,
+} from "../src/deliver/agents.ts";
 import { wakeFor, type Wake } from "../src/deliver/wake.ts";
 import { HOOK_HEADER } from "../src/deliver/words.ts";
 import { ListeningSchema, SILENT_MS, HEARTBEAT_MS } from "../src/io/listening.ts";
@@ -138,7 +144,7 @@ export function startNote(token: string, app: KeptApp, lines: readonly string[])
   return [
     tokenLine(token),
     `You are the agent for a Blueline review of the app in ${app.root}. The reviewer wrote the lines below in the review panel.`,
-    `Answer each line with an id: run \`blueline reply ${status} <id> working\` with your plan, make the change, then \`blueline reply ${status} <id> replied "<what you did>"\`. Or use the reply tool of the blueline MCP server.`,
+    `Answer each line with an id: run \`blueline reply ${status} <id> working\` as you start, make the change, then run \`blueline reply ${status} <id> replied "<what you did>"\`. Or use the reply tool of the blueline MCP server.`,
     `Then wait for the next lines: call wait_for_feedback, or run \`blueline listen ${feedback}\`.`,
     "",
     ...lines,
@@ -255,7 +261,8 @@ const decide = Effect.fn(function* (
   );
 });
 
-/** Ends a reservation, and gives its lines back: the start or the send failed. */
+/** Ends a reservation, and gives its lines back: the start or the send failed. It says that
+ * it failed, so the server waits for a new line before it tries again. */
 const undo = Effect.fn(function* (app: KeptApp, name: string, decided: Decided, why: string) {
   yield* Console.error(`[deliver] ${app.root}: ${why}; the lines go back.`);
   yield* unclaim(
@@ -267,20 +274,16 @@ const undo = Effect.fn(function* (app: KeptApp, name: string, decided: Decided, 
     const { [decided.token]: _, ...others } = agents.reservations;
     return Effect.succeed([{ ...agents, reservations: others }, undefined] as const);
   });
+  return true;
 });
 
-/** Keeps what the start made in its reservation: its process or its thread. */
+/** Keeps what the start made, its process or its thread, by its token. */
 const keepStarted = (app: KeptApp, token: string, made: Partial<Reservation>) =>
-  withAgents(app.files.feedback, (agents) => {
-    const was = agents.reservations[token];
-    if (was === undefined) return Effect.succeed([agents, undefined] as const);
-    return Effect.succeed([
-      { ...agents, reservations: { ...agents.reservations, [token]: { ...was, ...made } } },
-      undefined,
-    ] as const);
-  });
+  withAgents(app.files.feedback, (agents) =>
+    Effect.succeed([withStarted(agents, token, made), undefined] as const),
+  );
 
-/** Acts on the choice, outside the lock. */
+/** Acts on the choice, outside the lock; whether the start or the send failed. */
 const act = Effect.fn(function* (
   app: KeptApp,
   name: string,
@@ -304,9 +307,10 @@ const act = Effect.fn(function* (
           );
     if (sent.code !== 0)
       return yield* undo(app, name, decided, `the wake failed: ${sent.stderr.trim()}`);
-    return yield* Console.error(`[deliver] ${app.root}: woke ${wake.session} by ${wake.via}.`);
+    yield* Console.error(`[deliver] ${app.root}: woke ${wake.session} by ${wake.via}.`);
+    return false;
   }
-  if (wake.kind !== "start") return;
+  if (wake.kind !== "start") return false;
   if (start === undefined) return yield* undo(app, name, decided, "no start adapter is set");
   const note = startNote(token, app, lines);
   if (start.adapter === "t3") {
@@ -315,12 +319,19 @@ const act = Effect.fn(function* (
       ...(start.provider === undefined ? [] : ["--provider", start.provider]),
       ...(start.model === undefined ? [] : ["--model", start.model]),
     ];
-    const made = yield* run(t3, ["thread", "start", ...options, app.repository, note], app.root);
+    // Its title names the review: the note's first line is the token.
+    const title = `Blueline review of ${app.root.split("/").at(-1) ?? app.root}`;
+    const made = yield* run(
+      t3,
+      ["thread", "start", "--title", title, ...options, app.repository, note],
+      app.root,
+    );
     const thread = made.stdout.trim().split("\n").at(-1)?.trim() ?? "";
     if (made.code !== 0 || thread === "")
       return yield* undo(app, name, decided, `t3 could not start a thread: ${made.stderr.trim()}`);
     yield* keepStarted(app, token, { thread });
-    return yield* Console.error(`[deliver] ${app.root}: started T3 thread ${thread}.`);
+    yield* Console.error(`[deliver] ${app.root}: started T3 thread ${thread}.`);
+    return false;
   }
   const [command, args, input]: readonly [string, readonly string[], string | undefined] =
     start.adapter === "claude"
@@ -341,12 +352,13 @@ const act = Effect.fn(function* (
       undo(app, name, decided, `${start.adapter} did not start: ${why}`).pipe(Effect.as(undefined)),
     ),
   );
-  if (pid === undefined) return;
+  if (pid === undefined) return true;
   const started = (yield* processes).get(pid)?.started;
   if (started !== undefined) yield* keepStarted(app, token, { process: { pid, started } });
   yield* Console.error(
     `[deliver] ${app.root}: started ${start.adapter} as process ${String(pid)}.`,
   );
+  return false;
 });
 
 /** The T3 threads whose run ended: a start there that no session joined has failed. */
@@ -443,7 +455,8 @@ export const deliver = Effect.gen(function* () {
             `[deliver] ${app.root}: the agent ended before it joined; the next line starts one again.`,
           );
         } else if (!paused) failedAt.delete(app.files.feedback);
-        if (decided.taken.length > 0) yield* act(app, name, setting?.start, decided, log);
+        if (decided.taken.length > 0 && (yield* act(app, name, setting?.start, decided, log)))
+          failedAt.set(app.files.feedback, size);
       }).pipe(
         Effect.catchCause((cause) =>
           Console.error(`[deliver] ${app.root}: ${Cause.pretty(cause)}`),

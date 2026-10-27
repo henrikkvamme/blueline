@@ -6,6 +6,7 @@ import {
   NO_AGENTS,
   tokenIn,
   tokenLine,
+  withStarted,
   type Agent,
   type Agents,
   type Facts,
@@ -104,6 +105,26 @@ describe("an agent's state", () => {
     expect(mayBlock(agents.sessions["s"], 8)).toBe(true);
     // A session that did not join is never blocked.
     expect(mayBlock(agent({ joined: false }), 8)).toBe(false);
+  });
+
+  it("counts a Stop block from the session's count in all its files", () => {
+    const one = afterHook(NO_AGENTS, "tool", facts("s", 1), { joins: true });
+    const after = afterHook(one, "stop", facts("s", 2), { blocked: true, before: 5 });
+    expect(after.sessions["s"]?.blocks).toBe(6);
+  });
+
+  it("gives a thread that a start returns after its agent joined to the session", () => {
+    const reserved: Agents = {
+      sessions: {},
+      reservations: { abc12345: { adapter: "t3", lines: [], at: 1 } },
+    };
+    // The prompt hook joins by the token before `t3 thread start` returns.
+    const joined = afterHook(reserved, "prompt", facts("new", 2), { token: "abc12345" });
+    expect(withStarted(joined, "abc12345", { thread: "T9" }).sessions["new"]?.thread).toBe("T9");
+    // Before the join, the reservation keeps it.
+    expect(
+      withStarted(reserved, "abc12345", { thread: "T9" }).reservations["abc12345"]?.thread,
+    ).toBe("T9");
   });
 
   it("is a new agent in a new harness process, even with the same session", () => {
@@ -271,5 +292,17 @@ describe("setup", () => {
     );
     expect(withMcpTable(once, table)).toBe(once);
     expect(withMcpTable(once, undefined)).toBe(toml);
+  });
+
+  it.each([
+    "[mcp_servers.blueline] # mine",
+    '[ mcp_servers."blueline" ]',
+    "[mcp_servers . 'blueline']",
+  ])("finds its table by the header %s", (header) => {
+    const table = mcpTable("/usr/bin/node", ["/x/blueline.ts"], timesFor(30));
+    const toml = `${header}\ncommand = "old"\n\n[mcp_servers.other]\ncommand = "o"\n`;
+    const written = withMcpTable(toml, table);
+    expect(written).not.toContain('"old"');
+    expect(written.match(/blueline/g)).toHaveLength(2);
   });
 });

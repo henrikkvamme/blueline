@@ -1605,6 +1605,27 @@ proofs.
     the hooks and the wait. A hook's output and a wake's message go into the agent's turn at
     once. A line is lost only when the harness is killed between the claim and the model
     call, at most once. `listen` keeps its rule.
+11. **As built.** Each proof ran on 2026-10-27 in a temporary repository, with the packed
+    package installed by `npm install <tarball>`, `BLUELINE_STATE` in a folder of its own,
+    and `blueline serve` on its own port.
+    - Setup: `blueline setup claude --start claude --feedback .blueline/feedback.jsonl`
+      wrote the hooks and the start adapter, and `claude mcp get blueline` showed the
+      server connected. A second run wrote the same file.
+    - Cases 1 and 3, with Claude: N1 asked for `sleep 45` and a reply. The server started
+      `claude -p`, which joined by its token. N2 came 15 s later, while the agent worked;
+      its next tool batch had N2 0.4 s after it was written, and it replied on N2's id.
+    - Case 2, with Claude: 6.5 minutes after the `claude -p` session's turn ended, N3 came
+      with no server running. Its `blueline wait` hook woke the session, and the reply was
+      there 5 s after the line. A `claude -p` process stays while its `wait` runs, up to
+      the warm time, and serves each line that comes.
+    - The proof found that the start note asked for a plan after `working`, which
+      `blueline reply` does not take; the note now says to send `working` as the agent
+      starts.
+    - Hook speed, with nothing new, from the packed command: 168 ms at the median (301 ms
+      before each command loaded only its own modules). The rest is Node's start, one `ps`
+      and Effect's runtime; bundling `effect` into the command gained 8 ms only, so it
+      stays a dependency.
+    - Case 5 runs in `test/deliver-run.test.ts` with the fake agent killed by `SIGKILL`.
 
 ## Evals
 
