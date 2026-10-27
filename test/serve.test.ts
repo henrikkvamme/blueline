@@ -405,7 +405,7 @@ describe("blueline serve for pages", () => {
     expect(tag.headers.get("access-control-allow-origin")).toBe(page);
     expect(tag.headers.get("vary")).toBe("Origin");
     const text = await tag.text();
-    expect(text).toContain(`from "${url}/blueline/overlay.js"`);
+    expect(text).toContain(`await import("${url}/blueline/overlay.js")`);
     expect(text).toContain(`"feedback":"${url}${a.base}feedback"`);
     expect(text).toContain(`"storageKey":"blueline.${a.name}"`);
     expect((await raw(`${a.base}tag.js`, { origin: "http://localhost:1" })).status).toBe(403);

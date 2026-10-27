@@ -55,6 +55,9 @@ Vite's config, or the dev server's default. For another dev server on Node, name
 `blueline dev` stops, by Ctrl+C or a signal, it stops every process that the command
 started, and exits with the command's code.
 
+The overlay's script tag loads nothing until the page has loaded and the browser is idle, at
+most two seconds later. The app's own load takes no longer with Blueline than without it.
+
 It does not work for an HTTPS dev server, a dev server that is not on Node, or a command
 that sets `NODE_OPTIONS` itself; set `NODE_OPTIONS` in the environment instead. Use the Vite
 plugin or a tag by hand there. The page loads the app's `blueline.config.ts` as a tag by hand
