@@ -17,10 +17,19 @@ export const USAGE = `Usage:
   blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
   blueline serve [stop]
   blueline add <origin> [--root <dir>]
-  blueline remove <origin> [--root <dir>]`;
+  blueline remove <origin> [--root <dir>]
+  blueline dev [--port <port>] [--host <host>] -- <command>`;
 
 /** What the command line asks for. */
 export type Command =
+  /** Runs the app's dev command behind a proxy that adds the overlay (src/server/dev.ts). */
+  | {
+      readonly kind: "dev";
+      readonly command: readonly string[];
+      /** The page's port, for a dev server that `blueline dev` does not know. */
+      readonly port: number | undefined;
+      readonly host: string | undefined;
+    }
   /** Serves every app's channel on the machine (src/server/serve.ts), or stops it. */
   | { readonly kind: "serve"; readonly stop: boolean }
   /** Keeps an origin for a script tag by hand, or removes it. */
@@ -88,6 +97,7 @@ const WAIT_S = 50;
 
 /** The command in the arguments, or none when they make no command. */
 export function commandOf(args: readonly string[]): Command | undefined {
+  if (args[0] === "dev") return devOf(args.slice(1));
   const words: string[] = [];
   const flags = new Map<string, string>();
   for (let i = 0; i < args.length; i += 1) {
@@ -141,6 +151,24 @@ export function commandOf(args: readonly string[]): Command | undefined {
   if (state === "replied" && text !== undefined && words.length === 5)
     return { kind, file, id, state, text, variant, blocks };
   return undefined;
+}
+
+/** `blueline dev`'s flags, then `--` and the command. */
+function devOf(args: readonly string[]): Command | undefined {
+  const split = args.indexOf("--");
+  const command = args.slice(split + 1);
+  if (split === -1 || command.length === 0) return undefined;
+  let port: number | undefined;
+  let host: string | undefined;
+  for (let i = 0; i < split; i += 2) {
+    const [flag, value] = [args[i], args[i + 1]];
+    if (value === undefined || i + 1 >= split) return undefined;
+    if (flag === "--port" && /^\d+$/.test(value) && Number(value) > 0 && Number(value) < 65536)
+      port = Number(value);
+    else if (flag === "--host") host = value;
+    else return undefined;
+  }
+  return { kind: "dev", command, port, host };
 }
 
 /** A note line from the feedback file, with the fields the listener reads. */

@@ -100,6 +100,23 @@ describe("the agent's side of the channel", () => {
     );
     expect(commandOf(["reply", "s.json", "n1", "replied"])).toBeUndefined();
     expect(commandOf(["listen"])).toBeUndefined();
+    expect(commandOf(["dev", "--", "pnpm", "dev", "--port", "4000"])).toEqual({
+      kind: "dev",
+      command: ["pnpm", "dev", "--port", "4000"],
+      port: undefined,
+      host: undefined,
+    });
+    expect(commandOf(["dev", "--port", "4000", "--host", "0.0.0.0", "--", "node", "s.js"])).toEqual(
+      {
+        kind: "dev",
+        command: ["node", "s.js"],
+        port: 4000,
+        host: "0.0.0.0",
+      },
+    );
+    expect(commandOf(["dev", "pnpm", "dev"])).toBeUndefined();
+    expect(commandOf(["dev", "--"])).toBeUndefined();
+    expect(commandOf(["dev", "--port", "x", "--", "node"])).toBeUndefined();
     expect(commandOf(["apply", "f.jsonl", "--part", "Suggestion"])).toEqual({
       kind: "apply",
       file: "f.jsonl",

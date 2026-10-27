@@ -7,6 +7,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Stdio } from "effect";
 import { applyCommand } from "./apply-run.ts";
+import { dev } from "./dev.ts";
 import { commandOf, USAGE } from "./lines.ts";
 import { listen, review } from "./listen.ts";
 import { mcp } from "./mcp.ts";
@@ -34,6 +35,8 @@ const program = Effect.gen(function* () {
       return yield* remove(command.root, command.origin);
     case "mcp":
       return yield* Effect.scoped(mcp(command));
+    case "dev":
+      return yield* Effect.scoped(dev(command));
     case "apply":
       // What the agent must decide, as a plain line, and no stack.
       return yield* applyCommand(command).pipe(

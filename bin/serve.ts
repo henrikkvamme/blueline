@@ -12,7 +12,7 @@ const env = (name: string) =>
   Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
 
 /** Where the server runs and keeps its apps, from the environment (src/server/start.ts). */
-const PLACE = Config.all({
+export const PLACE = Config.all({
   BLUELINE_PORT: env("BLUELINE_PORT"),
   BLUELINE_STATE: env("BLUELINE_STATE"),
   XDG_STATE_HOME: env("XDG_STATE_HOME"),
@@ -20,7 +20,7 @@ const PLACE = Config.all({
 }).pipe(Config.map(placeOf));
 
 /** A promise of src/server, with its error as a plain message. */
-const plain = <A>(run: () => Promise<A>) =>
+export const plain = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({
     try: run,
     catch: (error) => (error instanceof Error ? error.message : String(error)),
@@ -46,7 +46,7 @@ const serveProgram = Effect.gen(function* () {
 });
 
 // Why a command cannot run, as a plain line, and no stack.
-const said =
+export const said =
   (name: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(

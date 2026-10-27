@@ -16,7 +16,8 @@ their own CSS. Three places use it:
   `overlay: false`. The notes go to `.blueline/` in the app's root, or to the `feedback` and
   `status` files it gives. In middleware mode, give the page's `origin`. When the app links
   Blueline from its source, the plugin also has Blueline's files use the app's React. An app
-  with no Vite uses a script tag by hand (see "One server for the machine").
+  with no Vite uses `blueline dev` (see "With no change to the app") or a script tag by
+  hand (see "One server for the machine").
 - `mount({ adapter, storageKey: "<app>.review" })`, in a module that the app loads in
   development only, or `<DevTools adapter={...} storageKey="<app>.review" />` from
   `@henrikkvamme/blueline/react` in a React app. The adapter (`DevAdapter` in `src/types.ts`) gives the journeys and opens a step's
@@ -34,7 +35,30 @@ their own CSS. Three places use it:
 The agent's command is `blueline`. `examples/review-demo` is a small app set up this way, with
 one journey over two pages and one part with variants; `pnpm run demo` starts it on port 4310.
 
-`blueline dev`, which needs no change to the app, comes later ([design.md](design.md)).
+### With no change to the app
+
+`blueline dev -- <command>`, in the app's root, runs the app's own dev command and puts the
+page's own review on each page, with no change to the app's code:
+
+```sh
+blueline dev -- pnpm dev
+```
+
+The page stays on the port it had, so its origin does not change. `blueline dev` holds that
+port with a proxy, and the dev server listens on another one, which it does not see: it
+still names the page's port in its lines and its request URLs. The proxy sends every request
+and websocket on, and adds the overlay's script tag to each HTML page, also a compressed or
+streamed one. It finds the page's port for Vite (`vite`, `vp dev`) and Next.js (`next dev`),
+also through a package script: from the command's `--port`, from `PORT` for Next.js, from
+Vite's config, or the dev server's default. For another dev server on Node, name the port:
+`blueline dev --port 4000 -- <command>`. `--host` names where the proxy listens. When
+`blueline dev` stops, by Ctrl+C or a signal, it stops every process that the command
+started, and exits with the command's code.
+
+It does not work for an HTTPS dev server, a dev server that is not on Node, or a command
+that sets `NODE_OPTIONS` itself; set `NODE_OPTIONS` in the environment instead. Use the Vite
+plugin or a tag by hand there. The page loads the app's `blueline.config.ts` as a tag by hand
+does, so the config may import only `@henrikkvamme/blueline/config`.
 
 ### An app with its own keys
 
@@ -619,8 +643,8 @@ server registered; the agent's tools, which send no origin, always may. The serv
 only a request to its own address, so another site cannot reach it by a name of its own. It
 keeps its apps in `~/.local/state/blueline/apps.json`, or in `BLUELINE_STATE`.
 
-A page that no dev server registers, such as one from Next.js, loads the overlay by a script
-tag by hand. In the app's root, keep the page's origin and get the tag:
+`blueline dev` registers its page as the plugin does. A page that no dev server registers
+loads the overlay by a script tag by hand. In the app's root, keep the page's origin and get the tag:
 
 ```sh
 blueline add http://localhost:3000

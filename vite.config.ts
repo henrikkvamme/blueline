@@ -138,6 +138,23 @@ export default defineConfig({
       clean: false,
     },
     {
+      // The preload of `blueline dev`. `--require` loads it before any other preload; Node
+      // loads an ES module with no top-level await that way too (src/server/hook.ts).
+      entry: { "bin/dev-hook": "src/server/hook.ts" },
+      platform: "node",
+      tsconfig: "tsconfig.node.json",
+      fixedExtension: false,
+      clean: false,
+    },
+    {
+      // The guard that starts `blueline dev`'s command and stops its group.
+      entry: { "bin/dev-guard": "src/server/guard.ts" },
+      platform: "node",
+      tsconfig: "tsconfig.node.json",
+      fixedExtension: false,
+      clean: false,
+    },
+    {
       entry: { "bin/blueline": "bin/blueline.ts" },
       platform: "node",
       // The platform layer goes in the command: its own dependencies on npm resolve to a

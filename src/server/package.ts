@@ -25,3 +25,15 @@ export const commandFile = (): string =>
   here.endsWith(".ts")
     ? path.join(packageRoot(), "bin", "blueline.ts")
     : path.join(packageRoot(), "dist", "bin", "blueline.js");
+
+/** The preload of `blueline dev`, which moves the dev server's listen (src/server/hook.ts). */
+export const hookFile = (): string =>
+  here.endsWith(".ts")
+    ? path.join(packageRoot(), "src", "server", "hook.ts")
+    : path.join(packageRoot(), "dist", "bin", "dev-hook.js");
+
+/** The guard of `blueline dev`'s command (src/server/guard.ts). */
+export const guardFile = (): string =>
+  here.endsWith(".ts")
+    ? path.join(packageRoot(), "src", "server", "guard.ts")
+    : path.join(packageRoot(), "dist", "bin", "dev-guard.js");

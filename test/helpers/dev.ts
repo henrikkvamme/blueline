@@ -12,7 +12,7 @@ export const folder = (name: string) =>
 
 /** `blueline serve` on a free port, with its own state folder. */
 export async function startServe(
-  options: { port?: number; state?: string; overlay?: string } = {},
+  options: { port?: number; state?: string; overlay?: string; config?: string } = {},
 ) {
   const state = options.state ?? folder("state");
   const served = await serve({ port: options.port ?? 0, state, ...options });

@@ -1,15 +1,24 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { request as send } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { Plugin } from "vite";
 import type { GivenFiles } from "./server/apps.ts";
-import type { ChannelRoute } from "./server/channel.ts";
 import { configFile } from "./server/config.ts";
+import {
+  CHANNEL_ROUTES,
+  forward,
+  fromPage,
+  OVERLAY,
+  refuse,
+  ROUTES,
+  TAG,
+  type Routes,
+} from "./server/page.ts";
 import { holdRegistration, placeOf, type Holding, type Place } from "./server/start.ts";
 import { tagModule } from "./server/tag.ts";
 
 export { isJson, LINE_FORMAT, stamped } from "./server/channel.ts";
+export { fromPage, OVERLAY, ROUTES, TAG, type Routes } from "./server/page.ts";
 
 /*
  * The channel between the dev tools and the coding agent, through the dev server to
@@ -47,21 +56,6 @@ export interface ChannelOptions {
   readonly serve?: Partial<Place>;
 }
 
-/** Where the page posts notes and reads replies. The page's copy is in io/routes.ts: Node
- * loads this file with the app's Vite config, so it imports nothing of the page. A test keeps
- * the two the same. */
-export const ROUTES = {
-  feedback: "/__devtools/feedback",
-  status: "/__devtools/status",
-  images: "/__devtools/images",
-  listening: "/__devtools/listening",
-};
-export type Routes = typeof ROUTES;
-const CHANNEL_ROUTES: readonly ChannelRoute[] = ["feedback", "status", "images", "listening"];
-/** The overlay from the server, and the module that mounts it on the page. */
-export const OVERLAY = "/__devtools/overlay.js";
-export const TAG = "/__devtools/tag.js";
-
 /** The packages that hold React's state, each with its subpaths, as the JSX runtimes. */
 const ONE_COPY = ["react", "react-dom"];
 
@@ -74,60 +68,6 @@ export function hasReact(root: string): boolean {
     return false;
   }
 }
-
-/**
- * Whether a request comes from the dev server's own page. A browser names the page's origin
- * on each POST, so another site cannot put a note in the file the agent acts on. A request
- * with no origin is not from a browser page, as the agent's own tools are. Vite checks the
- * request's host before the plugin's routes (`server.allowedHosts`).
- */
-export function fromPage(headers: {
-  readonly origin?: string | undefined;
-  readonly host?: string | undefined;
-}): boolean {
-  if (headers.origin === undefined) return true;
-  try {
-    return new URL(headers.origin).host === headers.host;
-  } catch {
-    return false;
-  }
-}
-
-/** The headers of one connection, which a request forwarded on another does not keep. */
-const OWN_HEADERS = ["host", "origin", "connection", "keep-alive", "upgrade", "referer"];
-
-/**
- * Sends a page's request on to the server as a tool's: the plugin checked the page, so the
- * request goes with no `Origin`.
- */
-function forward(port: number, target: string, request: IncomingMessage, response: ServerResponse) {
-  const headers = Object.fromEntries(
-    Object.entries(request.headers).filter(([name]) => !OWN_HEADERS.includes(name)),
-  );
-  const sent = send(
-    { host: "127.0.0.1", port, path: target, method: request.method, headers },
-    (answer) => {
-      response.writeHead(answer.statusCode ?? 502, answer.headers);
-      answer.pipe(response);
-      // An answer cut short ends the page's answer too, so the page does not wait on it.
-      answer.once("close", () => {
-        if (!answer.complete) response.destroy();
-      });
-    },
-  );
-  sent.on("error", () => {
-    if (response.headersSent) return void response.destroy();
-    response.statusCode = 502;
-    response.end();
-  });
-  request.pipe(sent);
-}
-
-const refuse = (response: ServerResponse, status: number, why?: string) => {
-  response.statusCode = status;
-  if (why !== undefined) response.setHeader("content-type", "text/plain; charset=utf-8");
-  response.end(why);
-};
 
 /** The module that mounts the overlay on the page, on the page's routes, with the app's
  * config through Vite, from the dev server's base. A change to it loads the page again, as
