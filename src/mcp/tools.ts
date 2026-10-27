@@ -24,10 +24,16 @@ export const BLOCKS_GUIDE = [
   "An image is a screenshot's name on the dev server. Keep the words short: the blocks carry the detail.",
 ].join("\n");
 
+/** How an agent asks for a change to Blueline itself (bin/request.ts). */
+export const REQUEST_GUIDE =
+  'When Blueline itself is wrong or lacks something you need, ask for the change: run `blueline request "<title>" --body "<what happened, what you expected>"`. It files an issue on Blueline\'s public repository, once per title. Describe Blueline\'s behaviour only: leave out the app, its company and its data.';
+
 export const INSTRUCTIONS = [
   "Blueline gives you the reviewer's lines from the review panel. Call wait_for_feedback when you wait for the reviewer. Answer each message with reply, on its id. Apply the reviewer's verdicts on a part's variants with apply.",
   "",
   BLOCKS_GUIDE,
+  "",
+  REQUEST_GUIDE,
 ].join("\n");
 
 /** What a wait that got nothing returns: the same words each time. */
