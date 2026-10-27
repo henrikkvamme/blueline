@@ -977,10 +977,12 @@ export const sessionMachine = setup({
             enqueue.assign({ cursor: next, row: undefined });
             if (next !== context.at) enqueue.raise({ type: "go", by: next - context.at });
           };
-          // A settled step that shows the variant it kept is right as it is: the walk goes on.
+          // A settle on a settled step that shows the variant it kept takes it back: the step
+          // opens again and the walk stays, so y and the green button toggle (Henrik
+          // 2026-10-27).
           const again = was.settled === true;
           if (again && !changesKept(context, step, event.keep)) {
-            goOn(context.feedback);
+            enqueue.raise({ type: "reopen", step: at });
             return;
           }
           // The notes not sent yet go with the settle, so none is lost: the agent works on

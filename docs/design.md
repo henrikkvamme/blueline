@@ -325,7 +325,7 @@ the variant the page shows:
 | The step                        | Settle reads           | A press                                    |
 | ------------------------------- | ---------------------- | ------------------------------------------ |
 | open                            | Keep Cards, or Settle  | settles it with Cards, and goes on         |
-| settled, shows its kept variant | Kept Cards, or Settled | opens it again; `y` and Enter go on        |
+| settled, shows its kept variant | Kept Cards, or Settled | opens it again, and stays on it            |
 | settled, shows another variant  | Keep Table, in blue    | keeps Table in place of Cards, and goes on |
 
 A settled step that keeps another variant keeps only that one. The old variant is kept no
@@ -336,8 +336,8 @@ walk comes to a settled step with its kept variant on the page, so Settle starts
 panel's list of variants, a small green check marks the kept variant, apart from the radio of
 the variant shown. A press on the green button opens the step again and stays on it: under the
 pointer or the focus it reads **Open again**, so the press says what it does (Henrik
-2026-10-27). `y` and Enter on a settled step still go on, so a burst of keys never opens one.
-`u` right after a settle, **Open the step again** in the panel's ⋯ menu, and `y` on a settled
+2026-10-27). `y` and Enter do the same: settle toggles. A burst of keys cannot open a step by
+chance, as a settle goes on and the next key waits until the next step shows. `u` right after a settle, **Open the step again** in the panel's ⋯ menu, and `y` on a settled
 step in the tree open it again too.
 
 The tree's selection follows the walk: a step the walk goes to is the one selected, so the

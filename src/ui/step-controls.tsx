@@ -153,7 +153,7 @@ const AGAIN = "group-hover:visible group-focus-visible:visible";
  * goes on to the next open step. On a step that lists variants it names the one it keeps,
  * "Keep Cards", and once settled the one it kept, "Kept Cards", in green. Under the pointer or
  * the focus a settled step's button says "Open again", and a press opens the step again and
- * stays on it, as y keeps going on. On a settled step that shows another variant it turns blue
+ * stays on it, as y does. On a settled step that shows another variant it turns blue
  * again, "Keep Table": a
  * press keeps that one in place of the old (settle.ts). Its width stays the same whatever it
  * says, so nothing beside it moves: a long name ends in an ellipsis. In the panel's foot it is
@@ -193,7 +193,7 @@ export function SettleButton({
       aria-pressed={words.kept}
       aria-label={words.label}
       title={words.label}
-      onClick={() => perform({ kind: "event", event: { type: words.kept ? "reopen" : "settle" } })}
+      onClick={() => perform({ kind: "event", event: { type: "settle" } })}
       className={cx(
         "group flex shrink-0 items-center justify-center gap-1.5 rounded-dt-control font-medium transition-colors duration-150 motion-reduce:transition-none",
         foot

@@ -1001,14 +1001,17 @@ describe("settling a step", () => {
     expect(written.context.notes.find((n) => n.id === note)?.state).toBe("waiting");
   });
 
-  it("goes on from a settled step with y, and changes nothing", () => {
+  it("opens a settled step again with y, and stays on it, as Open the step again does", () => {
     const settled = after(ready(), { type: "settle" }, { type: "entered" });
     const back = after(settled, { type: "go", by: -1 }, { type: "entered" });
-    const on = after(back, { type: "settle" });
-    expect(on.context.at).toBe(1);
-    expect(on.context.feedback).toEqual(back.context.feedback);
-    expect(on.context.posts).toBe(back.context.posts);
-    expect(on.context.past).toEqual(back.context.past);
+    const toggled = after(back, { type: "settle" });
+    const reopened = after(back, { type: "reopen" });
+    expect(toggled.context.at).toBe(0);
+    expect(toggled.context.feedback["a"]?.settled).toBe(false);
+    expect(toggled.context.feedback).toEqual(reopened.context.feedback);
+    expect(toggled.context.past.at(-1)?.label).toBe("Opened the step again");
+    // y again settles it again.
+    expect(after(toggled, { type: "settle" }).context.feedback["a"]?.settled).toBe(true);
   });
 
   it("goes on to the next open step, or back to the first open one when none is after", () => {
@@ -1627,7 +1630,7 @@ describe("what the agent hears of the settles", () => {
     expect(lines[2]).toMatchObject({ parts: { Requests: { kept: ["Dense list"] } } });
   });
 
-  it("hears nothing when a settled step that shows its kept variant goes on", () => {
+  it("hears a settled step that shows its kept variant opened again by its settle", () => {
     const lines: unknown[] = [];
     expect(
       heard(
@@ -1636,7 +1639,8 @@ describe("what the agent hears of the settles", () => {
         lines,
       ),
     ).toEqual([]);
-    expect(lines).toHaveLength(1);
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toMatchObject({ step: { id: "a" }, settled: false });
   });
 
   it("hears a step opened again from the menu, and the undo of it", () => {

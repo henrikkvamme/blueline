@@ -328,15 +328,18 @@ export function Running({
     /** Settles the step at `at`. The walk goes on at once, and the light shows the settle on
      * the part it leaves (Light's `left`). Until the next step shows, another settle does
      * nothing (settle.ts). A step the tree selected is named when the page shows another. On
-     * a settled step that shows its kept variant, nothing changes: the walk only goes on,
-     * with no settle to show. */
+     * a settled step that shows its kept variant, the settle opens it again and the walk
+     * stays. */
     const settle = (at: number) => {
       const s = actor.getSnapshot();
       const was = s.context;
       const step = journeyIn(s, info)?.steps[at];
-      if (step === undefined || !settling.free()) return;
+      if (step === undefined) return;
       const here = at === was.at;
       const before = was.feedback[step.id];
+      // The gate keeps a burst of keys off steps not seen yet. A settled step is one the
+      // reviewer sees: its settle opens it again, or keeps the variant they chose.
+      if (before?.settled !== true && !settling.free()) return;
       // The variant the reviewer sees as they settle.
       actor.send({ type: "settle", ...(here ? {} : { step: at }), ...settleOf(at), at: now() });
       const then = actor.getSnapshot().context;
@@ -345,7 +348,8 @@ export function Running({
       // light turns green where it stands, so on a phone the part goes above the sheet.
       if (!then.active || (then.at === was.at && then.run === was.run)) {
         settling.reset();
-        if (then.active && here && changed) keepLit(step.target?.[0]);
+        if (then.active && here && changed && then.feedback[step.id]?.settled === true)
+          keepLit(step.target?.[0]);
         return;
       }
       // The part left shows the settle only when the settle changed the step.

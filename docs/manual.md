@@ -251,14 +251,14 @@ the check only fade, and the light fades in on the new part.
 Until the next step shows with its light in place, another `y`, Enter or check does
 nothing, so a held or quick key never settles a step you have not seen.
 
-Settle always means "this is right, go on". A walk back to a settled step shows its kept
-variant, and the button is green. Enter there goes on to the next open step and writes
-nothing. To change your mind, show another variant: the button turns blue, as **Keep
+Settle is a toggle. On an open step it means "this is right, go on". A walk back to a
+settled step shows its kept variant, and the button is green. `y`, Enter or the button
+there opens the step again, and you stay on it. To keep another variant instead, show another variant: the button turns blue, as **Keep
 Table**. Enter keeps Table in place of the old variant, writes one settle line, plays the
 green motion and goes on. The old variant is kept no more, and it is not deleted. `u` takes
-the change back. To open a settled step again, press its green button, which reads **Open
-again** under the pointer. You stay on the step. `u` right after the settle, **Open the step
-again** in the panel's ⋯ menu, and `y` on a settled step in the tree open it again too.
+the change back. Under the pointer the green button reads **Open again**, so you see what a
+press does. `u` right after the settle and **Open the step again** in the panel's ⋯ menu
+open a settled step again too.
 
 The tree selects the step the walk is on. When you go to another step, by a key, a chevron
 or a settle, the tree selects that step, also when the pointer rests on the row you clicked
@@ -375,24 +375,24 @@ The keys move the way things stand on the screen. On a step, the panel's foot go
 the step before, Settle and the step after. The variants stand in a list down the panel.
 Each arrow key does what its vim key does. No key needs AltGr or Option on a Norwegian Mac.
 
-| Key                               | Where    | What it does                                              |
-| --------------------------------- | -------- | --------------------------------------------------------- |
-| `h`, `l`, ←, →                    | the page | the step before, the step after                           |
-| `j`, `k`, ↓, ↑                    | the page | the next, the previous variant, on a step with more       |
-| `1` to `9`                        | the page | the variant with that number                              |
-| `H`, `L`, Shift+←, Shift+→        | the page | the open step before, after: settled steps are skipped    |
-| `g g`, `G`                        | the page | the first, the last open step                             |
-| `y`, Enter                        | the page | settle the step, then go on to the next open step         |
-| `v`, Space                        | the page | lift the part                                             |
-| `i`                               | the page | write a message                                           |
-| `m`                               | the page | annotate: a click pins an annotation there; Esc stops     |
-| `u`, Ctrl+Z, Cmd+Z                | the page | undo                                                      |
-| Ctrl+R, Ctrl+Shift+Z, Cmd+Shift+Z | the page | redo                                                      |
-| `p`                               | the page | the preview: a tap hides or shows the tools; held, a peek |
-| `j`, `k`                          | the tree | the row below, above                                      |
-| `h`, `l`                          | the tree | close the row or go up, open it or go down into it        |
-| Ctrl+J, Ctrl+K                    | the tree | the open step below, above                                |
-| Enter                             | the tree | open the selected row                                     |
+| Key                               | Where    | What it does                                               |
+| --------------------------------- | -------- | ---------------------------------------------------------- |
+| `h`, `l`, ←, →                    | the page | the step before, the step after                            |
+| `j`, `k`, ↓, ↑                    | the page | the next, the previous variant, on a step with more        |
+| `1` to `9`                        | the page | the variant with that number                               |
+| `H`, `L`, Shift+←, Shift+→        | the page | the open step before, after: settled steps are skipped     |
+| `g g`, `G`                        | the page | the first, the last open step                              |
+| `y`, Enter                        | the page | settle the step and go on; on a settled one, open it again |
+| `v`, Space                        | the page | lift the part                                              |
+| `i`                               | the page | write a message                                            |
+| `m`                               | the page | annotate: a click pins an annotation there; Esc stops      |
+| `u`, Ctrl+Z, Cmd+Z                | the page | undo                                                       |
+| Ctrl+R, Ctrl+Shift+Z, Cmd+Shift+Z | the page | redo                                                       |
+| `p`                               | the page | the preview: a tap hides or shows the tools; held, a peek  |
+| `j`, `k`                          | the tree | the row below, above                                       |
+| `h`, `l`                          | the tree | close the row or go up, open it or go down into it         |
+| Ctrl+J, Ctrl+K                    | the tree | the open step below, above                                 |
+| Enter                             | the tree | open the selected row                                      |
 
 The arrow keys and Space act only on a step, and only while the focus is on the page
 itself: on the app's field, select, slider, tabs or another control that uses them, they
