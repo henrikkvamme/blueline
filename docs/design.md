@@ -1262,17 +1262,36 @@ proofs.
    - `joined`: whether the agent takes the review's lines (below).
    - `request`: the time of its last model request, as near as a hook can tell: the last hook
      time. The wake uses it for the cache rule.
-   - `waiter`: the process of its `blueline wait`, if one runs (step 3).
+   - `waiter`: the process of its `blueline wait`, if one runs (step 4).
+   - `warm`: its warm time, from setup (step 7). `blocks`: its `Stop` blocks in a row
+     (step 3). `thread`: its T3 thread, when a token gave it (step 2).
+
+   Beside the sessions, the file keeps the open **reservations**, by token: the adapter, the
+   start's process or T3 thread, and the line IDs the start carried.
 
    `src/deliver/agents.ts` holds the plain part: the schema, the transitions for each hook
    event, and `liveAgents(entries, alive)`. `bin/agents.ts` holds the files and `ps`.
 
 2. **Who takes the lines.** Every session in the repository registers, so Blueline knows its
    state. Only a session that **joined** gets the review's lines, so a session in the same
-   checkout that works on something else never gets them in its turn. A session joins when
-   it calls `wait_for_feedback` or `reply` on `blueline mcp`, or when a hook sees a tool call
-   that runs `blueline review`, `listen`, `reply` or `apply`. A session that a wake started
-   joins at its first reply. It stays joined until it ends.
+   checkout that works on something else never gets them in its turn. A session stays joined
+   until it ends. It joins in one of three ways:
+   - It calls `wait_for_feedback` or `reply` on `blueline mcp`.
+   - It runs `blueline review`, `listen`, `reply` or `apply`. Each of these commands finds
+     its harness among its ancestors, as the hook does, and joins that session before it
+     reads a line. A hook after the tool call would come too late: `review` and `listen` run
+     until they are stopped. While a listener runs, its entry in the listening file is fresh,
+     and the wake does nothing (step 6): the listener takes the lines.
+   - Blueline started or woke it (step 6). Each start and each wake from outside carries a
+     **token**, a random word in a fixed line of its prompt: "Blueline session
+     `<token>`." The server keeps a **reservation** for the token in the agents file. The
+     session's `UserPromptSubmit` hook sees the token in the prompt, joins the session, and
+     takes the reservation's place, before the first model request. A reservation counts as
+     a joined, busy agent, so no second agent starts while the first one starts. It ends when
+     its session joins, or when the start fails: the start's process ends with no session
+     joined, or for `t3`, the thread's run ends with no session joined. No timer ends it.
+     The token also gives a T3 session its thread ID: the server knows which thread it sent
+     the token to.
    - The MCP server finds its session in the agents file by its parent process: the harness
      starts a stdio server as its child. With no entry, the server keeps its own name and
      works as in C1.
@@ -1292,8 +1311,13 @@ proofs.
    - `PostToolBatch` (Claude) and `PostToolUse` (Codex): `busy`, and joins on a `blueline`
      command (step 2). A joined session gets its fresh lines as `additionalContext`.
    - `Stop`: with fresh lines for a joined session, `{"decision":"block","reason":...}` with
-     the lines, so the turn goes on (both harnesses). Otherwise `idle`. Claude Code ends the
-     turn anyway after 8 blocks in a row; then the lines wait for the wake.
+     the lines, so the turn goes on (both harnesses). Otherwise `idle`.
+   - **The block cap.** Claude Code overrides the ninth `Stop` block in a row and ends the
+     turn; a tool call starts the count again. The entry counts the hook's own blocks in a
+     row, and a tool batch sets the count to 0. When the count is at the cap,
+     `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` or 8, the `Stop` hook claims nothing and makes the
+     session `idle`, so the lines stay for `wait` or the wake. Codex has no such cap that
+     its docs name; the same count stops a loop there too.
    - `SessionEnd`: deletes the entry.
    - The lines are claimed with `listenerPick`, and tagged as `listen` and the MCP server
      tag them, after one fixed line: "Blueline: the reviewer's new lines. Answer each with
@@ -1311,10 +1335,10 @@ proofs.
    - Each second, while the session is `idle` and joined, it claims the fresh lines. With
      lines, it writes them to stderr, after the fixed line, and exits 2.
    - It exits 0 when the session goes `busy` after the wait started, when the session is
-     gone, or when the session's last request is older than the cache lifetime, `--warm`,
-     55 minutes by default. A cold session is not woken: a fresh start costs less (ADR 0005).
-     Setup gives the hook a `timeout` a minute longer than `--warm`, as Claude Code enforces
-     the timeout of an `asyncRewake` hook.
+     gone, or when the session's last request is older than its `warm` time (step 7). A
+     cold session is not woken: a fresh start costs less (ADR 0005). Setup gives the hook a
+     `timeout` a minute longer than the warm time, as Claude Code enforces the timeout of an
+     `asyncRewake` hook.
    - A wait that starts while the `Stop` hook still runs sees the old `busy`, and waits.
 5. **The MCP server.** `blueline mcp` marks its session `waiting` during a
    `wait_for_feedback` call and `busy` after it, and joins on `wait_for_feedback` and
@@ -1323,12 +1347,19 @@ proofs.
    `deliver` loop checks each one every second, by `changeOf`. When fresh lines that wake
    (`wakes`) wait for the reader `agent`, and the file has been quiet for 5 s, it decides by
    the live agents of that file (`src/deliver/wake.ts`, plain):
-   - A joined agent is `busy` or `waiting`, or `idle` with a live `waiter`: nothing. It takes
-     the lines itself.
+   - A joined agent is `busy` or `waiting`, or `idle` with a live `waiter`, or a reservation
+     is open, or a listener's entry is fresh: nothing. It takes the lines itself.
    - A joined agent is `idle` and warm, and its harness can be woken from outside: Codex by
      `codex queue --thread <session> --message <text>`; T3 by `t3 thread send <thread> -`.
-     The server claims the lines first, then sends them; when the send fails, it gives them
-     back (`unclaim`) and says so in its log.
+   - **One order.** The decision, the claim and the reservation happen in one step under the
+     agents file's lock, and each hook's change of state takes the same lock. So the server
+     either sees a `UserPromptSubmit`'s `busy` and does nothing, or it claims first, and the
+     prompt's hook then finds the lines taken. In that second order the wake's message
+     reaches the session as its next queued turn, as `codex queue` and `t3 thread send`
+     queue behind a running turn; the line is late by one turn, and not lost. Then the
+     server sends, outside the lock. When the send fails, it gives the lines back
+     (`unclaim`), ends the reservation, and says so in its log. A test runs both orders with
+     barriers.
    - Otherwise (no joined agent, every one gone, or each one cold): the start adapter starts
      a fresh session with a short note that stands alone: the page, the open lines, the last
      decision and the file paths. It never resumes a session that another process holds.
@@ -1341,18 +1372,25 @@ proofs.
      listening file that the notes are read, by the name `blueline-serve`, every 5 s, as the
      dispatch service does now. A joined agent that thinks for minutes is still there.
    - **T3's own thread.** A hook under T3 cannot read its thread's ID: T3 gives the
-     harness no such value. Step 8 proves whether Claude's `asyncRewake` wakes a T3 thread.
-     If it does, T3 sessions use `wait` as Claude does. If not, a cold or idle T3 session
+     harness no such value. A T3 session that Blueline started or woke has it, by its token
+     (step 2). Step 8 proves whether Claude's `asyncRewake` wakes a T3 thread. If it does,
+     T3 sessions use `wait` as Claude does. If not, an idle T3 session with no thread ID
      gets a fresh thread in its worktree, as the dispatch service does for a cold one.
-7. **`blueline setup <claude|codex> [--as <name>] [--start <t3|claude|codex|command>]`.**
-   Run in the repository. It writes only its own entries, and leaves the others as they are:
+7. **`blueline setup <claude|codex> [--as <name>] [--cache <minutes>] [--start <t3|claude|codex|command>]`.**
+   Run in the repository. It writes only its own entries, and leaves the others as they are.
+   - **One cache time.** `--cache` is the harness's cache lifetime: 60 minutes for Claude by
+     default (a Claude subscription; 5 on an API key), and 30 for Codex. Every time follows
+     from it, so none can disagree: the warm time and the MCP wait are the cache less
+     1 minute, the wait at most 3540 s (4 minutes for a 5-minute cache, 59 for an hour); the
+     `wait` hook's timeout is the warm time and 1 minute; Codex's `tool_timeout_sec` is the
+     MCP wait and 10 s. The `Stop` hook comes just after the turn's last model request, and the minute of margin covers the time that last answer took. Setup writes the
+     warm time into each command as `--warm`, and each hook writes it into the session's
+     entry, so the server's wake uses the same warm time as the session's own `wait`.
    - Claude: the hooks in `.claude/settings.local.json` (not checked in), each as the exec
-     form of the `blueline` command; and the MCP server by `claude mcp add --scope local`,
-     with `--wait 3540` for a 1-hour cache, or `--cache 5m` for 240.
+     form of the `blueline` command; and the MCP server by `claude mcp add --scope local`.
    - Codex: the hooks in `.codex/hooks.json`, and `[mcp_servers.blueline]` in
-     `.codex/config.toml`, with `tool_timeout_sec` 10 s over `--wait 1740` (Codex's cache
-     keeps at least 30 minutes). Codex loads a project's `.codex/` only once it is trusted;
-     setup says so.
+     `.codex/config.toml`. Codex loads a project's `.codex/` only once it is trusted; setup
+     says so.
    - The command is the repository's `node_modules/.bin/blueline` when it is there, or the
      absolute path of the running command.
    - `--start` writes the start adapter for the repository in `<state>/start.json`.
@@ -1377,8 +1415,21 @@ proofs.
    - A hook, the MCP pull, a `wait` and a wake at once: each line goes to one of them.
    - `wait`: exits 2 with the lines for an idle joined session; exits 0 when it goes busy,
      when another wait starts, when the harness is gone, and when it is cold.
-   - The wake decision, as a table: each state of the live agents gives nothing, a wake or a
-     start. A failed send gives the lines back. A killed harness's lines go to a start.
+   - The wake decision, as a table: each state of the live agents, reservations and
+     listeners gives nothing, a wake or a start. A failed send gives the lines back and ends
+     the reservation. A killed harness's lines go to a start.
+   - A foreground `blueline listen` joins its session before a note comes, and the wake
+     starts no one while it runs.
+   - A start's token: the `UserPromptSubmit` hook with the token joins the session and ends
+     the reservation; a second note while the started session thinks starts no one; a start
+     whose process ends with no session joined ends its reservation, and the next note
+     starts again.
+   - The block cap: eight `Stop` blocks in a row, then a ninth `Stop` with fresh lines
+     claims nothing and makes the session idle, and `wait` then takes the lines. A tool
+     batch between blocks starts the count again.
+   - Both orders of a wake and a `UserPromptSubmit`, with barriers: the hook delivers the
+     line, or the wake does, once.
+   - One cache time: for `--cache` 5, 30 and 60, each derived time, as step 7 gives it.
    - Setup: the files it writes for each harness, run twice, and `--remove`.
    - The speed of a hook with nothing new, from the built command (step 3).
    - Packed: `dist/bin/blueline.js hook` and `setup` run.
