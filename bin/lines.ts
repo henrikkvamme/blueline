@@ -20,7 +20,7 @@ export const USAGE = `Usage:
   blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
   blueline hook <claude|codex> [--as <name>] [--warm <minutes>] [--feedback <feedback.jsonl>]
   blueline wait [--as <name>] [--feedback <feedback.jsonl>]
-  blueline setup <claude|codex> [--as <name>] [--cache <minutes>] [--feedback <feedback.jsonl>] [--start <t3|claude|codex>] [--model <model>] [--provider <id>] [--remove]
+  blueline setup <claude|codex> [--shared] [--as <name>] [--cache <minutes>] [--feedback <feedback.jsonl>] [--start <t3|claude|codex>] [--model <model>] [--provider <id>] [--remove]
   blueline serve [stop]
   blueline add <origin> [--root <dir>]
   blueline remove <origin> [--root <dir>]
@@ -122,6 +122,9 @@ export type Command =
       /** How the server starts a fresh agent here; the one kept before with none. */
       readonly start: Start | undefined;
       readonly remove: boolean;
+      /** Writes the files the repository commits, with paths from its root, in place of the
+       * user's own settings: every clone and worktree has the delivery. */
+      readonly shared: boolean;
     }
   /** Claude's idle wake (bin/wait.ts): a background `Stop` hook, with the hook's JSON on stdin. */
   | {
@@ -131,7 +134,7 @@ export type Command =
     };
 
 /** The flags that take no value. */
-const SWITCHES = new Set(["--remove"]);
+const SWITCHES = new Set(["--remove", "--shared"]);
 
 /** The longest wait: below a 1-hour cache's lifetime less 60 s (ADR 0005). */
 const WAIT_MAX_S = 3540;
@@ -224,6 +227,7 @@ export function commandOf(args: readonly string[]): Command | undefined {
       feedback: flags.get("feedback"),
       start,
       remove: flags.get("remove") === "true",
+      shared: flags.get("shared") === "true",
     };
   }
   if (kind === "wait" && words.length === 1)

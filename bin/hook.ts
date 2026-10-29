@@ -5,7 +5,7 @@ import { HOOK_HEADER } from "../src/deliver/words.ts";
 import { harnessOf, processes, readAgents, withAgents } from "./agents.ts";
 import type { Command, Line } from "./lines.ts";
 import { listenerPick, tagged } from "./listen.ts";
-import { feedbackOf, repositoryOf } from "./repository.ts";
+import { feedbackIn, feedbackOf, repositoryOf } from "./repository.ts";
 import { claim } from "./wire.ts";
 
 /*
@@ -82,7 +82,7 @@ export const hookStep = Effect.fn(function* (command: HookCommand, stdin: string
   const repository = yield* repositoryOf(input.cwd);
   const files =
     command.feedback !== undefined
-      ? [command.feedback]
+      ? [feedbackIn(repository, command.feedback)]
       : repository === undefined
         ? []
         : yield* feedbackOf(repository);

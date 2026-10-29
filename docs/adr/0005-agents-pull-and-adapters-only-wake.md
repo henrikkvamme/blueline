@@ -40,6 +40,15 @@ that is not under T3 got notes only while a watcher ran, and the watcher expired
 still carry their own instructions, so a harness with no setup still works through
 `blueline listen` or the `command` adapter.
 
+Amended on 2026-10-29: `blueline setup <harness> --shared` writes the same delivery to the
+files a repository commits (`.claude/settings.json` and `.mcp.json`, or `.codex/`), and the
+fresh start to `.blueline.json`. A repository that makes a worktree per task had delivery in
+none of them, because setup wrote absolute paths to the user's own files and kept the start
+by the checkout's path. A background listener was then the only way in, and when its turn
+ended, notes waited with no agent. Each shared command goes to the repository's root and
+runs its own `blueline`, so the files hold no path of one machine. The user's own start
+still comes before the repository's.
+
 ## Cache rules
 
 - Only add text after the last message. Never rewrite an earlier hook output or result.

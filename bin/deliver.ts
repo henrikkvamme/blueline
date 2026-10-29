@@ -61,6 +61,14 @@ export type Starts = typeof StartsSchema.Type;
 export const StartsFile = Schema.fromJsonString(StartsSchema, { space: 1 });
 export const startsPath = (state: string) => `${state}/start.json`;
 
+/** The repository's own start, in a file it commits, so every clone and worktree has it:
+ * `blueline setup --shared` writes it. The user's own in the state folder comes first. */
+export const RepositoryStartFile = Schema.fromJsonString(
+  Schema.Struct({ start: Schema.optional(StartSchema), as: Schema.optional(Schema.String) }),
+  { space: 1 },
+);
+export const repositoryStartPath = (repository: string) => `${repository}/.blueline.json`;
+
 const KeptApps = Schema.fromJsonString(
   Schema.Struct({
     apps: Schema.Array(
@@ -444,7 +452,13 @@ export const deliver = Effect.gen(function* () {
     const beat = now - saidAt >= HEARTBEAT_MS;
     if (beat) saidAt = now;
     for (const app of kept.apps) {
-      const setting = starts[app.repository];
+      // The user's own start and name come before the repository's.
+      const setting = {
+        ...(yield* readFile(repositoryStartPath(app.repository), RepositoryStartFile, {}).pipe(
+          Effect.orElseSucceed(() => ({})),
+        )),
+        ...starts[app.repository],
+      };
       const name = setting?.as ?? "agent";
       yield* Effect.gen(function* () {
         const change = yield* changeOf(app.files.feedback);

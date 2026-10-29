@@ -221,14 +221,19 @@ function keepApps(feedbacks: readonly string[]) {
   writeFileSync(path.join(state, "apps.json"), JSON.stringify({ protocol: 2, apps }));
 }
 
-/** `blueline serve` with the app kept, and the fake agent as its start adapter. */
-async function serve(more: Record<string, string>, command = [process.execPath, FAKE]) {
+/** `blueline serve` with the app kept, and the fake agent as its start adapter: in the user's
+ * own start file, or in the one the repository commits. */
+async function serve(
+  more: Record<string, string>,
+  command = [process.execPath, FAKE],
+  where: "user" | "repository" = "user",
+) {
   const state = path.join(dir, "state");
   keepApps([feedback]);
-  writeFileSync(
-    path.join(state, "start.json"),
-    JSON.stringify({ [dir]: { start: { adapter: "command", command } } }),
-  );
+  const start = { adapter: "command", command };
+  if (where === "user")
+    writeFileSync(path.join(state, "start.json"), JSON.stringify({ [dir]: { start } }));
+  else writeFileSync(path.join(dir, ".blueline.json"), JSON.stringify({ start }));
   const server = spawn(process.execPath, [COMMAND, "serve"], {
     env: env({
       BLUELINE_PORT: String(await freePort()),
@@ -273,6 +278,14 @@ describe("the server's wake", () => {
     process.kill(first?.pid ?? 0, "SIGKILL");
     expect(await until(() => starts().length === 2, 10_000)).toBe(true);
     expect(starts()[1]?.note).toContain('"line":"N2"');
+  }, 60_000);
+
+  it("starts one by the start the repository commits, with no setup of the user's", async () => {
+    repository();
+    await serve({ HOLD_MS: "60000" }, [process.execPath, FAKE], "repository");
+    appendFileSync(feedback, note("N1"));
+    expect(await until(() => starts().length === 1, 15_000)).toBe(true);
+    expect(starts()[0]?.note).toContain('"line":"N1"');
   }, 60_000);
 
   it("does not start again on the same lines when the start itself fails", async () => {

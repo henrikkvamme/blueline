@@ -719,7 +719,7 @@ When the root has `blueline.config.ts`, the tag loads it from the server at
 Run setup once in the repository, for each harness that the agent runs in:
 
 ```sh
-blueline setup <claude|codex> [--start <t3|claude|codex>] [--model <model>] [--provider <id>] [--cache <minutes>] [--as <name>] [--feedback <feedback.jsonl>]
+blueline setup <claude|codex> [--shared] [--start <t3|claude|codex>] [--model <model>] [--provider <id>] [--cache <minutes>] [--as <name>] [--feedback <feedback.jsonl>]
 ```
 
 - For Claude Code, it writes the hooks to `.claude/settings.local.json`, and adds the MCP
@@ -728,6 +728,21 @@ blueline setup <claude|codex> [--start <t3|claude|codex>] [--model <model>] [--p
   `.codex/config.toml`. Codex reads them only once you trust the project.
 
 Setup writes only its own entries. Run again, it changes nothing; `--remove` takes them out.
+
+For a team, `--shared` writes files the repository commits, so every clone and every
+worktree has the delivery with no setup of its own:
+
+- For Claude Code, the hooks go to `.claude/settings.json`, the MCP server to `.mcp.json`,
+  and `enabledMcpjsonServers` lets it run.
+- For Codex, the files are `.codex/hooks.json` and `.codex/config.toml`, as before.
+- `--start` goes to `.blueline.json`, which the server reads in each worktree. A start that
+  a user set up without `--shared` comes first.
+
+Each command goes to the repository's root and runs the repository's own `blueline`, from
+`node_modules/.bin`, so the repository installs `@henrikkvamme/blueline` at its root.
+`--feedback` is a path in the repository, written from its root. No file holds a path of one
+machine. A user who also set up without `--shared` gets each hook twice: take those out with
+`blueline setup <harness> --remove`.
 
 An agent joins the review when it runs `blueline review`, `listen`, `reply` or `apply`, or
 calls `wait_for_feedback` or `reply`. A session that joined gets each new line once:

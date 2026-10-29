@@ -39,6 +39,38 @@ export interface Invocation {
   readonly command: string;
   /** What comes before the command's own words, as the script for `node`. */
   readonly prefix: readonly string[];
+  /** A shell line in place of `command`, for files a repository commits: it goes to the
+   * repository's root and runs its own `blueline`, so it holds no path of one machine. The
+   * words after it are quoted; it is not. */
+  readonly shell?: string;
+}
+
+/** The root of the repository, as a shell finds it from any folder in it. */
+const GIT_ROOT = `"$(git rev-parse --show-toplevel)"`;
+
+/** The shared invocation: from the root the harness names, or that git finds. Claude Code
+ * names the project's root in `CLAUDE_PROJECT_DIR` for its hooks; Codex and the MCP servers
+ * have git's. */
+export const sharedInvocation = (root = GIT_ROOT): Invocation => ({
+  command: "sh",
+  prefix: [],
+  shell: `cd ${root} && exec node_modules/.bin/blueline`,
+});
+
+/** Claude Code's root for a hook. */
+export const CLAUDE_ROOT = `"$CLAUDE_PROJECT_DIR"`;
+
+/** The command line of a shared invocation and the command's words. */
+const lineOf = (shell: string, words: readonly string[]) => [shell, ...words.map(quoted)].join(" ");
+
+/** How a harness starts the MCP server: the command, and its words. */
+export function mcpCommand(
+  invocation: Invocation,
+  words: readonly string[],
+): { readonly command: string; readonly args: readonly string[] } {
+  return invocation.shell === undefined
+    ? { command: invocation.command, args: [...invocation.prefix, ...words] }
+    : { command: "sh", args: ["-c", lineOf(invocation.shell, words)] };
 }
 
 /** A hook handler as both harnesses read it. Claude takes `args` (its exec form); Codex takes
@@ -86,6 +118,8 @@ const handler = (
   words: readonly string[],
   extra: Partial<Handler> = {},
 ): Handler => {
+  if (invocation.shell !== undefined)
+    return { type: "command", command: lineOf(invocation.shell, words), ...extra };
   const all = [...invocation.prefix, ...words];
   return harness === "claude"
     ? { type: "command", command: invocation.command, args: all, ...extra }

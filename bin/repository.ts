@@ -1,3 +1,4 @@
+import nodePath from "node:path";
 import { Config, Effect, FileSystem, Option, Path, Schema } from "effect";
 import { placeOf } from "../src/server/start.ts";
 
@@ -18,6 +19,14 @@ export const PLACE = Config.all({
   XDG_STATE_HOME: env("XDG_STATE_HOME"),
   HOME: env("HOME"),
 }).pipe(Config.map(placeOf));
+
+/** A feedback file a hook names: one from the root is in the session's repository, as the
+ * session's folder says. A shared hook runs from the project's first root, and a session that
+ * went into a worktree since works there (`blueline setup --shared`). */
+export const feedbackIn = (repository: string | undefined, feedback: string) =>
+  repository === undefined || nodePath.isAbsolute(feedback)
+    ? feedback
+    : nodePath.join(repository, feedback);
 
 /** The repository a folder is in, by real path; none outside one. */
 export const repositoryOf = Effect.fn(function* (folder: string) {

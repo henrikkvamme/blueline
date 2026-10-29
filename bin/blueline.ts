@@ -70,7 +70,9 @@ const program = Effect.gen(function* () {
     }
     case "setup": {
       const { setup } = yield* load(() => import("./setup.ts"));
-      return yield* setup(command);
+      const { said } = yield* load(() => import("./serve.ts"));
+      // Why setup cannot write, as a plain line, and no stack.
+      return yield* setup(command).pipe(said("setup"));
     }
     case "wait": {
       const { wait } = yield* load(() => import("./wait.ts"));
