@@ -235,18 +235,24 @@ function Progress({
   const at = given === undefined ? walked.at : 0;
   const feedback = useSession((s) => s.context.feedback);
   const steps = journey?.steps ?? [];
-  const settled = steps.filter((s) => feedback[s.id]?.settled === true).length;
+  const done = steps.map((s) => feedback[s.id]?.settled === true);
   if (steps.length < 2) return null;
-  const label = `${String(settled)} of ${String(steps.length)} steps settled`;
-  const shape = progressOf(steps.length, settled, at, finishing);
+  const label = `${String(done.filter(Boolean).length)} of ${String(steps.length)} steps settled`;
+  const shape = progressOf(done, at, finishing);
   if (shape.look === "bar")
     return (
       <span role="img" aria-label={label} className="flex shrink-0 items-center gap-2 px-1.5">
         <span className="relative h-1 w-20 overflow-hidden rounded-full bg-dt-faint/35">
-          <i
-            className="absolute inset-y-0 left-0 rounded-full bg-dt-good transition-[width] duration-200 ease-out motion-reduce:transition-none"
-            style={{ width: `${String(shape.settled * 100)}%` }}
-          />
+          {shape.settled.map((run) => (
+            <i
+              key={run.from}
+              className="absolute inset-y-0 rounded-full bg-dt-good transition-[width] duration-200 ease-out motion-reduce:transition-none"
+              style={{
+                left: `${String(run.from * 100)}%`,
+                width: `${String(run.width * 100)}%`,
+              }}
+            />
+          ))}
           {shape.place !== undefined && (
             <i
               className="absolute inset-y-0 min-w-1 rounded-full bg-dt-accent transition-[left] duration-200 ease-out motion-reduce:transition-none"
