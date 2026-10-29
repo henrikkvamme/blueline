@@ -1,6 +1,5 @@
 import { mount, type DevAdapter } from "@henrikkvamme/blueline";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
 
 /*
  * The bar of a journey past ten steps, in the panel: each run of settled steps in green at
@@ -63,7 +62,5 @@ describe("the bar of a long journey", () => {
       { from: 5, width: 4 },
       { from: 10, width: 1 },
     ]);
-    const bar = tools()?.querySelector<HTMLElement>("[aria-label$='steps settled']");
-    if (bar) await page.screenshot({ element: bar, path: "progress-bar.png" });
   });
 });
