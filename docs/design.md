@@ -439,8 +439,10 @@ Agreed on 2026-10-29 (issue #1). The status file keeps each reply's time (`at`, 
 the chat draws each reply by its time among the reviewer's messages. A chat that the page no
 longer has, as in another browser, leaves its replies in the status file. They go above the
 new message, by time, and do not count as its answer: the chat waits until a reply is newer
-than the newest message. A reply from a status file before 0.1.8 has no time, and comes
-under the chat, by count, as before.
+than the newest message. A reply from a status file before 0.1.8 has no time. It came before
+the run that reads it, so the listener and the MCP server give it time 0 as they start, and
+each reply write does the same (issue #3). It then goes above every chat. Only a page that
+reads such a file before any of them ran draws it by count, under the chat, as before.
 
 ### Annotation, and the wire's note
 

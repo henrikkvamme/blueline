@@ -346,6 +346,16 @@ export const cameLate = (sentAt: string | undefined, now: number, lateMs: number
 
 /** A note's answer after a reply command: working, one more reply, or settled. A working
  *  reply's blocks are its progress, in place of the last; a reply or a settle ends it. */
+/** The time of a reply that a Blueline before 0.1.8 wrote, with none: before any chat that
+ * runs now, so the page draws it above the chat and never as an answer to its message. */
+export const BEFORE_TIMES = 0;
+
+/** The note's answer with a time on each reply: one with none came before this run. */
+export function dated(reply: Reply): Reply {
+  if (reply.replies?.every((r) => r.at !== undefined) !== false) return reply;
+  return { ...reply, replies: reply.replies.map((r) => ({ ...r, at: r.at ?? BEFORE_TIMES })) };
+}
+
 export function replyAfter(
   was: Reply | undefined,
   command: Extract<Command, { kind: "reply" }>,
@@ -353,7 +363,7 @@ export function replyAfter(
   now: number,
   blocks?: readonly Block[],
 ): Reply {
-  const { progress: _, ...before }: Reply = was ?? { state: "working" };
+  const { progress: _, ...before }: Reply = dated(was ?? { state: "working" });
   if (command.state === "working")
     return { ...before, state: "working", ...(blocks === undefined ? {} : { progress: blocks }) };
   if (command.state === "settled")

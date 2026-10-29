@@ -13,7 +13,7 @@ import { BlockSchema } from "../src/notes/blocks.ts";
 import { applyCommand } from "./apply-run.ts";
 import type { Command, Line } from "./lines.ts";
 import { listenerPick, tagged } from "./listen.ts";
-import { answer } from "./reply.ts";
+import { answer, dateReplies } from "./reply.ts";
 import { markedAbove } from "./agents.ts";
 import { changeOf, claim, unclaim } from "./wire.ts";
 
@@ -274,6 +274,8 @@ export const mcp = Effect.fn(function* (command: McpCommand) {
     givingBack: new Set(),
   };
   const status = command.status ?? path.join(path.dirname(command.file), "status.json");
+  // A reply with no time is from before this run: it gets one, so it never answers a new chat.
+  yield* dateReplies(status).pipe(Effect.ignore);
   const handle = serveStdio(() => serverFor(command, waiting, status), {
     transport: wire,
     onerror: (error) => void run(Console.error(`[mcp] ${error.message}`)),

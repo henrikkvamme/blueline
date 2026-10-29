@@ -1,9 +1,11 @@
+import path from "node:path";
 import { Clock, Console, Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { reviewLink } from "../src/io/link.ts";
 import { HEARTBEAT_MS, ListeningSchema, type Listening } from "../src/io/listening.ts";
 import { ageOf, cameLate, wakes, type Command, type Line } from "./lines.ts";
 import { markedAbove } from "./agents.ts";
+import { dateReplies } from "./reply.ts";
 import { changeOf, claim, readFile, writeWhole } from "./wire.ts";
 
 /*
@@ -93,6 +95,12 @@ export const listen = Effect.fn(function* (
   // It joins its session before it reads a line: it runs until it is stopped, so a hook after
   // its tool call would come too late.
   yield* markedAbove(feedback);
+  // A reply with no time is from before this run: it gets one, so it never answers a new chat.
+  yield* dateReplies(path.join(path.dirname(feedback), "status.json")).pipe(
+    Effect.catch((error: unknown) =>
+      Console.error(`[listener] could not date the old replies: ${String(error)}`),
+    ),
+  );
   yield* Effect.addFinalizer(() =>
     sayListening(listening, name, journey, undefined).pipe(Effect.ignore),
   );

@@ -577,6 +577,33 @@ describe("the review session", () => {
     ]);
   });
 
+  it("never puts an old reply between a step's first note and the next message", () => {
+    const id = stepNoteId("b");
+    const chat = (s: Snapshot) => s.context.notes.find((n) => n.id === id);
+    // The reply answered the step's chat two days ago; the listener gave it the time before
+    // every chat (bin/lines.ts, `dated`).
+    const old = { text: "Done: five designs", at: 0 };
+    const s = after(
+      start(),
+      { type: "choose" },
+      { type: "entered" },
+      { type: "go", by: 1 },
+      { type: "entered" },
+      { type: "write", id, step: "b", draft: "How do I get into this menu?" },
+      { type: "send", id, step: "b", at: 100 },
+      { type: "replies", replies: { [id]: { state: "working", replies: [old] } } },
+      { type: "write", id, step: "b", draft: "Again, this is a bug" },
+      { type: "send", id, step: "b", at: 120 },
+      { type: "replies", replies: { [id]: { state: "working", replies: [old] } } },
+    );
+    expect(chat(s)?.thread.map((m) => m.text)).toEqual([
+      "Done: five designs",
+      "How do I get into this menu?",
+      "Again, this is a bug",
+    ]);
+    expect(chat(s)?.state).toBe("working");
+  });
+
   it("undoes and redoes removing a note, and keeps a reply the agent gave meanwhile", () => {
     let s = after(
       start(),
