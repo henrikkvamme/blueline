@@ -575,15 +575,18 @@ flow across people or pages.
 ## Apply the reviewer's verdicts
 
 The settle line and the reviewer's next message carry `parts`, the variant kept and the ones
-deleted per part, and an
-`apply` hint:
+deleted per part, and an `apply` hint that names the parts. Apply them at once, not at the end
+of the review: a part whose variants stay in the code is a choice that is not there. A settle
+with verdicts wakes the agent for this, and its tag says `apply its verdicts now`. The panel
+offers no choice on a part with one variant left, or with one kept, until its step opens again.
 
 ```sh
 blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
 ```
 
-- With one variant kept, the call becomes that variant, typed from the call. The import
-  and the steps' `part` fields go too.
+- With one variant kept, or one variant left after the deleted ones, the call becomes that
+  variant, typed from the call. The import, when nothing else uses it, and the steps' `part`
+  fields go too.
 - Otherwise the deleted variants leave the call.
 - With none kept, name one with `--keep`. Read the messages for which one.
 
@@ -652,10 +655,11 @@ The repository is public, so the words describe Blueline's behaviour only, not t
 company or its data. `blueline mcp` says this in its instructions.
 
 A settle does not wake the agent. The listener holds it and prints it, tagged `status`,
-with the next message, so the agent reads where the review is without a turn of its own. The
-last settle, which leaves no step open, wakes the agent: the review is done, and the agent
-applies the kept variants. The tools send that settle only when the reviewer finishes the
-review, so the agent wakes once, at the end. A listener that starts again still has the settles it held.
+with the next message, so the agent reads where the review is without a turn of its own. Two
+settles wake the agent. A settle with verdicts on parts wakes it to apply them at once. The
+last settle, which leaves no step open, wakes it as the review is done. The tools send that
+settle only when the reviewer finishes the review. A listener that starts again still has the
+settles it held.
 
 ### An MCP server for the agent
 

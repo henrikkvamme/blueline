@@ -71,6 +71,7 @@ describe("what a part has to lift", () => {
   it("has nothing to lift with one variant left and no states", () => {
     expect(varietyOf(part(["A"]), NO_VERDICTS)).toBeUndefined();
     expect(varietyOf(part(["A", "B"]), { kept: [], dropped: ["B"] })).toBeUndefined();
+    expect(varietyOf(part(["A", "B"]), { kept: ["A"], dropped: [] })).toBeUndefined();
   });
 });
 
@@ -105,5 +106,14 @@ describe("the variant rows in the panel", () => {
     expect(variantRows(undefined, one, NO_VERDICTS, own)).toEqual({ ...own, from: "own" });
     expect(variantRows(undefined, one, NO_VERDICTS, { labels: ["Only"], at: 0 })).toBeUndefined();
     expect(variantRows(part, one, left, none)).toBeUndefined();
+  });
+
+  it("offers no choice once the reviewer kept a variant, and the choice again on a reopen", () => {
+    const shown = { variant: "Title first", state: undefined };
+    const kept = keptOn(NO_VERDICTS, "Compact row");
+    expect(variantRows(part, shown, kept, none)).toBeUndefined();
+    expect(variantOf(part.labels, shown, kept)).toBe("Compact row");
+    // A reopen takes the keep back (session/state.ts `openedAgain`).
+    expect(variantRows(part, shown, { ...kept, kept: [] }, none)?.labels).toEqual(part.labels);
   });
 });

@@ -60,6 +60,7 @@ const sayListening = Effect.fn(function* (
  * The lines a reader took, as the agent reads them: each after a tag that says when it was
  * sent. A settle is only `status`. A note is `old` in the reader's first round, which had
  * the notes from before it listened, `late` when it came long after it was sent, or `new`.
+ * A line with verdicts on parts says to apply them now.
  */
 export function tagged(taken: readonly Line[], now: number, first: boolean): string[] {
   return taken.map((line) => {
@@ -70,7 +71,7 @@ export function tagged(taken: readonly Line[], now: number, first: boolean): str
       : cameLate(line.sentAt, now, LATE_MS)
         ? `late, sent ${age}`
         : `new, sent ${age}`;
-    return `[${tag}] ${line.raw}`;
+    return `[${line.apply === undefined ? tag : `${tag}, apply its verdicts now`}] ${line.raw}`;
   });
 }
 

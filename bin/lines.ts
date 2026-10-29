@@ -280,6 +280,8 @@ export interface Line {
   readonly settled?: boolean | undefined;
   /** The steps still open after a settle. */
   readonly left?: number | undefined;
+  /** What to apply to the code now: the line carries the reviewer's verdicts on parts. */
+  readonly apply?: string | undefined;
 }
 
 const NEWLINE = 10;
@@ -293,6 +295,7 @@ const LineSchema = Schema.fromJsonString(
     sentAt: Schema.optional(Schema.String),
     settled: Schema.optional(Schema.Boolean),
     left: Schema.optional(Schema.Int),
+    apply: Schema.optional(Schema.String),
   }),
 );
 const decodeLine = Schema.decodeUnknownOption(LineSchema);
@@ -328,10 +331,11 @@ export function takeLines(bytes: Uint8Array, base = 0): { lines: Line[]; used: n
 }
 
 /** Whether a line needs the agent now. A settle only tells where the review is, so it waits
- *  for the next line that does, and saves the agent a turn; the last settle ends the
- *  review, and the agent applies the kept variants. */
+ *  for the next line that does, and saves the agent a turn; a settle with verdicts to apply
+ *  does not wait, as the part keeps a choice that is not there until the agent applies them.
+ *  The last settle ends the review. */
 export const wakes = (line: Line) =>
-  line.kind !== "settle" || (line.settled === true && line.left === 0);
+  line.kind !== "settle" || line.apply !== undefined || (line.settled === true && line.left === 0);
 
 /** How long ago a note was sent, in words. */
 export function ageOf(sentAt: string | undefined, now: number): string {

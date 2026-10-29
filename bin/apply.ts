@@ -6,7 +6,8 @@ import ts from "typescript";
  * `blueline apply`, without files, so a test can run it. A part is a call
  * `variants("<name>", { "<label>": (props) => …, … }, { <state>: patch })` (src/part/
  * variants.tsx). With one variant kept, the call becomes that variant: the code is then as
- * if the part never had others. Otherwise the deleted variants leave the call.
+ * if the part never had others. Otherwise the deleted variants leave the call, and a call
+ * left with one variant becomes that variant too: one is no choice.
  */
 
 export interface Verdicts {
@@ -158,33 +159,42 @@ export function applyVerdicts(
     );
   const changes: string[] = [];
   const edits: Edit[] = [];
+  /** Whether a call became its one variant, so the part's fields and import may go. */
+  let alone = false;
   for (const call of calls) {
     const options = call.arguments[1];
     if (options === undefined || !ts.isObjectLiteralExpression(options)) continue;
     const line = file.getLineAndCharacterOfPosition(call.getStart(file)).line + 1;
-    if (only !== undefined) {
-      const chosen = options.properties.find((p) => nameOf(p) === only);
+    const gone =
+      only === undefined
+        ? options.properties.filter((p) => {
+            const name = nameOf(p);
+            return name !== undefined && verdicts.dropped.includes(name);
+          })
+        : [];
+    if (only === undefined && gone.length === options.properties.length)
+      throw new Error(`${path}:${line}: the reviewer deleted every variant of ${part}.`);
+    const left = options.properties.filter((p) => !gone.includes(p));
+    const sole = left.length === 1 ? left[0] : undefined;
+    const name = only ?? (sole === undefined ? undefined : nameOf(sole));
+    if (name !== undefined) {
+      const chosen = options.properties.find((p) => nameOf(p) === name);
       if (chosen === undefined || !ts.isPropertyAssignment(chosen))
-        throw new Error(`${path}:${line}: ${part} has no variant "${only}".`);
+        throw new Error(`${path}:${line}: ${part} has no variant "${name}".`);
       edits.push({
         start: call.getStart(file),
         end: call.getEnd(),
         text: keptText(file, call, chosen.initializer),
       });
-      changes.push(`${path}:${line}: ${part} is now "${only}" alone`);
+      changes.push(`${path}:${line}: ${part} is now "${name}" alone`);
+      alone = true;
       continue;
     }
-    const gone = options.properties.filter((p) => {
-      const name = nameOf(p);
-      return name !== undefined && verdicts.dropped.includes(name);
-    });
-    if (gone.length === options.properties.length)
-      throw new Error(`${path}:${line}: the reviewer deleted every variant of ${part}.`);
     edits.push(...gone.map((p) => withComma(file, p)));
     if (gone.length > 0)
       changes.push(`${path}:${line}: took ${gone.map(nameOf).join(", ")} out of ${part}`);
   }
-  if (only === undefined) return { source: edited(source, edits), changes };
+  if (!alone) return { source: edited(source, edits), changes };
   const once = edited(source, [...edits, ...partFields(file, part)]);
   return { source: edited(once, unusedImport(parse(path, once))), changes };
 }

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createActor, type EventFrom, initialTransition, transition, waitFor } from "xstate";
 import { handoffId } from "../src/notes/handoff";
 import { listedJourneys, PAGE_JOURNEY, pageJourney, pageParts } from "../src/part/page";
-import { parts } from "../src/part/store";
+import { NO_VERDICTS, parts } from "../src/part/store";
 import { liveMachine, shapesOf } from "../src/session/actors";
 import { postedLine } from "../src/session/lines";
 import { sessionMachine, stepNoteId } from "../src/session/machine";
@@ -441,8 +441,14 @@ describe("the lines the agent reads", () => {
       postedLine([steps], { kind: "note", ids: [stepNoteId("b")], session: judged }, "now"),
     ).toMatchObject({
       parts,
-      apply: expect.stringContaining("blueline apply <feedback.jsonl> --part"),
+      apply: expect.stringMatching(
+        /^Run now.*blueline apply <feedback.jsonl> --part .*"Suggestion"$/,
+      ),
     });
+    const undecided = { ...session, feedback: { b: { parts: { Suggestion: NO_VERDICTS } } } };
+    expect(
+      postedLine([steps], { kind: "note", ids: [stepNoteId("b")], session: undecided }, "now"),
+    ).not.toHaveProperty("apply");
     expect(
       postedLine([steps], { kind: "note", ids: [stepNoteId("b")], session }, "now"),
     ).not.toHaveProperty("parts");

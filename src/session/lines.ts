@@ -41,13 +41,16 @@ function lineOf<C>(journey: DevJourney<C> | undefined, session: Context, n: Note
 }
 
 /** The variants the reviewer kept and deleted in the step's parts (part/variants.tsx), with
- * the command that applies them to the code; none when the step has no verdicts. */
+ * the command that applies them to the code, at once: a part left with variants it no longer
+ * has is a choice that is not there. None when the step has no verdicts. */
 function partsOf(session: Context, step: string) {
   const parts = session.feedback[step]?.parts;
-  if (parts === undefined || Object.keys(parts).length === 0) return {};
+  if (parts === undefined) return {};
+  const decided = Object.entries(parts).filter(([, v]) => v.kept.length + v.dropped.length > 0);
+  if (decided.length === 0) return {};
   return {
     parts,
-    apply: "blueline apply <feedback.jsonl> --part <part>",
+    apply: `Run now, before the next line: blueline apply <feedback.jsonl> --part <part>, for ${decided.map(([name]) => JSON.stringify(name)).join(", ")}`,
   };
 }
 

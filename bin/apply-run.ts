@@ -52,8 +52,12 @@ export const applyCommand = Effect.fn(function* (command: Extract<Command, { kin
     });
     applied.push({ ...result, file, was: source });
   }
-  const resolved = command.keep !== undefined || verdicts.kept.length === 1;
   const changed = applied.filter((a) => a.changes.length > 0);
+  // The part is one variant now: in the code, or as the verdicts say.
+  const resolved =
+    command.keep !== undefined ||
+    verdicts.kept.length === 1 ||
+    changed.some((a) => a.changes.some((c) => c.endsWith(" alone")));
   if (resolved && changed.length > 0)
     for (const a of applied.filter((a) => a.changes.length === 0))
       changed.push({ ...dropPartFields(a.file, a.was, command.part), file: a.file, was: a.was });

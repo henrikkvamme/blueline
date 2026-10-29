@@ -1,7 +1,16 @@
 import { isValidElement, useState, useSyncExternalStore } from "react";
 import { Lift } from "./lift";
 import { StillLifted } from "./still-lift";
-import { AS_IT_IS, hugs, NO_VERDICTS, parts, rectOf, variantOf, type Instance } from "./store";
+import {
+  AS_IT_IS,
+  hugs,
+  leftOf,
+  NO_VERDICTS,
+  parts,
+  rectOf,
+  variantOf,
+  type Instance,
+} from "./store";
 
 /*
  * The lift, for the part the store says is lifted, or a step's own variants as stills
@@ -49,7 +58,7 @@ function Lifted({ instance }: { readonly instance: Instance }) {
     <Lift
       id={id}
       title={name}
-      variants={labels.filter((l) => !verdicts.dropped.includes(l))}
+      variants={leftOf(labels, verdicts)}
       states={[AS_IT_IS, ...names]}
       start={{ variant, state: state === undefined ? 0 : names.indexOf(state) + 1 }}
       from={rose.from}

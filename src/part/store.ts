@@ -147,17 +147,24 @@ const stored = (name: string): string | undefined => {
   }
 };
 
-/** The variant a part shows: the one shown last, unless the reviewer deleted it; then the
+/** The variants of a part left to choose from: the one the reviewer kept, as a kept part is
+ * decided, else the ones the reviewer did not delete. Reopening the step takes the keep back. */
+export function leftOf(labels: readonly string[], verdicts: Verdicts): readonly string[] {
+  const kept = labels.filter((l) => verdicts.kept.includes(l));
+  return kept.length > 0 ? kept : labels.filter((l) => !verdicts.dropped.includes(l));
+}
+
+/** The variant a part shows: the one shown last, unless it is not left (`leftOf`); then the
  * first one left. With every variant deleted, the first. */
 export function variantOf(labels: readonly string[], shown: Shown, verdicts: Verdicts): string {
-  const left = labels.filter((l) => !verdicts.dropped.includes(l));
+  const left = leftOf(labels, verdicts);
   const wanted = shown.variant;
   return wanted !== undefined && left.includes(wanted) ? wanted : (left[0] ?? labels[0] ?? "");
 }
 
 /**
  * The variants the panel lists for a step, and the one the page shows: the part's variants
- * that the reviewer did not delete, else the step's own. `from` says which. None when fewer
+ * left (`leftOf`), else the step's own. `from` says which. None when fewer
  * than two are left, as there is nothing to choose.
  */
 export function variantRows(
@@ -168,7 +175,7 @@ export function variantRows(
 ):
   | { readonly labels: readonly string[]; readonly at: number; readonly from: "part" | "own" }
   | undefined {
-  const left = part?.labels.filter((l) => !verdicts.dropped.includes(l)) ?? [];
+  const left = part === undefined ? [] : leftOf(part.labels, verdicts);
   if (part !== undefined && left.length > 1)
     return {
       labels: left,
@@ -193,7 +200,7 @@ export const keptOn = (was: Verdicts, variant: string): Verdicts => ({
 /** How many variants of the part are left, and how many states it has besides the page's;
  * none of either when there is nothing to lift. */
 export function varietyOf(instance: Instance, verdicts: Verdicts) {
-  const variants = instance.labels.filter((l) => !verdicts.dropped.includes(l)).length;
+  const variants = leftOf(instance.labels, verdicts).length;
   const states = instance.states.length;
   return variants > 1 || states > 0 ? { variants, states } : undefined;
 }
@@ -298,8 +305,7 @@ export function variantsOn(step: StepInfo, journey: JourneyInfo | undefined): nu
   const name = partOn(step, journey)?.name ?? step.part;
   const labels = name === undefined ? undefined : declared.get(name);
   if (name !== undefined && labels !== undefined) {
-    const dropped = parts.verdicts(name).dropped;
-    return labels.filter((l) => !dropped.includes(l)).length;
+    return leftOf(labels, parts.verdicts(name)).length;
   }
   return step.variants?.length ?? 0;
 }

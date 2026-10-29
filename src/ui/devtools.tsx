@@ -17,7 +17,7 @@ import {
 } from "../keys/keymap";
 import { journeyIn, startSession, stepIn, type Session } from "../core/session";
 import { LAYERS, treeShown, type Layer as LayerName, type SessionActor } from "../session/machine";
-import { partOn, parts, variantOf, variantsOn, varietyOf, type Shown } from "../part/store";
+import { leftOf, partOn, parts, variantOf, variantsOn, varietyOf, type Shown } from "../part/store";
 import type { DevAdapter, DevInfo, DevShift } from "../types";
 import { Bar } from "./bar";
 import { firstOpen, lastOpen } from "../session/state";
@@ -420,7 +420,8 @@ export function Running({
         const { context } = actor.getSnapshot();
         const step = stepIn(actor.getSnapshot(), info);
         const part = partOn(step, journeyIn(actor.getSnapshot(), info));
-        const left = part?.labels.filter((l) => !parts.verdicts(part.name).dropped.includes(l));
+        const left =
+          part === undefined ? undefined : leftOf(part.labels, parts.verdicts(part.name));
         if (part === undefined || left === undefined || left.length < 2) {
           const own = step?.variants?.length ?? 0;
           const shown = step === undefined ? 0 : (context.variants[step.id] ?? 0);
@@ -436,7 +437,8 @@ export function Running({
       if (action.kind === "variant") {
         const step = stepIn(actor.getSnapshot(), info);
         const part = partOn(step, journeyIn(actor.getSnapshot(), info));
-        const left = part?.labels.filter((l) => !parts.verdicts(part.name).dropped.includes(l));
+        const left =
+          part === undefined ? undefined : leftOf(part.labels, parts.verdicts(part.name));
         if (part === undefined || left === undefined || left.length < 2)
           return actor.send({ type: "variant", by: action.by });
         const shown = parts.shown(part.name);

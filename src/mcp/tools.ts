@@ -42,7 +42,7 @@ export const NOTHING_NEW = "Nothing new. Call wait_for_feedback again to wait mo
 export const WAIT_FOR_FEEDBACK = {
   name: "wait_for_feedback",
   description:
-    "Waits for the reviewer's next lines and returns them, each a JSON line after a tag that says when it was sent. A line with an id, a chat's message or the hand-off of a finished review, needs your answer: before you work on it, call reply with state working and your plan, then reply with state replied. A settle before it only says where the review is. The settle with left 0 ends the review: apply the kept variants. Each line comes to you once, here or in a hook. When nothing comes for a while, it says so: call it again to wait more.",
+    "Waits for the reviewer's next lines and returns them, each a JSON line after a tag that says when it was sent. A line with an id, a chat's message or the hand-off of a finished review, needs your answer: before you work on it, call reply with state working and your plan, then reply with state replied. A settle before it only says where the review is. A line whose tag says apply its verdicts now carries verdicts on parts: call apply for each part it names at once, not at the end of the review. The settle with left 0 ends the review. Each line comes to you once, here or in a hook. When nothing comes for a while, it says so: call it again to wait more.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
 } as const;
 

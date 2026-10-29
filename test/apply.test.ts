@@ -41,16 +41,38 @@ describe("the reviewer's verdicts, applied to the code", () => {
     expect(applyVerdicts("card.tsx", first, "Suggestion", kept).source).toMatch(/^type CardProps/);
   });
 
-  it("takes the deleted variants out, and keeps the call", () => {
+  it("takes the deleted variants out, and keeps the call while it has a choice", () => {
     const { source } = applyVerdicts("card.tsx", CARD, "Suggestion", {
       kept: [],
-      dropped: ["Tracked change", "Marked field"],
+      dropped: ["Tracked change"],
     });
     expect(source).toContain('"Card under the field"');
+    expect(source).toContain('"Marked field"');
     expect(source).not.toContain("Tracked change");
     expect(source).not.toContain("struck");
-    expect(source).not.toContain("Marked field");
     expect(source).toContain("variants<CardProps>(");
+  });
+
+  it("makes a part with one variant left that variant, as one is no choice", () => {
+    const dropped = { kept: [], dropped: ["Tracked change", "Marked field"] };
+    const { source, changes } = applyVerdicts("card.tsx", CARD, "Suggestion", dropped);
+    expect(source).toContain(
+      'export const SuggestionView = (p: CardProps) => <Shell p={p} className="bg-caution-wash" />;',
+    );
+    expect(source).not.toContain("variants");
+    expect(changes).toEqual(['card.tsx:6: Suggestion is now "Card under the field" alone']);
+    // The dropped ones went before, by hand or by an earlier apply: one is left all the same.
+    const one = applyVerdicts("card.tsx", CARD, "Suggestion", {
+      kept: [],
+      dropped: ["Tracked change"],
+    }).source.replace(/\n\s*"Marked field".*\n/, "\n");
+    expect(one).not.toContain("Marked field");
+    const again = applyVerdicts("card.tsx", one, "Suggestion", {
+      kept: [],
+      dropped: ["Tracked change"],
+    });
+    expect(again.source).not.toContain("variants");
+    expect(again.changes).toEqual(['card.tsx:6: Suggestion is now "Card under the field" alone']);
   });
 
   it("asks which variant to keep when the reviewer kept more than one", () => {

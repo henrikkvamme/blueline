@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ageOf, cameLate, commandOf, replyAfter, takeLines, wakes } from "../bin/lines";
+import { tagged } from "../bin/listen";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 
@@ -40,6 +41,13 @@ describe("the agent's side of the channel", () => {
     expect(wake({ kind: "settle", settled: true, left: 2 })).toBe(false);
     expect(wake({ kind: "settle", settled: false, left: 0 })).toBe(false);
     expect(wake({ kind: "settle", settled: true, left: 0 })).toBe(true);
+  });
+
+  it("wakes the agent for a settle with verdicts, to apply them at once", () => {
+    const settle = { kind: "settle", settled: true, left: 2, apply: "Run now" };
+    const { lines } = takeLines(bytes(`${JSON.stringify(settle)}\n`));
+    expect(lines.map(wakes)).toEqual([true]);
+    expect(tagged(lines, 0, false)[0]).toMatch(/^\[new, sent .*, apply its verdicts now\] /);
   });
 
   it("wakes the agent for a take-back, as for any note, after the settles it held", () => {
