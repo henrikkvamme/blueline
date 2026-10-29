@@ -615,8 +615,23 @@ export function Pins({
   );
 }
 
+/** The presses a dialog or a popover of the page hears to close on a press outside it. */
+const PRESSES = [
+  "pointerdown",
+  "pointerup",
+  "pointercancel",
+  "mousedown",
+  "mouseup",
+  "touchstart",
+  "touchend",
+  "click",
+] as const;
+
 /** The crosshair, while the reviewer holds Alt or after the pin button: it lights the
- * element under the mouse or the finger, and a click or a tap points at it. */
+ * element under the mouse or the finger, and a click or a tap points at it. A press on it
+ * never reaches the page: an open dialog of Base UI or Radix hears presses on the document
+ * in the capture phase and closes on one outside its popup, as the crosshair is. The window
+ * hears them first, so the crosshair takes them there. */
 export function Pointer({
   at,
   onPick,
@@ -627,18 +642,32 @@ export function Pointer({
   const [over, setOver] = useState<Element | undefined>(() =>
     at.x < 0 ? undefined : under(at.x, at.y),
   );
+  const layer = useRef<HTMLDivElement>(null);
+  const pick = useRef(onPick);
+  pick.current = onPick;
+  useEffect(() => {
+    const take = (e: Event) => {
+      if (layer.current === null || !e.composedPath().includes(layer.current)) return;
+      e.stopPropagation();
+      if (e.type === "pointerdown" && e instanceof PointerEvent)
+        setOver(under(e.clientX, e.clientY));
+      if (e.type !== "click" || !(e instanceof MouseEvent)) return;
+      e.preventDefault();
+      const element = under(e.clientX, e.clientY);
+      if (element !== undefined) pick.current(element);
+    };
+    for (const type of PRESSES) window.addEventListener(type, take, true);
+    return () => {
+      for (const type of PRESSES) window.removeEventListener(type, take, true);
+    };
+  }, []);
   const rect = over?.getBoundingClientRect();
   return (
     <div
       {...UI}
+      ref={layer}
       className="fixed inset-0 z-[2147483003] cursor-crosshair"
-      onPointerDown={(e) => setOver(under(e.clientX, e.clientY))}
       onPointerMove={(e) => setOver(under(e.clientX, e.clientY))}
-      onClick={(e) => {
-        e.preventDefault();
-        const element = under(e.clientX, e.clientY);
-        if (element !== undefined) onPick(element);
-      }}
     >
       {rect !== undefined && (
         <div
