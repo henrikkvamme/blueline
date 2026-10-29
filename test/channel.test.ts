@@ -150,7 +150,14 @@ describe("the agent's side of the channel", () => {
     const working = replyAfter(undefined, reply("working"), 1);
     const first = replyAfter(working, reply("replied", "One"), 2);
     const second = replyAfter(first, reply("replied", "Two"), 3);
-    expect(second).toEqual({ state: "replied", replies: [{ text: "One" }, { text: "Two" }] });
+    // Each reply keeps when it was written, so the page draws it in its place in the chat.
+    expect(second).toEqual({
+      state: "replied",
+      replies: [
+        { text: "One", at: 2 },
+        { text: "Two", at: 3 },
+      ],
+    });
     expect(replyAfter(second, reply("settled"), 4)).toMatchObject({
       settled: true,
       settledAt: 4,
@@ -169,7 +176,7 @@ describe("the agent's side of the channel", () => {
     const next = replyAfter(first, command, 2, plan("done"));
     expect(next).toEqual({ state: "working", progress: plan("done") });
     const replied = replyAfter(next, { ...command, state: "replied", text: "Bold" }, 3);
-    expect(replied).toEqual({ state: "replied", replies: [{ text: "Bold" }] });
+    expect(replied).toEqual({ state: "replied", replies: [{ text: "Bold", at: 3 }] });
     expect(replyAfter(next, { ...command, blocks: undefined }, 3)).toEqual({ state: "working" });
     const settled = replyAfter(next, { ...command, state: "settled" }, 4);
     expect(settled.progress).toBeUndefined();
@@ -185,7 +192,7 @@ describe("the agent's side of the channel", () => {
     const blocks = [{ kind: "followups", items: ["Yes"] }] as const;
     expect(replyAfter(undefined, command, 1, blocks)).toEqual({
       state: "replied",
-      replies: [{ text: "", blocks }],
+      replies: [{ text: "", at: 1, blocks }],
     });
   });
 });

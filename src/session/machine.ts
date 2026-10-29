@@ -867,24 +867,30 @@ export const sessionMachine = setup({
         const notes = context.notes.map((n) => {
           const reply = event.replies[n.id];
           if (reply === undefined) return n;
-          const fresh = (reply.replies ?? []).slice(
+          const all = (reply.replies ?? []).slice(
             n.thread.filter((m) => m.by === "agent").length + (n.skip ?? 0),
           );
           // A settle stays in the status file: once the reviewer wrote again, it is an old one.
           const wrote = Math.max(0, ...n.thread.filter((m) => m.by === "you").map((m) => m.at));
           const settled =
             reply.settled === true && (reply.settledAt === undefined || reply.settledAt >= wrote);
+          // A reply from before the newest message answers an earlier one, as one the page
+          // did not have when the reviewer wrote again: it is no answer to the newest.
+          const earlier = all.filter((r) => r.at !== undefined && r.at < wrote);
+          const fresh = all.filter((r) => !earlier.includes(r));
+          const was =
+            earlier.length === 0 ? n : noteAfter(n, { type: "earlier", replies: earlier });
           if (fresh.length === 0 && !settled)
             return reply.state === "working"
-              ? noteAfter(n, { type: "working", progress: reply.progress })
-              : n;
-          const next = noteAfter(n, {
+              ? noteAfter(was, { type: "working", progress: reply.progress })
+              : was;
+          const next = noteAfter(was, {
             type: "reply",
-            at: n.thread.at(-1)?.at ?? 0,
+            at: was.thread.at(-1)?.at ?? 0,
             replies: fresh,
             settled,
           });
-          if (next.state === n.state && next.thread.length === n.thread.length) return n;
+          if (next.state === was.state && next.thread.length === was.thread.length) return was;
           enqueue.emit({ type: "replied", note: next, settled: next.state === "settled" });
           // The agent's variant shows at once.
           const label = fresh.at(-1)?.variant;

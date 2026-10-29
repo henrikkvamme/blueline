@@ -611,6 +611,12 @@ blocks in place of the last, so the plan changes as the agent goes on; a working
 no `--blocks` takes the plan away. The agent's reply ends it: the plan leaves the chat, and
 the reply shows.
 
+Each reply keeps the time you wrote it, and the chat shows it in that place among the
+reviewer's messages. A reply written before the reviewer's newest message does not answer
+that message: the chat still waits for your answer to it. So write each reply with
+`blueline reply` or the MCP `reply` tool, which give it its time; a reply written into
+`status.json` some other way shows under the chat's last message.
+
 ### Blocks in a reply
 
 A reply can show more than words. `--blocks` takes a JSON file with a list of blocks, and the

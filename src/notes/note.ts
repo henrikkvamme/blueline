@@ -66,6 +66,8 @@ export type Message = typeof MessageSchema.Type;
 /** One of the agent's replies, as the status file has it. */
 export interface AgentReply {
   readonly text: string;
+  /** When the agent wrote it, in ms; none in a status file from before. */
+  readonly at?: number | undefined;
   readonly variant?: string | undefined;
   readonly blocks?: Message["blocks"];
 }
@@ -118,10 +120,14 @@ export type NoteEvent =
   | { readonly type: "working"; readonly progress?: Message["blocks"] }
   | {
       readonly type: "reply";
+      /** The time of a reply that has none of its own. */
       readonly at: number;
       readonly replies: readonly AgentReply[];
       readonly settled: boolean;
     }
+  /** Replies the agent wrote before the reviewer's newest message: they answer an earlier
+   * one, so they take their place by time, and the newest message still waits. */
+  | { readonly type: "earlier"; readonly replies: readonly AgentReply[] }
   | { readonly type: "settle" }
   | { readonly type: "reopen" }
   | { readonly type: "read" };
@@ -134,6 +140,20 @@ const words = (context: Context, event: NoteEvent) =>
 /** The screenshots a send takes: the draft's, unless it sends other words. */
 const imagesOf = (context: Context, event: NoteEvent) =>
   event.type === "send" && event.text === undefined ? (context.images ?? []) : [];
+
+/** The thread with the agent's replies in it, each by its time; one with no time at `at`.
+ * The sort is stable, so a reply comes after a message of the same time. */
+const withReplies = (context: Context, replies: readonly AgentReply[], at: number) =>
+  [
+    ...context.thread,
+    ...replies.map((r) => ({
+      by: "agent" as const,
+      text: r.text,
+      at: r.at ?? at,
+      variant: r.variant,
+      ...(r.blocks === undefined ? {} : { blocks: r.blocks }),
+    })),
+  ].sort((a, b) => a.at - b.at);
 
 const agentSaid = (context: Context) => context.thread.some((m) => m.by === "agent");
 
@@ -186,19 +206,13 @@ const lifecycle = setup({
     addReplies: assign(({ context, event }) => {
       if (event.type !== "reply") return {};
       return {
-        thread: [
-          ...context.thread,
-          ...event.replies.map((r) => ({
-            by: "agent" as const,
-            text: r.text,
-            at: event.at,
-            variant: r.variant,
-            ...(r.blocks === undefined ? {} : { blocks: r.blocks }),
-          })),
-        ],
+        thread: withReplies(context, event.replies, event.at),
         unread: event.replies.length > 0 ? true : context.unread,
       };
     }),
+    addEarlier: assign(({ context, event }) =>
+      event.type === "earlier" ? { thread: withReplies(context, event.replies, 0) } : {},
+    ),
     progress: assign(({ event }) => (event.type === "working" ? { progress: event.progress } : {})),
     endProgress: assign({ progress: undefined }),
     settledByYou: assign({ settledBy: "you" as const, unread: false }),
@@ -210,7 +224,11 @@ const lifecycle = setup({
   id: "note",
   context: ({ input }) => input,
   initial: "new",
-  on: { write: { actions: "write" }, read: { actions: "read" } },
+  on: {
+    write: { actions: "write" },
+    read: { actions: "read" },
+    earlier: { actions: "addEarlier" },
+  },
   states: {
     new: { on: { send: { guard: "hasWords", target: "waiting", actions: "send" } } },
     waiting: {

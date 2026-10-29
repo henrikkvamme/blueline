@@ -21,6 +21,9 @@ export const ReplySchema = Schema.Struct({
     Schema.Array(
       Schema.Struct({
         text: Schema.String,
+        /** When the agent wrote it, in ms, so the page draws it by time among the reviewer's
+         * messages. A status file from before has none: such a reply comes under the chat. */
+        at: Schema.optional(Schema.Finite),
         variant: Schema.optional(Schema.String),
         /** What the reply shows besides its words: a question, variants, a table (blocks.ts). */
         blocks: Schema.optional(Schema.Array(BlockSchema)),

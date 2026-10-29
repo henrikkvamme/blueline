@@ -320,7 +320,7 @@ describe("reply", () => {
     await call({ id: "note-a", state: "replied", text: "Moved", variant: "B" });
     expect(status()["note-a"]).toEqual({
       state: "replied",
-      replies: [{ text: "Moved", variant: "B" }],
+      replies: [{ text: "Moved", at: expect.any(Number), variant: "B" }],
     });
     await call({ id: "note-a", state: "settled" });
     expect(status()["note-a"]).toMatchObject({ state: "replied", settled: true });

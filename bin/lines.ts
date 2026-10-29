@@ -349,7 +349,7 @@ export const cameLate = (sentAt: string | undefined, now: number, lateMs: number
 export function replyAfter(
   was: Reply | undefined,
   command: Extract<Command, { kind: "reply" }>,
-  /** The time now, in ms: a settle keeps it. */
+  /** The time now, in ms: a reply and a settle keep it. */
   now: number,
   blocks?: readonly Block[],
 ): Reply {
@@ -360,6 +360,7 @@ export function replyAfter(
     return { ...before, state: "replied", settled: true, settledAt: now };
   const reply = {
     text: command.text,
+    at: now,
     ...(command.variant === undefined ? {} : { variant: command.variant }),
     ...(blocks === undefined ? {} : { blocks }),
   };

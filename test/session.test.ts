@@ -524,6 +524,59 @@ describe("the review session", () => {
     actor.stop();
   });
 
+  it("draws the agent's replies by their time, so old ones never answer a new message", () => {
+    const id = stepNoteId("b");
+    const chat = (s: Snapshot) => s.context.notes.find((n) => n.id === id);
+    // The page lost the chat of two days ago; the status file keeps its three replies.
+    const old = [
+      { text: "Too short, sorry", at: 10 },
+      { text: "Bold now", at: 20 },
+      { text: "Done", at: 30 },
+    ];
+    let s = after(
+      start(),
+      { type: "choose" },
+      { type: "entered" },
+      { type: "go", by: 1 },
+      { type: "entered" },
+      { type: "write", id, step: "b", draft: "Highlight the route" },
+      { type: "send", id, step: "b", at: 100 },
+      { type: "replies", replies: { [id]: { state: "working", replies: old } } },
+    );
+    expect(chat(s)?.thread.map((m) => m.text)).toEqual([
+      "Too short, sorry",
+      "Bold now",
+      "Done",
+      "Highlight the route",
+    ]);
+    expect([chat(s)?.state, chat(s)?.unread]).toEqual(["working", false]);
+    s = after(s, {
+      type: "replies",
+      replies: { [id]: { state: "replied", replies: [...old, { text: "Highlighted", at: 110 }] } },
+    });
+    expect(
+      chat(s)
+        ?.thread.map((m) => m.text)
+        .slice(-2),
+    ).toEqual(["Highlight the route", "Highlighted"]);
+    expect([chat(s)?.state, chat(s)?.unread]).toEqual(["replied", true]);
+    // A status file from before replies had times reads as before: by count, under the chat.
+    const untimed = after(
+      start(),
+      { type: "choose" },
+      { type: "entered" },
+      { type: "go", by: 1 },
+      { type: "entered" },
+      { type: "write", id, step: "b", draft: "Ask" },
+      { type: "send", id, step: "b", at: 100 },
+      { type: "replies", replies: { [id]: { state: "replied", replies: [{ text: "Yes" }] } } },
+    );
+    expect(chat(untimed)?.thread.map((m) => [m.text, m.at])).toEqual([
+      ["Ask", 100],
+      ["Yes", 100],
+    ]);
+  });
+
   it("undoes and redoes removing a note, and keeps a reply the agent gave meanwhile", () => {
     let s = after(
       start(),

@@ -433,6 +433,15 @@ work on other things. It writes one follow-up instead.
 - A send is not undoable: `u` takes back the settles and the other changes, and never a
   message. Take back is the one way.
 
+### Replies by time
+
+Agreed on 2026-10-29 (issue #1). The status file keeps each reply's time (`at`, in ms), and
+the chat draws each reply by its time among the reviewer's messages. A chat that the page no
+longer has, as in another browser, leaves its replies in the status file. They go above the
+new message, by time, and do not count as its answer: the chat waits until a reply is newer
+than the newest message. A reply from a status file before 0.1.8 has no time, and comes
+under the chat, by count, as before.
+
 ### Annotation, and the wire's note
 
 Agreed with Henrik on 2026-10-26. The reviewer's word for what they write on a pin is
