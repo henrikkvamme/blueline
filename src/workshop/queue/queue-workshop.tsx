@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   annotate,
   annotationsOn,
@@ -23,6 +23,9 @@ import { cx } from "../../ui/cx";
 import { PANEL } from "../../ui/geometry";
 import { Panel, SHIP_SECONDS, type Composer, type Ship } from "./panel";
 import { AppNav, AppPage, Status } from "./app";
+import { Guide, GuideToggle } from "./guide";
+import { VOICES } from "./voice";
+import { Walker } from "./walker";
 import { answerTo, selectorOf, start, targetOf, type Path } from "./script";
 import { QueueStates } from "./queue-states";
 
@@ -32,7 +35,8 @@ import { QueueStates } from "./queue-states";
  * the page shows its change. The state survives a reload; Reset starts again.
  */
 
-const KEY = "blueline.workshop.queue";
+const KEY = "blueline.workshop.queue.3";
+const GUIDE = "blueline.workshop.queue.guide";
 
 interface State {
   readonly queue: Queue;
@@ -41,11 +45,35 @@ interface State {
   readonly stopped: boolean;
 }
 
-const fresh = (limit = 2, delay = 8): State => ({
-  queue: next(start(limit)).queue,
+const fresh = (delay = 8): State => ({
+  queue: next(start()).queue,
   delay,
   stopped: false,
 });
+
+interface GuideSettings {
+  /** Whether each remark walks when it shows. */
+  readonly on: boolean;
+  readonly voice: boolean;
+  /** The ElevenLabs voice that speaks. */
+  readonly speaker: string;
+  readonly reduced: boolean;
+}
+
+function loadGuide(): GuideSettings {
+  const start = {
+    on: true,
+    voice: true,
+    speaker: VOICES[0].id,
+    reduced: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  };
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(GUIDE) ?? "null");
+    return typeof raw === "object" && raw !== null ? { ...start, ...raw } : start;
+  } catch {
+    return start;
+  }
+}
 
 function load(): State {
   try {
@@ -66,9 +94,48 @@ function Live() {
   const [toast, setToast] = useState<readonly string[]>([]);
   const [shipAt, setShipAt] = useState<number | undefined>(undefined);
   const [clock, setClock] = useState(Date.now());
+  const [seen, setSeen] = useState(false);
+  const [guide, setGuide] = useState<GuideSettings>(loadGuide);
+  // A variant that shows on the page and is not kept: the reviewer's own preview, and the
+  // guide's while a beat shows it.
+  const [peek, setPeek] = useState<string | undefined>(undefined);
+  const [guidePeek, setGuidePeek] = useState<string | undefined>(undefined);
+  const walker = useMemo(
+    () =>
+      new Walker(
+        () => ({ width: window.innerWidth - PANEL, height: window.innerHeight }),
+        setGuidePeek,
+      ),
+    [],
+  );
+  const walk = useSyncExternalStore(walker.subscribe, walker.snapshot);
+  useEffect(() => () => walker.destroy(), [walker]);
+  useEffect(() => localStorage.setItem(GUIDE, JSON.stringify(guide)), [guide]);
+  useEffect(
+    () =>
+      walker.configure({
+        voice: guide.voice ? guide.speaker : undefined,
+        reduced: guide.reduced,
+      }),
+    [walker, guide],
+  );
   const q = state.queue;
   const here = current(q);
   const page: Path = (here?.page as Path | undefined) ?? "/request";
+  // Each remark walks when it shows, with walks on; its preview ends when it goes.
+  useEffect(() => {
+    setPeek(undefined);
+    if (guide.on && here?.walk !== undefined) walker.start(here.walk, here.page);
+    else walker.stop();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new remark starts a walk, not a new setting
+  }, [here?.id, walker]);
+  useEffect(() => walker.navigate(page), [walker, page]);
+  /** g: pause a walk, go on with it, or walk the remark again. */
+  const toggleWalk = () => {
+    if (walker.active()) walker.pause();
+    else if (walk.phase === "paused" || walk.phase === "lost") walker.resume();
+    else if (here?.walk !== undefined) walker.start(here.walk, page);
+  };
 
   useEffect(() => localStorage.setItem(KEY, JSON.stringify(state)), [state]);
 
@@ -113,7 +180,10 @@ function Live() {
     setToast([]);
   };
 
-  const open = (target: string) => setComposer({ target, text: "" });
+  const open = (target: string) => {
+    walker.pause();
+    setComposer({ target, text: "" });
+  };
   const send = () => {
     if (composer === undefined || composer.text.trim() === "") return;
     setState((s) => ({
@@ -129,8 +199,10 @@ function Live() {
     }));
     setComposer(undefined);
   };
+  /** Keep a variant, or send an answer: only a click or Enter does it. */
   const choose = (value: string) => {
     if (here !== undefined) setState((s) => ({ ...s, queue: pick(s.queue, here.id, value) }));
+    setPeek(undefined);
   };
 
   useEffect(() => {
@@ -140,10 +212,17 @@ function Live() {
       const n = Number(e.key);
       if (e.key === "j" || e.key === "ArrowRight") move(next);
       else if (e.key === "k" || e.key === "ArrowLeft") move(back);
+      else if (e.key === "h") setSeen((o) => !o);
+      else if (e.key === "Escape" && seen) setSeen(false);
       else if (e.key === "y") move(settleNow);
       else if (e.key === "u" && toast.length > 0) undo();
       else if (e.key === "a" && here !== undefined) open(here.target);
-      else if (n >= 1 && n <= values.length) choose(values[n - 1] ?? "");
+      else if (e.key === "g") toggleWalk();
+      else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
+      // A number previews; Enter keeps what it previews.
+      else if (n >= 1 && n <= values.length) setPeek(values[n - 1]);
+      else if (e.key === "Enter" && peek !== undefined) choose(peek);
+      else if (e.key === "Escape" && peek !== undefined) setPeek(undefined);
       else return;
       e.preventDefault();
     };
@@ -169,7 +248,12 @@ function Live() {
       <Controls
         state={state}
         setState={setState}
-        reset={() => setState(fresh(q.limit, state.delay))}
+        guide={guide}
+        setGuide={setGuide}
+        reset={() => {
+          setState(fresh(state.delay));
+          walker.stop();
+        }}
       />
       <main
         onClickCapture={onPage}
@@ -179,13 +263,28 @@ function Live() {
       >
         <div className="mx-auto flex max-w-xl flex-col gap-4">
           <AppNav path={page} />
-          <AppPage path={page} changed={changed} status={q.picks["r-status"] ?? "Dot"} />
+          <AppPage
+            path={page}
+            changed={changed}
+            status={
+              (here?.id === "r-status" ? (peek ?? guidePeek) : undefined) ??
+              q.picks["r-status"] ??
+              "Dot"
+            }
+          />
         </div>
       </main>
       <Pins queue={q} page={page} onShow={(id) => move((s) => show(s, id))} />
+      <Guide walker={walker} reduced={guide.reduced} />
       <Panel
         docked
         preview={(_, v) => <Status look={v} text="In review" />}
+        peek={peek ?? (here?.kind === "choice" ? guidePeek : undefined)}
+        onPeek={setPeek}
+        walk={here?.walk === undefined ? undefined : walk.phase}
+        onWalk={toggleWalk}
+        voice={guide.voice}
+        onVoice={() => setGuide((g) => ({ ...g, voice: !g.voice }))}
         queue={q}
         eta={eta}
         composer={composer}
@@ -193,6 +292,9 @@ function Live() {
         ship={ship}
         onNext={() => move(next)}
         onBack={() => move(back)}
+        onShow={(id) => move((s) => show(s, id))}
+        seen={seen}
+        onSeen={setSeen}
         onAnnotate={() => here !== undefined && open(here.target)}
         onWrite={(text) => setComposer((c) => (c === undefined ? c : { ...c, text }))}
         onSend={send}
@@ -209,10 +311,14 @@ function Live() {
 function Controls({
   state,
   setState,
+  guide,
+  setGuide,
   reset,
 }: {
   readonly state: State;
   readonly setState: (to: (s: State) => State) => void;
+  readonly guide: GuideSettings;
+  readonly setGuide: (guide: GuideSettings) => void;
   readonly reset: () => void;
 }) {
   const choice = (on: boolean) =>
@@ -222,19 +328,6 @@ function Controls({
     );
   return (
     <div className="blueline fixed bottom-3 left-3 z-[2147483004] flex items-center gap-3 rounded-full bg-dt-panel px-3 py-1.5 text-[12px] text-dt-muted shadow-dt-float">
-      <span className="flex items-center gap-1">
-        Waiting limit
-        {[1, 2, 3].map((n) => (
-          <button
-            key={n}
-            type="button"
-            className={choice(state.queue.limit === n)}
-            onClick={() => setState((s) => ({ ...s, queue: { ...s.queue, limit: n } }))}
-          >
-            {n}
-          </button>
-        ))}
-      </span>
       <span className="flex items-center gap-1">
         Agent
         {[3, 8, 30].map((n) => (
@@ -248,6 +341,29 @@ function Controls({
           </button>
         ))}
       </span>
+      <span className="flex items-center gap-1">
+        Cursor
+        <GuideToggle label="Walks" on={guide.on} onChange={(on) => setGuide({ ...guide, on })} />
+        <GuideToggle
+          label="Voice"
+          on={guide.voice}
+          onChange={(voice) => setGuide({ ...guide, voice })}
+        />
+        {guide.voice &&
+          VOICES.map((v) => (
+            <GuideToggle
+              key={v.id}
+              label={v.name}
+              on={guide.speaker === v.id}
+              onChange={() => setGuide({ ...guide, speaker: v.id })}
+            />
+          ))}
+        <GuideToggle
+          label="Less motion"
+          on={guide.reduced}
+          onChange={(reduced) => setGuide({ ...guide, reduced })}
+        />
+      </span>
       <a href="#queue/states" className="rounded-full px-2.5 py-1 hover:text-dt-text">
         States
       </a>
@@ -258,8 +374,9 @@ function Controls({
   );
 }
 
-/** The light round the remark that shows, with its number on a tab, and a mark at each other
- * open remark on the page and at each annotation with the agent. */
+/** The number of the remark that shows, on a tab beside its element, and a mark at each
+ * other open remark on the page and at each annotation with the agent. The agent's cursor
+ * draws on the element itself. */
 function Pins({
   queue: q,
   page,
@@ -312,33 +429,18 @@ function Pins({
       {frame !== undefined && here !== undefined && (
         <span
           className={cx(
-            "absolute rounded-[12px] ring-2 transition-[left,top,width,height] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]",
-            answer
-              ? "shadow-[0_0_0_6px_rgb(63_178_127/0.14)] ring-dt-good"
-              : "shadow-[0_0_0_6px_rgb(74_108_247/0.14)] ring-dt-accent",
+            "absolute grid h-5 min-w-5 -translate-y-1/2 animate-dt-arrive place-items-center rounded-[6px] px-1 text-[10px] font-semibold text-white tabular-nums shadow-dt-float transition-[left,top] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]",
+            answer ? "bg-dt-good" : "bg-dt-accent",
           )}
-          style={{
-            left: frame.x - 8,
-            top: frame.y - 8,
-            width: frame.width + 16,
-            height: frame.height + 16,
-          }}
+          style={{ left: frame.right + 16, top: frame.top + 2 }}
         >
-          <span
-            className={cx(
-              "absolute top-0 left-[calc(100%+8px)] grid h-5 min-w-5 animate-dt-arrive place-items-center rounded-[6px] px-1 text-[10px] font-semibold text-white tabular-nums shadow-dt-float",
-              answer ? "bg-dt-good" : "bg-dt-accent",
-            )}
-          >
-            {answer ? <CornerDownRight className="size-3" aria-hidden /> : numberOf(here)}
-          </span>
+          {answer ? <CornerDownRight className="size-3" aria-hidden /> : numberOf(here)}
         </span>
       )}
       {others.map((r) => {
         const rect = box(r.target);
         if (rect === undefined) return null;
         const at = slot(r.target);
-        const asked = annotationsOn(q, r.id).length > 0;
         return (
           <button
             key={r.id}
@@ -346,10 +448,7 @@ function Pins({
             aria-label={`Remark ${String(numberOf(r))}: ${r.title}`}
             title={r.title}
             onClick={() => onShow(r.id)}
-            className={cx(
-              "pointer-events-auto absolute grid h-5 min-w-5 -translate-y-1/2 animate-dt-fade place-items-center rounded-[6px] bg-dt-panel px-1 text-[10px] font-semibold text-dt-muted tabular-nums shadow-dt-float transition-[scale,color] hover:scale-110 hover:text-dt-text",
-              asked && "opacity-45",
-            )}
+            className="pointer-events-auto absolute grid h-5 min-w-5 -translate-y-1/2 animate-dt-fade place-items-center rounded-[6px] bg-dt-panel px-1 text-[10px] font-semibold text-dt-muted tabular-nums shadow-dt-float transition-[scale,color] hover:scale-110 hover:text-dt-text"
             style={{ left: rect.right + 16 + at * 26, top: rect.top + 2 }}
           >
             {numberOf(r)}

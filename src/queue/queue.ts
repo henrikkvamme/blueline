@@ -13,6 +13,26 @@
 /** What a remark asks of the reviewer. */
 export type Kind = "look" | "answer" | "choice" | "question";
 
+/** One beat of a remark's walk: the agent's cursor goes to an element and says why. */
+export interface Beat {
+  /** The element: a CSS selector. */
+  readonly target: string;
+  /** What the element is, in words, for when it cannot be found. */
+  readonly name?: string;
+  /** What the voice says. */
+  readonly say: string;
+  /** The few words that the agent's note on the element shows; the voice says the rest. */
+  readonly note?: string;
+  /** What the cursor draws on the element while it speaks. */
+  readonly draw?: "circle" | "underline";
+  /** The reviewer's turn: the walk waits for his own click on the element. The cursor never
+   * clicks. */
+  readonly turn?: boolean;
+  /** A variant to preview while the beat shows. It ends with the beat; only the reviewer
+   * keeps a variant. */
+  readonly peek?: string;
+}
+
 export interface Remark {
   readonly id: string;
   readonly kind: Kind;
@@ -30,6 +50,8 @@ export interface Remark {
   readonly options?: readonly string[];
   /** When the agent wrote it, in ms. */
   readonly at: number;
+  /** The agent's cursor shows the remark: where to look, and what to try. */
+  readonly walk?: readonly Beat[];
 }
 
 export interface Annotation {
@@ -53,18 +75,15 @@ export interface Queue {
   readonly trail: readonly string[];
   /** Where on the trail the reviewer is; -1 before the first. */
   readonly at: number;
-  /** How many of his annotations may wait on the agent before Next holds new remarks. */
-  readonly limit: number;
 }
 
-export const empty = (limit = 2): Queue => ({
+export const empty = (): Queue => ({
   remarks: [],
   annotations: [],
   settled: [],
   picks: {},
   trail: [],
   at: -1,
-  limit,
 });
 
 export const remarkOf = (q: Queue, id: string | undefined) =>
@@ -86,35 +105,76 @@ export const waiting = (q: Queue) => q.annotations.filter((a) => answerOf(q, a.i
 export const annotationsOn = (q: Queue, remark: string) =>
   q.annotations.filter((a) => a.on === remark);
 
-/** The open remarks that he has not seen, in the order Next takes them. Answers always
- * come; a new remark comes only while fewer annotations than the limit wait. */
-export function order(q: Queue): readonly Remark[] {
+/** Where a remark stands in the queue: the page that shows first, answers before new
+ * remarks, then the oldest. An answer to come stands where the answer will. */
+function rank(
+  q: Queue,
+  item: { readonly page: string; readonly answer: boolean; readonly at: number },
+) {
   const here = current(q);
-  const roomForNew = waiting(q).length < q.limit;
-  const rank = (r: Remark) => [
+  return [
     // Finish where he is: the page that shows comes first.
-    here !== undefined && r.page === here.page ? 0 : 1,
+    here !== undefined && item.page === here.page ? 0 : 1,
     // Finish before starting: answers before new remarks.
-    r.kind === "answer" ? 0 : 1,
-    r.at,
+    item.answer ? 0 : 1,
+    item.at,
   ];
-  return [...q.remarks]
-    .filter((r) => !isSettled(q, r.id) && !q.trail.includes(r.id))
-    .filter((r) => r.kind === "answer" || roomForNew)
-    .sort((a, b) => {
-      const [x, y] = [rank(a), rank(b)];
-      for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return (x[i] ?? 0) - (y[i] ?? 0);
-      return 0;
-    });
 }
 
-/** The new remarks that Next holds back because enough annotations wait. */
-export const held = (q: Queue) =>
-  waiting(q).length < q.limit
-    ? []
-    : q.remarks.filter(
-        (r) => r.kind !== "answer" && !isSettled(q, r.id) && !q.trail.includes(r.id),
-      );
+function byRank(x: readonly number[], y: readonly number[]) {
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return (x[i] ?? 0) - (y[i] ?? 0);
+  return 0;
+}
+
+const rankOf = (q: Queue, r: Remark) =>
+  rank(q, { page: r.page, answer: r.kind === "answer", at: r.at });
+
+/** The open remarks that he has not seen, in the order Next takes them. */
+export function order(q: Queue): readonly Remark[] {
+  return [...q.remarks]
+    .filter((r) => !isSettled(q, r.id) && !q.trail.includes(r.id))
+    .sort((a, b) => byRank(rankOf(q, a), rankOf(q, b)));
+}
+
+/** One place in the queue ahead: a remark, or the agent's answer to an annotation, which
+ * has not come yet. */
+export type Ahead =
+  | { readonly kind: "remark"; readonly remark: Remark }
+  | { readonly kind: "answer"; readonly annotation: Annotation };
+
+/**
+ * The queue after the remark that shows, as Next takes it: open remarks on the trail ahead,
+ * then the rest in order. An answer still with the agent stands where it will come, so a
+ * remark that he annotated comes back into the queue at its place.
+ */
+export function ahead(q: Queue): readonly Ahead[] {
+  const trail = q.trail
+    .slice(q.at + 1)
+    .map((id) => remarkOf(q, id))
+    .filter((r): r is Remark => r !== undefined && !isSettled(q, r.id))
+    .map((remark): Ahead => ({ kind: "remark", remark }));
+  const rest = [
+    ...order(q).map((remark) => ({
+      item: { kind: "remark", remark } satisfies Ahead,
+      rank: rankOf(q, remark),
+    })),
+    ...waiting(q).map((annotation) => ({
+      item: { kind: "answer", annotation } satisfies Ahead,
+      rank: rank(q, { page: annotation.page, answer: true, at: Number.MAX_SAFE_INTEGER }),
+    })),
+  ].sort((a, b) => byRank(a.rank, b.rank));
+  return [...trail, ...rest.map((r): Ahead => r.item)];
+}
+
+/** The remarks that he saw before the one that shows, and those settled before, the last
+ * first. */
+export function seen(q: Queue): readonly Remark[] {
+  const ids = [...q.trail.slice(0, Math.max(q.at, 0)).reverse(), ...q.settled];
+  return [...new Set(ids)]
+    .filter((id) => id !== current(q)?.id)
+    .map((id) => remarkOf(q, id))
+    .filter((r) => r !== undefined);
+}
 
 /** The remarks left: open, and not waiting on the agent. */
 export const left = (q: Queue) =>
@@ -162,11 +222,13 @@ export interface Move {
   readonly settled: readonly string[];
 }
 
-/** Next: forward on the trail, or the queue's first remark. With nothing to show, the
- * reviewer stays, and the remark that he leaves still settles. */
+/** Next: the next open remark on the trail ahead, else the queue's first remark. A settled
+ * remark ahead is passed over, so Next goes back from the past to what needs him. With
+ * nothing to show, the reviewer stays, and the remark that he leaves still settles. */
 export function next(q: Queue): Move {
   const { queue, settled } = leave(q);
-  if (queue.at < queue.trail.length - 1) return { queue: { ...queue, at: queue.at + 1 }, settled };
+  const open = queue.trail.findIndex((id, i) => i > queue.at && !isSettled(queue, id));
+  if (open !== -1) return { queue: { ...queue, at: open }, settled };
   const first = order(queue)[0];
   if (first === undefined) return { queue, settled };
   return {

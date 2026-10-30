@@ -1,4 +1,4 @@
-import type { Annotation, Queue, Remark } from "../../queue/queue";
+import type { Annotation, Beat, Queue, Remark } from "../../queue/queue";
 import { arrive, empty } from "../../queue/queue";
 
 /*
@@ -20,17 +20,26 @@ export type Path = (typeof PAGES)[number]["path"];
 /** The elements of the made-up app that a remark or an annotation can be about. */
 export const TARGETS: Readonly<Record<string, string>> = {
   title: "the title",
+  asker: "who asked",
   status: "the status",
   amount: "the amount",
   approvers: "the approvers",
   submit: "the send button",
   "approver-list": "the approver list",
   add: "the add button",
+  grip: "the grip",
   sent: "the sent message",
 };
 
 export const selectorOf = (target: string) => `[data-q="${target}"]`;
 export const targetOf = (selector: string) => /data-q="([^"]+)"/.exec(selector)?.[1] ?? "";
+
+const beat = (target: string, say: string, more: Partial<Beat> = {}): Beat => ({
+  target: selectorOf(target),
+  name: TARGETS[target] ?? "the element",
+  say,
+  ...more,
+});
 
 const remark = (
   id: string,
@@ -47,33 +56,102 @@ const REMARKS: readonly Remark[] = [
   remark("r-list-old", "/approvers", "approver-list", "The approvers' rows"),
   remark("r-who", "/request", "title", "Who asked, under the title", {
     text: "The person who asked and the age of the request now sit under the title.",
+    walk: [
+      beat("asker", "Who asked, and when, now sit right under the title.", {
+        note: "Who asked, and when",
+        draw: "underline",
+      }),
+      beat("title", "Check that the title still reads first, and this line second.", {
+        note: "Title first, this second?",
+        draw: "circle",
+      }),
+    ],
   }),
   remark("r-status", "/request", "status", "How should the status look?", {
     kind: "choice",
     variants: ["Dot", "Pill", "Steps"],
     text: "Three looks for the request's status.",
+    walk: [
+      beat("status", "Here is the dot: quiet, with the words beside it.", {
+        peek: "Dot",
+        note: "1 · Dot",
+        draw: "circle",
+      }),
+      beat("status", "The pill stands out more.", {
+        peek: "Pill",
+        note: "2 · Pill",
+        draw: "circle",
+      }),
+      beat("status", "And steps show how far it has come.", {
+        peek: "Steps",
+        note: "3 · Steps",
+        draw: "circle",
+      }),
+      beat("status", "Hover one in the panel to see it here. A click keeps it.", {
+        note: "Hover to see, click to keep",
+      }),
+    ],
   }),
   remark("r-currency", "/request", "amount", "The amount keeps its currency", {
     text: "The field shows NOK before the figure, and groups the thousands.",
+    walk: [
+      beat("amount", "The amount keeps its currency in front of the figure.", {
+        note: "NOK in front",
+        draw: "underline",
+      }),
+      beat("amount", "Your turn: click in the field, then type a large figure.", {
+        turn: true,
+        note: "Type a large figure",
+      }),
+    ],
   }),
   remark("r-send", "/request", "submit", "Send only with two approvers?", {
     kind: "question",
     options: ["Yes, keep it off until then", "No, one is enough"],
     text: "Send is off until the request has two approvers.",
+    walk: [
+      beat("approvers", "These are the approvers. Send counts them.", {
+        note: "Send counts these",
+        draw: "circle",
+      }),
+      beat("submit", "With fewer than two, this button stays off. Should it?", {
+        note: "Off below two?",
+        draw: "circle",
+      }),
+    ],
   }),
   remark("r-add", "/approvers", "add", "Add an approver at the end", {
     text: "The new approver goes last in the order.",
+    walk: [
+      beat("add", "Your turn: click Add an approver.", { turn: true, note: "Click it" }),
+      beat("approver-list", "The new approver goes last, as number three.", {
+        note: "Goes last",
+        draw: "underline",
+      }),
+    ],
   }),
   remark("r-order", "/approvers", "approver-list", "Drag to change the order", {
     text: "Each row has a grip. The numbers follow the new order.",
+    walk: [
+      beat("grip", "Each row has a grip. Drag it to change who approves first.", {
+        note: "Drag to reorder",
+        draw: "circle",
+      }),
+    ],
   }),
   remark("r-sent", "/sent", "sent", "Who has the request now", {
     text: "The page names the approver who has it, and who is next.",
+    walk: [
+      beat("sent", "This line names who has the request now, and who is next.", {
+        note: "Who has it, who is next",
+        draw: "underline",
+      }),
+    ],
   }),
 ].map((r, i) => ({ ...r, at: i + 1 }));
 
-export const start = (limit: number): Queue => ({
-  ...REMARKS.reduce(arrive, empty(limit)),
+export const start = (): Queue => ({
+  ...REMARKS.reduce(arrive, empty()),
   settled: ["r-title", "r-amount-old", "r-list-old"],
 });
 
@@ -104,6 +182,15 @@ export const answerTo = (annotation: Annotation, at: number): Remark => {
     title: `Changed ${TARGETS[target] ?? "the element"}`,
     text: "Check that it still reads right next to the rest.",
     answers: [annotation.id],
+    walk: [
+      {
+        target: annotation.target,
+        name: TARGETS[target] ?? "the element",
+        say: `I changed this to “${changeOf(target).after}”. Check that it still reads right.`,
+        note: `Now “${changeOf(target).after}”`,
+        draw: "circle",
+      },
+    ],
     at,
   };
 };

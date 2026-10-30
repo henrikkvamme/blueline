@@ -1,34 +1,40 @@
 import {
   ArrowLeft,
+  Pause,
+  Play,
+  Volume2,
+  VolumeX,
   ArrowRight,
   Check,
   CircleHelp,
   CornerDownRight,
   Eye,
   GitMerge,
+  History,
   PenLine,
   Shuffle,
-  Sparkles,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
+  ahead,
   annotationsOn,
   answerOf,
   current,
   done,
-  held,
   isSettled,
   left,
   order,
-  remarkOf,
+  seen,
   waiting,
   type Kind,
   type Queue,
   type Remark,
 } from "../../queue/queue";
 import { cx } from "../../ui/cx";
+import { AgentMark } from "./mark";
 import { PANEL } from "../../ui/geometry";
 import { JOURNEY, PAGES, TARGETS, changeOf, targetOf } from "./script";
+import type { Phase } from "./walker";
 
 /*
  * The panel of the queue prototype: the remark that shows, what waits on the agent, what
@@ -67,6 +73,20 @@ export interface PanelProps {
   readonly onPick: (value: string) => void;
   readonly onUndo: () => void;
   readonly onStop: () => void;
+  /** Show one remark: from the bar, or from Seen. */
+  readonly onShow?: (id: string) => void;
+  /** Whether Seen, the list of the remarks seen before, is open. */
+  readonly seen?: boolean;
+  readonly onSeen?: (open: boolean) => void;
+  /** The choice that shows on the page and is not kept. */
+  readonly peek?: string | undefined;
+  readonly onPeek?: (value: string | undefined) => void;
+  /** Where the agent's cursor is on this remark's walk; none when it has no walk. */
+  readonly walk?: Phase | undefined;
+  /** Pause the walk, go on with it, or walk again. */
+  readonly onWalk?: () => void;
+  readonly voice?: boolean;
+  readonly onVoice?: () => void;
   /** Docked at the page's right edge, as the real panel is, or in the flow of the states
    * page. */
   readonly docked?: boolean;
@@ -91,7 +111,7 @@ const primary = `${button} bg-dt-accent pr-2 pl-3 text-white enabled:hover:brigh
 export function Panel(props: PanelProps) {
   const { queue: q } = props;
   const here = current(q);
-  const forward = q.at < q.trail.length - 1 || order(q).length > 0;
+  const forward = ahead(q).some((item) => item.kind === "remark");
   const shipping = done(q) && props.ship !== undefined;
   return (
     <aside
@@ -158,19 +178,20 @@ export function Panel(props: PanelProps) {
   );
 }
 
-/** The journey, how much is left, and a bar of its remarks: settled, with the agent, open,
- * and the one that shows. */
-function Header({ queue: q, eta }: PanelProps) {
+/** The journey, how much is left, and the queue as a bar: the remark that shows, then what
+ * Next takes, in its order. A settled remark leaves the bar; an annotation with the agent
+ * holds the place where its answer comes, and pulses until it does. A click on a remark in
+ * the bar shows it. The remarks seen before are in Seen. */
+function Header(props: PanelProps) {
+  const { queue: q, eta } = props;
   const count = left(q);
   const [help, setHelp] = useState(false);
   const here = current(q);
-  const remarks = q.remarks.filter((r) => r.kind !== "answer");
-  const withAgent = (r: Remark) =>
-    annotationsOn(q, r.id).some((a) => {
-      const answer = answerOf(q, a.id);
-      return answer === undefined || !isSettled(q, answer.id);
-    });
+  const queue = ahead(q);
+  const before = seen(q);
   const wait = waiting(q).length;
+  const tab =
+    "grid h-6 place-items-center rounded-full text-[12px] text-dt-faint hover:bg-dt-raised hover:text-dt-text aria-expanded:bg-dt-raised aria-expanded:text-dt-text";
   return (
     <header className="relative flex shrink-0 flex-col gap-2.5 px-4 pt-3.5 pb-3">
       <div className="flex items-center gap-2">
@@ -178,40 +199,121 @@ function Header({ queue: q, eta }: PanelProps) {
         <span className="text-[12px] text-dt-faint tabular-nums">
           {count === 0 ? "Nothing left" : `${String(count)} left`}
         </span>
-        <button
-          type="button"
-          aria-label="Keys"
-          aria-expanded={help}
-          onClick={() => setHelp((h) => !h)}
-          className="-mr-1.5 grid size-6 place-items-center rounded-full text-[12px] text-dt-faint hover:bg-dt-raised hover:text-dt-text"
-        >
-          ?
-        </button>
+        <span className="-mr-1.5 flex items-center">
+          <button
+            type="button"
+            aria-label="Seen"
+            title="Seen"
+            aria-expanded={props.seen === true}
+            disabled={before.length === 0}
+            onClick={() => props.onSeen?.(props.seen !== true)}
+            className={cx(tab, "size-6 disabled:opacity-35")}
+          >
+            <History className="size-3.5" aria-hidden />
+          </button>
+          <button
+            type="button"
+            aria-label="Keys"
+            aria-expanded={help}
+            onClick={() => setHelp((h) => !h)}
+            className={cx(tab, "size-6")}
+          >
+            ?
+          </button>
+        </span>
       </div>
-      <div className="flex h-1 gap-[3px]" aria-hidden>
-        {remarks.map((r) => {
-          const shows =
-            r.id === here?.id ||
-            annotationsOn(q, r.id).some((a) => here?.answers?.includes(a.id) === true);
-          const tone = isSettled(q, r.id)
-            ? "bg-dt-good"
-            : withAgent(r)
-              ? "bg-dt-accent/45 animate-pulse"
-              : "bg-dt-raised";
-          return (
+      <div className="flex h-1 items-center gap-[3px]">
+        {here !== undefined && (
+          <span
+            aria-hidden
+            className={cx(
+              "h-full flex-[2.2] rounded-full transition-all duration-300 ease-out",
+              isSettled(q, here.id)
+                ? "bg-dt-good"
+                : here.kind === "answer"
+                  ? "bg-dt-good"
+                  : "bg-dt-accent",
+            )}
+          />
+        )}
+        {queue.map((item) =>
+          item.kind === "remark" ? (
+            <button
+              key={item.remark.id}
+              type="button"
+              aria-label={item.remark.title}
+              title={item.remark.title}
+              onClick={() => props.onShow?.(item.remark.id)}
+              // A taller hit area than the bar it draws.
+              className="group -my-1.5 flex h-4 flex-1 animate-dt-fade items-center"
+            >
+              <span
+                className={cx(
+                  "h-1 w-full rounded-full transition-colors duration-150 group-hover:bg-dt-muted",
+                  item.remark.kind === "answer" ? "bg-dt-good/45" : "bg-dt-raised",
+                )}
+              />
+            </button>
+          ) : (
             <span
-              key={r.id}
-              className={cx(
-                "h-full rounded-full transition-all duration-300 ease-out",
-                shows === true ? "flex-[2.2] bg-dt-accent" : `flex-1 ${tone}`,
-              )}
+              key={item.annotation.id}
+              title="The agent's answer to your annotation"
+              className="h-full flex-1 animate-pulse rounded-full bg-dt-accent/45"
             />
-          );
-        })}
+          ),
+        )}
       </div>
       {wait > 0 && <Agent count={wait} eta={eta} />}
       {help && <Keys />}
+      {props.seen === true && (
+        <Seen
+          remarks={before}
+          queue={q}
+          onShow={(id) => {
+            props.onShow?.(id);
+            props.onSeen?.(false);
+          }}
+        />
+      )}
     </header>
+  );
+}
+
+/** The remarks seen before, the last first: a click shows one again. */
+function Seen({
+  remarks,
+  queue: q,
+  onShow,
+}: {
+  readonly remarks: readonly Remark[];
+  readonly queue: Queue;
+  readonly onShow: (id: string) => void;
+}) {
+  return (
+    <ul className="absolute top-11 right-3 left-3 z-10 flex max-h-80 animate-dt-arrive flex-col overflow-y-auto rounded-dt-control bg-dt-raised p-1 text-[12px] shadow-dt-float">
+      {remarks.map((r) => {
+        const kind = KIND[r.kind];
+        return (
+          <li key={r.id}>
+            <button
+              type="button"
+              onClick={() => onShow(r.id)}
+              className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-left text-dt-muted hover:bg-dt-line hover:text-dt-text"
+            >
+              <kind.Icon className="size-3.5 shrink-0 text-dt-faint" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{r.title}</span>
+              {isSettled(q, r.id) ? (
+                <Check className="size-3.5 shrink-0 text-dt-good" aria-label="Settled" />
+              ) : annotationsOn(q, r.id).some((a) => answerOf(q, a.id) === undefined) ? (
+                <AgentMark className="size-3.5 shrink-0 animate-pulse" />
+              ) : (
+                <span className="shrink-0 text-dt-faint">{pageTitle(r.page)}</span>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -221,7 +323,7 @@ function Agent({ count, eta }: { readonly count: number; readonly eta: number | 
     <span className="flex animate-dt-fade items-center gap-2 text-[12px] text-dt-muted">
       <span className="relative grid size-4 place-items-center">
         <span className="absolute inset-0 animate-ping rounded-full bg-dt-accent/25" />
-        <Sparkles className="relative size-3 text-dt-accent" aria-hidden />
+        <AgentMark className="relative size-3" />
       </span>
       <span className="flex-1">
         The agent works on {count === 1 ? "your annotation" : `${String(count)} annotations`}
@@ -234,11 +336,16 @@ function Agent({ count, eta }: { readonly count: number; readonly eta: number | 
 const KEYS = [
   ["j  →", "Next"],
   ["k  ←", "Back"],
+  ["h", "Seen: the remarks before"],
   ["a", "Annotate what shows"],
   ["Alt+click", "Annotate any element"],
-  ["1–9", "Pick a variant or an answer"],
+  ["1–9", "Preview a variant or an answer"],
+  ["Enter", "Keep what the preview shows"],
   ["y", "Settle now and go on"],
   ["u", "Undo the last settle"],
+  ["g", "Show me, pause, go on"],
+  ["m", "Mute the voice"],
+  ["Esc", "Pause the cursor; again, stop it"],
 ] as const;
 
 function Keys() {
@@ -268,11 +375,13 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
           <span aria-hidden>·</span>
           <span className="font-normal">{pageTitle(r.page)}</span>
           <span className="flex-1" />
-          {settled && (
+          {settled ? (
             <span className="flex items-center gap-1 text-dt-good">
               <Check className="size-3.5" aria-hidden />
               Settled
             </span>
+          ) : (
+            props.walk !== undefined && <WalkControls {...props} phase={props.walk} />
           )}
         </span>
         <h2 className="text-[17px] leading-6 font-semibold tracking-[-0.01em] text-balance">
@@ -284,19 +393,73 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
       </div>
       {r.kind === "answer" && <AnswerView queue={q} remark={r} />}
       {r.kind === "choice" && r.variants !== undefined && (
-        <Variants
-          remark={r}
+        <Choices
           values={r.variants}
           picked={q.picks[r.id]}
-          preview={props.preview}
+          peek={props.peek}
+          verb="Keep"
+          draw={props.preview === undefined ? undefined : (v) => props.preview?.(r, v)}
+          onPeek={props.onPeek}
           onPick={props.onPick}
         />
       )}
       {r.kind === "question" && r.options !== undefined && (
-        <Options values={r.options} picked={q.picks[r.id]} onPick={props.onPick} />
+        <Choices
+          values={r.options}
+          picked={q.picks[r.id]}
+          peek={props.peek}
+          verb="Answer"
+          draw={undefined}
+          onPeek={props.onPeek}
+          onPick={props.onPick}
+        />
       )}
       {mine.length > 0 && <Mine queue={q} remark={r} />}
     </section>
+  );
+}
+
+/** The agent's cursor for this remark: walk it, pause it or go on, and its voice. Both are
+ * the guide's own controls, so a press on them does not pause the walk. */
+function WalkControls(props: PanelProps & { readonly phase: Phase }) {
+  const running = props.phase === "moving" || props.phase === "speaking" || props.phase === "turn";
+  const stopped = props.phase === "paused" || props.phase === "lost";
+  const control =
+    "-my-1 flex items-center gap-1 rounded-full px-2 py-1 font-medium text-dt-muted hover:bg-dt-raised hover:text-dt-text";
+  return (
+    <span data-guide-ui="" className="-mr-1.5 flex items-center">
+      <button type="button" onClick={props.onWalk} className={control}>
+        {running ? (
+          <>
+            <Pause className="size-3.5" aria-hidden />
+            Pause
+          </>
+        ) : stopped ? (
+          <>
+            <Play className="size-3.5" aria-hidden />
+            Go on
+          </>
+        ) : (
+          <>
+            <Play className="size-3.5" aria-hidden />
+            Show me
+          </>
+        )}
+      </button>
+      <button
+        type="button"
+        aria-label={props.voice === true ? "Mute the voice" : "Turn the voice on"}
+        aria-pressed={props.voice === true}
+        onClick={props.onVoice}
+        className={cx(control, "w-7 justify-center px-0")}
+      >
+        {props.voice === true ? (
+          <Volume2 className={cx("size-3.5", running && "text-dt-accent")} aria-hidden />
+        ) : (
+          <VolumeX className="size-3.5" aria-hidden />
+        )}
+      </button>
+    </span>
   );
 }
 
@@ -329,86 +492,91 @@ function AnswerView({ queue: q, remark: r }: { readonly queue: Queue; readonly r
 }
 
 /** A choice: each variant drawn small in the app's own look, numbered for its key. */
-function Variants({
-  remark,
+/**
+ * The choices of a remark: variants drawn small in the app's own look, or a question's
+ * answers. A hover or a number previews one on the page and keeps nothing. Only a click on
+ * it, or Keep, keeps it.
+ */
+function Choices({
   values,
   picked,
-  preview,
-  onPick,
-}: {
-  readonly remark: Remark;
-  readonly values: readonly string[];
-  readonly picked: string | undefined;
-  readonly preview: PanelProps["preview"];
-  readonly onPick: (value: string) => void;
-}) {
-  return (
-    <ol className="grid grid-cols-1 gap-2">
-      {values.map((v, i) => {
-        const on = picked === v;
-        return (
-          <li key={v}>
-            <button
-              type="button"
-              aria-pressed={on}
-              onClick={() => onPick(v)}
-              className={cx(
-                "group flex w-full flex-col overflow-hidden rounded-dt-control text-left ring-1 transition-[box-shadow,background-color] duration-150",
-                on
-                  ? "bg-dt-accent/10 ring-2 ring-dt-accent"
-                  : "bg-dt-raised ring-dt-line hover:ring-dt-faint/60",
-              )}
-            >
-              <span className="flex h-16 items-center justify-center bg-[#fbfbfc] text-[#16161a]">
-                {preview?.(remark, v) ?? <span className="text-[13px]">{v}</span>}
-              </span>
-              <span className="flex items-center gap-2 px-2.5 py-2 text-[13px]">
-                <Number n={i + 1} on={on} />
-                <span className="flex-1 font-medium">{v}</span>
-                {on && <Check className="size-3.5 text-dt-accent" aria-hidden />}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function Options({
-  values,
-  picked,
+  peek,
+  verb,
+  draw,
+  onPeek,
   onPick,
 }: {
   readonly values: readonly string[];
   readonly picked: string | undefined;
+  readonly peek: string | undefined;
+  /** What keeping one does, in a word: Keep, or Answer. */
+  readonly verb: string;
+  /** Draws one variant small; a question has none. */
+  readonly draw: ((value: string) => ReactNode) | undefined;
+  readonly onPeek: ((value: string | undefined) => void) | undefined;
   readonly onPick: (value: string) => void;
 }) {
+  const pending = peek !== undefined && peek !== picked ? peek : undefined;
   return (
-    <ol className="flex flex-col gap-1.5">
-      {values.map((v, i) => {
-        const on = picked === v;
-        return (
-          <li key={v}>
-            <button
-              type="button"
-              aria-pressed={on}
-              onClick={() => onPick(v)}
-              className={cx(
-                "flex w-full items-center gap-2.5 rounded-dt-control px-3 py-2.5 text-left text-[13px] leading-5 ring-1 transition-[box-shadow,background-color] duration-150",
-                on
-                  ? "bg-dt-accent/10 ring-2 ring-dt-accent"
-                  : "bg-dt-raised ring-transparent hover:ring-dt-line",
-              )}
-            >
-              <Number n={i + 1} on={on} />
-              <span className="flex-1">{v}</span>
-              {on && <Check className="size-3.5 text-dt-accent" aria-hidden />}
-            </button>
-          </li>
-        );
-      })}
-    </ol>
+    <div className="flex flex-col gap-2">
+      <ol className="flex flex-col gap-2" onPointerLeave={() => onPeek?.(undefined)}>
+        {values.map((v, i) => {
+          const kept = picked === v;
+          const shows = pending === v;
+          return (
+            <li key={v}>
+              <button
+                type="button"
+                aria-pressed={kept}
+                onPointerEnter={() => onPeek?.(v)}
+                onFocus={() => onPeek?.(v)}
+                onClick={() => onPick(v)}
+                className={cx(
+                  "flex w-full flex-col overflow-hidden rounded-dt-control text-left transition-[box-shadow,background-color] duration-150",
+                  kept
+                    ? "bg-dt-accent/10 ring-2 ring-dt-accent"
+                    : shows
+                      ? "bg-dt-raised ring-2 ring-dt-accent/45"
+                      : "bg-dt-raised ring-1 ring-dt-line hover:ring-dt-faint/60",
+                )}
+              >
+                {draw !== undefined && (
+                  <span className="flex h-16 items-center justify-center bg-[#fbfbfc] text-[#16161a]">
+                    {draw(v)}
+                  </span>
+                )}
+                <span className="flex items-center gap-2.5 px-2.5 py-2 text-[13px] leading-5">
+                  <Number n={i + 1} on={kept} />
+                  <span className={cx("flex-1", draw !== undefined && "font-medium")}>{v}</span>
+                  {kept ? (
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-dt-accent">
+                      <Check className="size-3.5" aria-hidden />
+                      Kept
+                    </span>
+                  ) : (
+                    shows && (
+                      <span className="flex items-center gap-1 text-[11px] font-medium text-dt-faint">
+                        <Eye className="size-3.5" aria-hidden />
+                        Preview
+                      </span>
+                    )
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      {pending !== undefined && (
+        <button
+          type="button"
+          onClick={() => onPick(pending)}
+          className={cx(primary, "animate-dt-fade justify-center self-stretch")}
+        >
+          {verb} {pending}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -451,7 +619,7 @@ function Mine({ queue: q, remark: r }: { readonly queue: Queue; readonly remark:
                   </>
                 ) : (
                   <>
-                    <Sparkles className="size-3 animate-pulse text-dt-accent" aria-hidden />
+                    <AgentMark className="size-3 animate-pulse" />
                     With the agent
                   </>
                 )}
@@ -474,10 +642,9 @@ function UpNext({
   readonly eta: number | undefined;
   readonly forward: boolean;
 }) {
-  const after =
-    q.at < q.trail.length - 1 ? remarkOf(q, q.trail[q.at + 1]) : (order(q)[0] ?? undefined);
-  const hold = held(q).length;
-  if (after === undefined && hold === 0 && waiting(q).length === 0) return null;
+  const next = ahead(q)[0];
+  const after = next?.kind === "remark" ? next.remark : undefined;
+  if (next === undefined) return null;
   const kind = after === undefined ? undefined : KIND[after.kind];
   return (
     <div className="flex h-10 shrink-0 items-center gap-2.5 border-t border-dt-line px-4 text-[12px]">
@@ -489,10 +656,8 @@ function UpNext({
         </span>
       ) : (
         <span className="flex min-w-0 flex-1 items-center gap-1.5 text-dt-muted">
-          <Sparkles className="size-3.5 shrink-0 animate-pulse text-dt-accent" aria-hidden />
-          <span className="truncate">
-            {hold > 0 ? `${String(hold)} more after the agent's answer` : "The agent's answer"}
-          </span>
+          <AgentMark className="size-3.5 shrink-0 animate-pulse" />
+          <span className="truncate">The agent's answer</span>
           {eta !== undefined && !forward && (
             <span className="ml-auto text-dt-faint tabular-nums">{eta} s</span>
           )}
@@ -515,7 +680,7 @@ function Idle({ queue: q, eta }: { readonly queue: Queue; readonly eta: number |
         )}
       >
         {wait > 0 ? (
-          <Sparkles className="size-5 animate-pulse" aria-hidden />
+          <AgentMark className="size-5 animate-pulse" />
         ) : (
           <Check className="size-5" aria-hidden />
         )}

@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   annotate,
+  ahead,
   arrive,
   back,
   current,
   done,
   empty,
-  held,
   left,
   next,
-  order,
   pick,
   settleNow,
+  seen,
   show,
   unsettle,
   type Annotation,
@@ -88,21 +88,33 @@ describe("the queue", () => {
     expect(current(q)?.id).toBe("r1");
   });
 
-  it("holds new remarks while as many annotations as the limit wait", () => {
-    let q = start(look("a", "/a", 1), look("b", "/a", 2), look("c", "/a", 3));
+  it("puts an annotated remark back in the queue where its answer comes", () => {
+    let q = start(look("a", "/a", 1), look("b", "/a", 2), look("c", "/b", 3));
     q = go(q, next);
     q = annotate(q, note("n1", "a"));
     q = go(q, next);
     expect(current(q)?.id).toBe("b");
-    q = annotate(q, note("n2", "b"));
-    // Two wait, and the limit is two: c is held, and Next stays.
-    expect(order(q)).toEqual([]);
-    expect(held(q).map((r) => r.id)).toEqual(["c"]);
-    q = go(q, next);
-    expect(current(q)?.id).toBe("b");
-    // An answer frees room, and comes first.
+    // The answer to come stands before new remarks on another page.
+    expect(ahead(q).map((x) => (x.kind === "remark" ? x.remark.id : x.annotation.id))).toEqual([
+      "n1",
+      "c",
+    ]);
     q = arrive(q, answer("r1", "n1", "/a", 9));
-    expect(order(q).map((r) => r.id)).toEqual(["r1", "c"]);
+    expect(ahead(q).map((x) => (x.kind === "remark" ? x.remark.id : x.annotation.id))).toEqual([
+      "r1",
+      "c",
+    ]);
+  });
+
+  it("lists the remarks seen before, and Next goes on from the past to what is open", () => {
+    let q = start(look("a", "/a", 1), look("b", "/a", 2), look("c", "/a", 3));
+    q = go(q, next, next);
+    expect(seen(q).map((r) => r.id)).toEqual(["a"]);
+    q = go(q, (s) => show(s, "a"));
+    expect(current(q)?.id).toBe("a");
+    // a and b are settled: Next passes over them, to the first open remark.
+    q = go(q, next);
+    expect(current(q)?.id).toBe("c");
   });
 
   it("settles an annotated remark once the answers to it settle", () => {

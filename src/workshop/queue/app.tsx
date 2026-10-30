@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { cx } from "../../ui/cx";
 import { PAGES, changeOf, type Path } from "./script";
 
 /*
@@ -38,6 +39,8 @@ export function AppPage({
   readonly changed: ReadonlySet<string>;
   readonly status: string;
 }) {
+  // The reviewer's own click adds an approver; the guide's cursor never clicks.
+  const [added, setAdded] = useState(false);
   const words = (target: string) => {
     const change = changeOf(target);
     return changed.has(target) ? change.after : change.before;
@@ -47,13 +50,18 @@ export function AppPage({
       <section className={card}>
         <h1>Approvers</h1>
         <div data-q="approver-list" className="flex flex-col gap-2">
-          {APPROVERS.map((a, i) => (
+          {(added ? [...APPROVERS, ADDED] : APPROVERS).map((a, i) => (
             <div
               key={a.name}
-              className="flex items-center justify-between rounded-md bg-[#f1f1f4] px-3 py-2 text-[14px]"
+              className={cx(
+                "flex items-center justify-between rounded-md bg-[#f1f1f4] px-3 py-2 text-[14px]",
+                a === ADDED && "animate-dt-arrive bg-[#e8edff]",
+              )}
             >
               <span className="flex items-center gap-2">
-                <span className="text-[#8a8a94]">⠿</span>
+                <span data-q={i === 0 ? "grip" : undefined} className="text-[#8a8a94]">
+                  ⠿
+                </span>
                 <span className="text-[12px] text-[#8a8a94] tabular-nums">{i + 1}</span>
                 <span className="font-medium">{a.name}</span>
               </span>
@@ -66,6 +74,7 @@ export function AppPage({
         <button
           type="button"
           data-q="add"
+          onClick={() => setAdded(true)}
           className="self-start rounded-md border border-[#dcdce3] px-3 py-1.5 text-[13px] font-medium"
         >
           {words("add")}
@@ -89,7 +98,9 @@ export function AppPage({
         </span>
         <div data-q="title" className="flex flex-col gap-1">
           <h1>{words("title")}</h1>
-          <span className="text-[13px] text-[#5b5b66]">Asked by Ola Hansen · 2 days ago</span>
+          <span data-q="asker" className="w-fit text-[13px] text-[#5b5b66]">
+            Asked by Ola Hansen · 2 days ago
+          </span>
         </div>
         <span data-q="status" className="w-fit">
           <Status look={status} text={changed.has("status") ? words("status") : "In review"} />
@@ -127,10 +138,12 @@ export function AppPage({
   );
 }
 
-const APPROVERS = [
+const ADDED = { name: "Kari Nordmann", role: "HR" };
+
+const APPROVERS: readonly { readonly name: string; readonly role: string }[] = [
   { name: "Ola Hansen", role: "Director" },
   { name: "Ingrid Berg", role: "Finance" },
-] as const;
+];
 
 export function Status({
   look,

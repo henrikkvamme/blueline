@@ -1,3 +1,11 @@
 @import "tailwindcss";
 /* The dev tools' own dark look, which the workshops' panels use. */
 @import "@henrikkvamme/blueline/styles.css";
+
+/* The agent cursor's note comes in from the cursor, with a small spring. */
+@keyframes dt-note {
+  from {
+    opacity: 0;
+    transform: translate(-8px, -4px) scale(0.9);
+  }
+}

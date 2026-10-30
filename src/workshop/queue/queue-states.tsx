@@ -26,8 +26,8 @@ const note = (q: Queue, id: string, text: string, target: string, page = "/reque
     at,
   });
 
-const first = walk(start(2), 1);
-const choice = walk(start(2), 2);
+const first = walk(start(), 1);
+const choice = walk(start(), 2);
 const picked = pick(choice, "r-status", "Pill");
 const question = walk(pick(choice, "r-status", "Pill"), 2);
 const annotated = note(first, "a1", "Put the person's name in bold.", "title");
@@ -47,15 +47,9 @@ const answered = walk(
   }),
   1,
 );
-const twoWait = (() => {
-  let q = note(first, "a1", "Put the person's name in bold.", "title");
-  q = next(q).queue;
-  q = note(q, "a2", "Show the status in words, not only a colour.", "status");
-  return q;
-})();
-const settledBack = back(walk(start(2), 2)).queue;
+const settledBack = back(walk(start(), 2)).queue;
 const allSettled = (() => {
-  const q = start(2);
+  const q = start();
   return { ...q, settled: q.remarks.map((r) => r.id) };
 })();
 
@@ -72,9 +66,8 @@ const STATES: readonly { readonly name: string; readonly props: PanelProps }[] =
   },
   { name: "Your annotation waits", props: still(annotated, { eta: 6 }) },
   { name: "The agent's answer", props: still(answered) },
-  { name: "Held at the limit", props: still(twoWait, { eta: 4 }) },
   { name: "Back on a settled remark", props: still(settledBack) },
-  { name: "Settled, with undo", props: still(walk(start(2), 2), { toast: ["r-who"] }) },
+  { name: "Settled, with undo", props: still(walk(start(), 2), { toast: ["r-who"] }) },
   { name: "Two settled at once", props: still(answered, { toast: ["answer-a1", "r-who"] }) },
   { name: "All settled: it ships", props: still(allSettled, { ship: { in: 7 } }) },
   { name: "Merged", props: still(allSettled, { ship: { in: "shipped" } }) },
