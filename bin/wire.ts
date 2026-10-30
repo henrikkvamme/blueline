@@ -147,12 +147,15 @@ const decodeAnswer = Schema.decodeUnknownOption(AnswerTimes);
 const StatusEntries = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
 
 /** Whether the note has an answer since a time, by the status file; undefined when the file
- * does not read, so no claim lapses on a failed read. */
+ * is missing or does not read, so no claim lapses on what Blueline cannot see: the app may
+ * keep its status file elsewhere. */
 const answersBeside = (feedback: string) =>
-  readFile(path.join(path.dirname(feedback), "status.json"), StatusEntries, {}).pipe(
-    Effect.map(
-      (entries) => (note: string, since: number) =>
-        answeredAt(Option.getOrUndefined(decodeAnswer(entries[note])), since),
+  readFile(path.join(path.dirname(feedback), "status.json"), StatusEntries, undefined).pipe(
+    Effect.map((entries) =>
+      entries === undefined
+        ? undefined
+        : (note: string, since: number) =>
+            answeredAt(Option.getOrUndefined(decodeAnswer(entries[note])), since),
     ),
     Effect.orElseSucceed(() => undefined),
   );

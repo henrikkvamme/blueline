@@ -66,11 +66,27 @@ describe("a claim with no answer", () => {
     expect(ids(freshFor(lines, after, "next"))).toEqual(["a"]);
   });
 
+  it("stays when the note was answered after the line, also before a later claim", () => {
+    const sent = linesOf(
+      line({ line: "a", id: "note-a", kind: "note", sentAt: new Date(500).toISOString() }),
+    );
+    // Claimed again long after the agent answered it, as before 0.1.14.
+    const late = claimedBy(NO_CLAIMS, "gone", sent, "a", 9_000);
+    const replied = (note: string, since: number) =>
+      note === "note-a" && answeredAt({ replies: [{ at: 600 }] }, since);
+    expect(lapsed(sent, late, replied, 9_000 + LEASE_MS)).toBe(late);
+    const before = (note: string, since: number) =>
+      note === "note-a" && answeredAt({ replies: [{ at: 400 }] }, since);
+    expect(Object.keys(lapsed(sent, late, before, 9_000 + LEASE_MS).claimed)).toEqual([]);
+  });
+
   it("stays while the note got an answer since the claim", () => {
     const answered = (note: string, since: number) =>
       note === "note-a" && answeredAt({ workingAt: 1_500 }, since);
     expect(lapsed(lines, held, answered, 1_000 + LEASE_MS)).toBe(held);
     expect(answeredAt({ replies: [{ at: 999 }] }, 1_000)).toBe(false);
+    expect(answeredAt({ replies: [{ at: 0 }] }, 1_000)).toBe(true);
+    expect(answeredAt({ replies: [{}] }, 1_000)).toBe(true);
     expect(answeredAt({ settledAt: 1_000 }, 1_000)).toBe(true);
     expect(answeredAt(undefined, 0)).toBe(false);
   });

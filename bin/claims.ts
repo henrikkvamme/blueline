@@ -106,8 +106,9 @@ export const cursorAtByte = (lines: readonly Line[], mark: number): string | und
 export const LEASE_MS = 3 * 60_000;
 
 /** The claims after each claim that lapsed is given back: a claim on a line that asks an
- * answer, older than `LEASE_MS`, on a note with no answer since the claim. `answeredSince`
- * says whether the note got one at or after the time. The same claims when none lapsed. */
+ * answer, older than `LEASE_MS`, on a note with no answer since the line was sent. A line
+ * with no time of its own counts from its claim. `answeredSince` says whether the note got
+ * an answer at or after the time. The same claims when none lapsed. */
 export function lapsed(
   lines: readonly Line[],
   claims: Claims,
@@ -117,13 +118,16 @@ export function lapsed(
   const gone = lines.flatMap((l) => {
     const held = claims.claimed[l.id];
     if (held === undefined || l.answers === undefined || now - held.at < LEASE_MS) return [];
-    return answeredSince(l.answers, held.at) ? [] : [{ id: l.id, by: held.by }];
+    const sent = l.sentAt === undefined ? Number.NaN : Date.parse(l.sentAt);
+    const since = Number.isNaN(sent) ? held.at : Math.min(sent, held.at);
+    return answeredSince(l.answers, since) ? [] : [{ id: l.id, by: held.by }];
   });
   return gone.reduce((c, g) => givenBack(c, g.by, [g.id], now), claims);
 }
 
 /** Whether the agent's answer on a note came at or after `since`, in ms: a reply, a settle or
- * a working state. */
+ * a working state. A reply with no known time (`BEFORE_TIMES`, 0) counts: a line is never
+ * given again on a time Blueline does not know. */
 export const answeredAt = (
   reply:
     | {
@@ -135,6 +139,6 @@ export const answeredAt = (
   since: number,
 ) =>
   reply !== undefined &&
-  [reply.workingAt, reply.settledAt, ...(reply.replies ?? []).map((r) => r.at)].some(
-    (at) => at !== undefined && at >= since,
+  [reply.workingAt, reply.settledAt, ...(reply.replies ?? []).map((r) => r.at ?? 0)].some(
+    (at) => at !== undefined && (at >= since || at === 0),
   );
