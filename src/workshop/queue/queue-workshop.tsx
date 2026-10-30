@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import {
   annotate,
   annotationsOn,
@@ -16,10 +16,14 @@ import {
   waiting,
   type Move,
   type Queue,
+  type Remark,
 } from "../../queue/queue";
+import { CornerDownRight, PenLine } from "lucide-react";
 import { cx } from "../../ui/cx";
-import { Panel, type Composer, type Ship } from "./panel";
-import { PAGES, answerTo, changeOf, selectorOf, start, targetOf, type Path } from "./script";
+import { PANEL } from "../../ui/geometry";
+import { Panel, SHIP_SECONDS, type Composer, type Ship } from "./panel";
+import { AppNav, AppPage, Status } from "./app";
+import { answerTo, selectorOf, start, targetOf, type Path } from "./script";
 import { QueueStates } from "./queue-states";
 
 /*
@@ -88,7 +92,7 @@ function Live() {
 
   // The ship: ten seconds after the last settle, unless stopped.
   const finished = done(q) && !state.stopped;
-  useEffect(() => setShipAt(finished ? Date.now() + 10_000 : undefined), [finished]);
+  useEffect(() => setShipAt(finished ? Date.now() + SHIP_SECONDS * 1000 : undefined), [finished]);
   const ship: Ship | undefined =
     shipAt === undefined
       ? undefined
@@ -169,7 +173,9 @@ function Live() {
       />
       <main
         onClickCapture={onPage}
-        className="min-h-screen bg-[#fbfbfc] py-20 pr-[392px] pl-8 text-[#16161a]"
+        // The page narrows by the panel's width, so the panel covers nothing.
+        style={{ marginRight: PANEL }}
+        className="min-h-screen bg-[#fbfbfc] px-8 py-20 text-[#16161a]"
       >
         <div className="mx-auto flex max-w-xl flex-col gap-4">
           <AppNav path={page} />
@@ -178,7 +184,8 @@ function Live() {
       </main>
       <Pins queue={q} page={page} onShow={(id) => move((s) => show(s, id))} />
       <Panel
-        floating
+        docked
+        preview={(_, v) => <Status look={v} text="In review" />}
         queue={q}
         eta={eta}
         composer={composer}
@@ -251,8 +258,8 @@ function Controls({
   );
 }
 
-/** A numbered mark at each open remark on the page, and at each annotation that waits. The
- * remark that shows has a frame. */
+/** The light round the remark that shows, with its number on a tab, and a mark at each other
+ * open remark on the page and at each annotation with the agent. */
 function Pins({
   queue: q,
   page,
@@ -275,50 +282,77 @@ function Pins({
   }, [page, q]);
   const here = current(q);
   const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect();
-  const frame = here === undefined ? undefined : box(here.target);
-  const remarks = q.remarks.filter(
-    (r) => r.page === page && (!isSettled(q, r.id) || r.id === here?.id) && r.kind !== "answer",
+  const frame = here === undefined || here.page !== page ? undefined : box(here.target);
+  const numbered = q.remarks.filter((r) => r.kind !== "answer");
+  const numberOf = (r: Remark) =>
+    numbered.indexOf(
+      r.kind === "answer"
+        ? (numbered.find((x) =>
+            r.answers?.some((a) => annotationsOn(q, x.id).some((m) => m.id === a)),
+          ) ?? r)
+        : r,
+    ) + 1;
+  const others = numbered.filter(
+    (r) => r.page === page && !isSettled(q, r.id) && r.id !== here?.id && r.target !== here?.target,
   );
   const mine = waiting(q).filter((a) => a.page === page);
-  // Two marks on one element sit side by side.
-  const taken = new Map<string, number>();
+  // Marks on one element stand side by side.
+  // The light's tab takes the first place on its element.
+  const taken = new Map<string, number>(
+    frame !== undefined && here !== undefined ? [[here.target, 1]] : [],
+  );
   const slot = (selector: string) => {
     const n = taken.get(selector) ?? 0;
     taken.set(selector, n + 1);
     return n;
   };
+  const answer = here?.kind === "answer";
   return (
     <div className="blueline pointer-events-none fixed inset-0 z-[2147483001]">
-      {frame !== undefined && (
+      {frame !== undefined && here !== undefined && (
         <span
-          className="absolute rounded-[10px] ring-2 ring-dt-accent transition-all duration-200"
+          className={cx(
+            "absolute rounded-[12px] ring-2 transition-[left,top,width,height] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]",
+            answer
+              ? "shadow-[0_0_0_6px_rgb(63_178_127/0.14)] ring-dt-good"
+              : "shadow-[0_0_0_6px_rgb(74_108_247/0.14)] ring-dt-accent",
+          )}
           style={{
-            left: frame.x - 6,
-            top: frame.y - 6,
-            width: frame.width + 12,
-            height: frame.height + 12,
+            left: frame.x - 8,
+            top: frame.y - 8,
+            width: frame.width + 16,
+            height: frame.height + 16,
           }}
-        />
+        >
+          <span
+            className={cx(
+              "absolute top-0 left-[calc(100%+8px)] grid h-5 min-w-5 animate-dt-arrive place-items-center rounded-[6px] px-1 text-[10px] font-semibold text-white tabular-nums shadow-dt-float",
+              answer ? "bg-dt-good" : "bg-dt-accent",
+            )}
+          >
+            {answer ? <CornerDownRight className="size-3" aria-hidden /> : numberOf(here)}
+          </span>
+        </span>
       )}
-      {remarks.map((r) => {
+      {others.map((r) => {
         const rect = box(r.target);
         if (rect === undefined) return null;
-        const n = q.remarks.filter((x) => x.kind !== "answer").indexOf(r) + 1;
         const at = slot(r.target);
+        const asked = annotationsOn(q, r.id).length > 0;
         return (
           <button
             key={r.id}
             type="button"
-            aria-label={`Remark ${String(n)}: ${r.title}`}
+            aria-label={`Remark ${String(numberOf(r))}: ${r.title}`}
+            title={r.title}
             onClick={() => onShow(r.id)}
             className={cx(
-              "pointer-events-auto absolute grid size-5 -translate-y-1/2 place-items-center rounded-[6px] text-[10px] font-semibold tabular-nums shadow-dt-float transition-transform hover:scale-110",
-              r.id === here?.id ? "scale-110 bg-dt-accent text-white" : "bg-dt-panel text-dt-text",
-              annotationsOn(q, r.id).length > 0 && r.id !== here?.id && "opacity-50",
+              "pointer-events-auto absolute grid h-5 min-w-5 -translate-y-1/2 animate-dt-fade place-items-center rounded-[6px] bg-dt-panel px-1 text-[10px] font-semibold text-dt-muted tabular-nums shadow-dt-float transition-[scale,color] hover:scale-110 hover:text-dt-text",
+              asked && "opacity-45",
             )}
-            style={{ left: rect.right + 10 + at * 24, top: rect.top }}
+            style={{ left: rect.right + 16 + at * 26, top: rect.top + 2 }}
           >
-            {n}
+            {numberOf(r)}
           </button>
         );
       })}
@@ -330,163 +364,14 @@ function Pins({
           <span
             key={a.id}
             title={a.text}
-            className="absolute grid size-5 -translate-y-1/2 animate-pulse place-items-center rounded-full bg-dt-text text-[10px] font-semibold text-dt-ground shadow-dt-float"
-            style={{ left: rect.right + 10 + at * 24, top: rect.top }}
+            className="absolute grid size-5 -translate-y-1/2 animate-dt-fade place-items-center rounded-full bg-dt-text text-dt-ground shadow-dt-float"
+            style={{ left: rect.right + 16 + at * 26, top: rect.top + 2 }}
           >
-            ✎
+            <span className="absolute inset-0 animate-ping rounded-full bg-dt-text/30" />
+            <PenLine className="relative size-2.5" aria-hidden />
           </span>
         );
       })}
     </div>
-  );
-}
-
-function AppNav({ path }: { readonly path: Path }) {
-  return (
-    <nav className="flex gap-1 text-[13px]">
-      {PAGES.map((p) => (
-        <span
-          key={p.path}
-          className={
-            p.path === path
-              ? "rounded-md bg-[#e8edff] px-3 py-1.5 font-medium text-[#3550c8]"
-              : "rounded-md px-3 py-1.5 text-[#5b5b66]"
-          }
-        >
-          {p.title}
-        </span>
-      ))}
-    </nav>
-  );
-}
-
-const card =
-  "flex flex-col gap-6 rounded-xl border border-[#e4e4e9] bg-white p-8 [&_h1]:text-[24px] [&_h1]:font-semibold";
-
-/** The made-up app. An element that the agent changed shows its new words. */
-function AppPage({
-  path,
-  changed,
-  status,
-}: {
-  readonly path: Path;
-  readonly changed: ReadonlySet<string>;
-  readonly status: string;
-}) {
-  const words = (target: string) => {
-    const change = changeOf(target);
-    return changed.has(target) ? change.after : change.before;
-  };
-  if (path === "/approvers")
-    return (
-      <section className={card}>
-        <h1>Approvers</h1>
-        <div data-q="approver-list" className="flex flex-col gap-2">
-          {APPROVERS.map((a, i) => (
-            <div
-              key={a.name}
-              className="flex items-center justify-between rounded-md bg-[#f1f1f4] px-3 py-2 text-[14px]"
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-[#8a8a94]">⠿</span>
-                <span className="text-[12px] text-[#8a8a94] tabular-nums">{i + 1}</span>
-                <span className="font-medium">{a.name}</span>
-              </span>
-              <span className="text-[#5b5b66]">
-                {i === 0 && changed.has("approver-list") ? words("approver-list") : a.role}
-              </span>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          data-q="add"
-          className="self-start rounded-md border border-[#dcdce3] px-3 py-1.5 text-[13px] font-medium"
-        >
-          {words("add")}
-        </button>
-      </section>
-    );
-  if (path === "/sent")
-    return (
-      <section className={card}>
-        <h1>Sent for approval</h1>
-        <p data-q="sent" className="text-[14px] text-[#5b5b66]">
-          {words("sent")} Ingrid Berg gets it once Ola Hansen approves.
-        </p>
-      </section>
-    );
-  return (
-    <section className={card}>
-      <div className="flex flex-col gap-2">
-        <span className="text-[12px] font-medium tracking-wide text-[#8a8a94] uppercase">
-          A made-up page
-        </span>
-        <div data-q="title" className="flex flex-col gap-1">
-          <h1>{words("title")}</h1>
-          <span className="text-[13px] text-[#5b5b66]">Asked by Ola Hansen · 2 days ago</span>
-        </div>
-        <span data-q="status" className="w-fit">
-          <Status look={status} text={changed.has("status") ? words("status") : "In review"} />
-        </span>
-      </div>
-      <label data-q="amount" className="flex flex-col gap-1.5 text-[13px]">
-        <span className="font-medium">Amount</span>
-        <input
-          name="amount"
-          value={words("amount")}
-          readOnly
-          className="rounded-md border border-[#dcdce3] px-3 py-2 text-[14px] tabular-nums"
-        />
-      </label>
-      <div data-q="approvers" className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-medium">Approvers</span>
-        {APPROVERS.map((a) => (
-          <div
-            key={a.name}
-            className="flex justify-between rounded-md bg-[#f1f1f4] px-3 py-2 text-[14px]"
-          >
-            <span className="font-medium">{a.name}</span>
-            <span className="text-[#5b5b66]">{a.role}</span>
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        data-q="submit"
-        className="self-end rounded-md bg-[#4a6cf7] px-4 py-2 text-[14px] font-medium text-white"
-      >
-        {words("submit")}
-      </button>
-    </section>
-  );
-}
-
-const APPROVERS = [
-  { name: "Ola Hansen", role: "Director" },
-  { name: "Ingrid Berg", role: "Finance" },
-] as const;
-
-function Status({ look, text }: { readonly look: string; readonly text: string }): ReactNode {
-  if (look === "Pill")
-    return (
-      <span className="rounded-full bg-[#e8edff] px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap text-[#3550c8]">
-        {text}
-      </span>
-    );
-  if (look === "Steps")
-    return (
-      <span className="flex items-center gap-1 text-[12px] whitespace-nowrap text-[#5b5b66]">
-        <span className="h-1 w-6 rounded-full bg-[#4a6cf7]" />
-        <span className="h-1 w-6 rounded-full bg-[#4a6cf7]" />
-        <span className="h-1 w-6 rounded-full bg-[#dcdce3]" />
-        <span className="ml-1">{text}</span>
-      </span>
-    );
-  return (
-    <span className="flex items-center gap-1.5 text-[13px] whitespace-nowrap text-[#5b5b66]">
-      <span className="size-2 rounded-full bg-[#4a6cf7]" />
-      {text}
-    </span>
   );
 }

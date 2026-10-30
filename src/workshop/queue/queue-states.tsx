@@ -1,4 +1,5 @@
 import { annotate, arrive, back, next, pick, type Queue } from "../../queue/queue";
+import { Status } from "./app";
 import { Panel, still, type PanelProps } from "./panel";
 import { answerTo, selectorOf, start } from "./script";
 
@@ -95,8 +96,8 @@ export function QueueStates() {
         {STATES.map((s) => (
           <figure key={s.name} className="flex flex-col gap-2">
             <figcaption className="text-[12px] font-medium text-[#5b5b66]">{s.name}</figcaption>
-            <div className="h-[460px]">
-              <Panel {...s.props} />
+            <div className="h-[560px]">
+              <Panel {...s.props} preview={(_, v) => <Status look={v} text="In review" />} />
             </div>
           </figure>
         ))}
