@@ -27,7 +27,7 @@ import { tagModule } from "./tag.ts";
 export const PROTOCOL = 2;
 export const PORT = 4399;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
-const ROUTES: readonly ChannelRoute[] = ["feedback", "status", "images", "listening"];
+const ROUTES: readonly ChannelRoute[] = ["feedback", "status", "images", "listening", "log"];
 const isRoute = (route: string): route is ChannelRoute => ROUTES.some((r) => r === route);
 const PROBE_MS = 1000;
 
@@ -269,6 +269,7 @@ async function tag(app: App, host: string, response: ServerResponse) {
       status: `${base}status`,
       images: `${base}images`,
       listening: `${base}listening`,
+      log: `${base}log`,
     },
   };
   const config = (await configFile(app.root)) !== undefined;

@@ -50,6 +50,10 @@ const program = Effect.gen(function* () {
       const { request } = yield* load(() => import("./request.ts"));
       return yield* request(command);
     }
+    case "log": {
+      const { log } = yield* load(() => import("./log.ts"));
+      return yield* log(command);
+    }
     case "serve": {
       const { serve, stop } = yield* load(() => import("./serve.ts"));
       return yield* command.stop ? stop : Effect.scoped(serve);

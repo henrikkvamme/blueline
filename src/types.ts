@@ -127,6 +127,8 @@ export interface DevAdapter<C> {
     readonly status: string;
     readonly images?: string | undefined;
     readonly listening?: string | undefined;
+    /** Where the page tells the review's log what it showed, and how long steps took. */
+    readonly log?: string | undefined;
   };
 }
 

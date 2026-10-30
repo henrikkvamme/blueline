@@ -1,10 +1,11 @@
+import path from "node:path";
 import { Clock, Console, Effect, FileSystem, Schema } from "effect";
 import { ReplySchema } from "../src/io/replies.ts";
 import { BlockSchema, type Block } from "../src/notes/blocks.ts";
 import { markedAbove } from "./agents.ts";
 import { dated, replyAfter, type Command } from "./lines.ts";
 import { feedbackOf, repositoryOf } from "./repository.ts";
-import { readFile, withLock, writeWhole } from "./wire.ts";
+import { logged, readFile, withLock, writeWhole } from "./wire.ts";
 
 /*
  * `reply` answers a note in the status file. It reads and writes the file under the file's
@@ -80,4 +81,15 @@ export const answer = Effect.fn(function* (
       yield* writeWhole(command.file, `${body}\n`);
     }),
   );
+  // The review's log is beside the feedback file, which is beside the status file.
+  yield* logged(path.join(path.dirname(command.file), "feedback.jsonl"), [
+    {
+      event: "reply",
+      note: command.id,
+      state: command.state,
+      ...(command.state === "replied" ? { text: command.text } : {}),
+      ...(command.variant === undefined ? {} : { variant: command.variant }),
+      ...(blocks === undefined ? {} : { blocks: blocks.map((b) => b.kind) }),
+    },
+  ]);
 });

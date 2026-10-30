@@ -76,7 +76,7 @@ const tagOf = async (routes: Routes, root: string, base: string) => {
   const file = await configFile(root);
   return tagModule({
     overlay: OVERLAY,
-    page: { storageKey: "blueline", routes },
+    page: { storageKey: "blueline", routes: { ...routes, log: routes.log ?? ROUTES.log } },
     config: file === undefined ? undefined : `${base}${path.basename(file)}`,
   });
 };
@@ -133,7 +133,7 @@ export function devtoolsChannel(options: ChannelOptions = {}): Plugin {
         };
       for (const route of CHANNEL_ROUTES)
         server.middlewares.use(
-          routes[route],
+          routes[route] ?? ROUTES[route],
           via((base, rest) => `${base}${route}${rest}`),
         );
       server.middlewares.use(

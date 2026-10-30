@@ -668,6 +668,32 @@ last settle, which leaves no step open, wakes it as the review is done. The tool
 settle only when the reviewer finishes the review. A listener that starts again still has the
 settles it held.
 
+### The review's log
+
+Blueline keeps a log of the review beside the feedback file, as `feedback.jsonl.log.jsonl`.
+Each line is one entry with its time, `at`, in ms:
+
+- `sent`: the server took a reviewer's line: its `line`, `kind`, `note` and `step`.
+- `claimed`, `lapsed` and `returned`: a reader took the line, its claim lapsed with no
+  answer, or the reader gave it back. `by` names the reader.
+- `reply`: the agent answered: its `state`, its words and its blocks' kinds.
+- `shown`: the panel showed the note in a new `state`, such as `waiting` or `working`.
+- `step`: a step opened. `asked` is when the walk asked for it, `phases` the time of each
+  part of its code (`leave`, `enter`, `reset`, `setup`, `choice`, `variant`, `ready`), and
+  `total` the time to ready, in ms. `trouble` says why it failed.
+
+Each writer only appends, and a write that fails loses one entry and stops nothing. Read it
+with:
+
+```sh
+blueline log <feedback.jsonl> [--note <id>]
+```
+
+With no `--note`, it gives each note's story on a line per message: how long it waited for a
+reader, for the agent's first word and for its reply. It flags a note that is unanswered,
+lapsed, or slow to get a first word, and lists the steps with their times, a slow one
+flagged. With `--note`, it gives every entry of that note in time order.
+
 ### An MCP server for the agent
 
 `blueline mcp` gives an agent the review as MCP tools, on stdio. Add it to the agent's

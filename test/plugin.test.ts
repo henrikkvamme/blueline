@@ -103,6 +103,27 @@ describe("the Vite plugin", () => {
     expect(await (await fetch(`${url}${TAG}`)).text()).toContain('"/review/notes"');
   });
 
+  it("logs the page's note as sent, and takes the page's own entries for the log", async () => {
+    const { root, url } = await vite();
+    await registered(url);
+    expect((await post(url, ROUTES.feedback)).status).toBe(204);
+    const entry = { event: "shown", note: "n", step: "a", state: "waiting" };
+    const page = await fetch(`${url}${ROUTES.log}`, {
+      method: "POST",
+      body: JSON.stringify(entry),
+      headers: { "content-type": "application/json", origin: url },
+    });
+    expect(page.status).toBe(204);
+    const log = readFileSync(path.join(root, ".blueline", "feedback.jsonl.log.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l): unknown => JSON.parse(l));
+    expect(log).toEqual([
+      expect.objectContaining({ event: "sent", kind: "note", at: expect.any(Number) }),
+      expect.objectContaining({ ...entry, from: "page", at: expect.any(Number) }),
+    ]);
+  });
+
   it("keeps its routes at the root of a dev server with a base", async () => {
     const { root, url } = await vite({}, { base: "/app/" });
     await registered(url);

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { logPath } from "../io/log.ts";
 
 /*
  * The channel's four routes for one app's files, as plain Node, so the Vite plugin
@@ -23,7 +24,7 @@ export interface ChannelFiles {
   readonly listening: string;
 }
 
-export type ChannelRoute = "feedback" | "status" | "images" | "listening";
+export type ChannelRoute = "feedback" | "status" | "images" | "listening" | "log";
 
 /** Whether a request may write to the channel. */
 export type Allowed = (request: IncomingMessage) => boolean;
@@ -87,7 +88,66 @@ export function answer(
       return json(files.status, response);
     case "listening":
       return json(files.listening, response);
+    case "log":
+      return pageLog(files, allowed, request, response);
   }
+}
+
+/** Adds an entry to the review's log (io/log.ts), with the server's time. A write that fails
+ * loses the entry and nothing else. */
+export function logged(feedback: string, entry: object): Promise<void> {
+  const line = JSON.stringify({ at: Date.now(), ...entry });
+  return mkdir(path.dirname(feedback), { recursive: true })
+    .then(() => appendFile(logPath(feedback), `${line}\n`))
+    .catch(() => undefined);
+}
+
+/** What the reviewer's line says about itself, for the log: its kind, note and step. */
+function sentOf(line: string, id: string): object {
+  const value: unknown = JSON.parse(line);
+  const field = (name: string) => {
+    const got: unknown =
+      typeof value === "object" && value !== null ? Reflect.get(value, name) : undefined;
+    return typeof got === "string" ? got : undefined;
+  };
+  const step: unknown =
+    typeof value === "object" && value !== null ? Reflect.get(value, "step") : undefined;
+  const stepId: unknown =
+    typeof step === "object" && step !== null ? Reflect.get(step, "id") : undefined;
+  return {
+    event: "sent",
+    line: id,
+    kind: field("kind"),
+    note: field("id"),
+    journey: field("journey"),
+    step: typeof stepId === "string" ? stepId : undefined,
+    sentAt: field("sentAt"),
+  };
+}
+
+// POST takes an entry of the page's (io/log.ts `PageEntry`) for the log.
+function pageLog(
+  files: ChannelFiles,
+  allowed: Allowed,
+  request: IncomingMessage,
+  response: ServerResponse,
+) {
+  if (request.method !== "POST") return end(response, 405);
+  if (!allowed(request)) return end(response, 403);
+  if (!isJson(request.headers["content-type"])) return end(response, 415);
+  const chunks: Buffer[] = [];
+  request.on("data", (chunk: Buffer) => chunks.push(chunk));
+  request.on("end", () => {
+    let value: unknown;
+    try {
+      value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      return end(response, 400);
+    }
+    if (typeof value !== "object" || value === null || Array.isArray(value))
+      return end(response, 400);
+    void logged(files.feedback, { ...value, from: "page" }).then(() => end(response, 204));
+  });
 }
 
 function note(
@@ -102,10 +162,12 @@ function note(
   const chunks: Buffer[] = [];
   request.on("data", (chunk: Buffer) => chunks.push(chunk));
   request.on("end", () => {
-    const line = stamped(Buffer.concat(chunks).toString("utf8"), randomUUID());
+    const id = randomUUID();
+    const line = stamped(Buffer.concat(chunks).toString("utf8"), id);
     if (line === undefined) return end(response, 400);
     mkdir(path.dirname(files.feedback), { recursive: true })
       .then(() => appendFile(files.feedback, `${line}\n`))
+      .then(() => logged(files.feedback, sentOf(line, id)))
       .then(
         () => end(response, 204),
         () => end(response, 500),

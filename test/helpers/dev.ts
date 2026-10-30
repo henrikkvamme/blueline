@@ -4,7 +4,7 @@ import path from "node:path";
 import { createServer, type InlineConfig, type ViteDevServer } from "vite";
 import { expect, vi } from "vitest";
 import { serve } from "../../src/server/serve";
-import { devtoolsChannel, ROUTES, type ChannelOptions } from "../../src/vite";
+import { devtoolsChannel, ROUTES, type ChannelOptions, type Routes } from "../../src/vite";
 
 /** A new folder, by its real path, as the server names roots. */
 export const folder = (name: string) =>
@@ -49,7 +49,7 @@ export async function startVite(
 }
 
 /** Waits until the plugin has its registration: the page's routes answer. */
-export async function registered(url: string, routes = ROUTES) {
+export async function registered(url: string, routes: Routes = ROUTES) {
   await vi.waitFor(async () => expect((await fetch(`${url}${routes.status}`)).status).toBe(200), {
     timeout: 5000,
   });

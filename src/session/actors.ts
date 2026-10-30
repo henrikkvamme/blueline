@@ -2,7 +2,7 @@ import { Clock, DateTime, Effect, Fiber, Option, Schedule } from "effect";
 import { fromCallback } from "xstate";
 import { registry } from "../core/registry";
 import { fromResult } from "../core/result";
-import { postLine, readListening, readReplies } from "../io/channel";
+import { postLine, postLog, readListening, readReplies } from "../io/channel";
 import { listenedJourneys } from "../io/listening";
 import { ROUTES } from "../io/routes";
 import { PAGE_JOURNEY, pageJourney, pageParts } from "../part/page";
@@ -98,6 +98,27 @@ const choiceNamed = (name: string) =>
     }),
   );
 
+/** One phase of a step's code, and how long it ran, in ms. */
+interface Phase {
+  readonly name: string;
+  readonly ms: number;
+}
+
+/** Runs an effect and adds its time to `phases`, also when it fails. */
+const timedInto =
+  (phases: Phase[]) =>
+  <A, E>(name: string, effect: Effect.Effect<A, E>) =>
+    Effect.gen(function* () {
+      const from = yield* Clock.currentTimeMillis;
+      return yield* effect.pipe(
+        Effect.ensuring(
+          Effect.flatMap(Clock.currentTimeMillis, (to) =>
+            Effect.sync(() => phases.push({ name, ms: to - from })),
+          ),
+        ),
+      );
+    });
+
 /** The journeys as the machine needs them. */
 export const shapesOf = (journeys: readonly JourneyInfo[]): readonly Shape[] =>
   journeys.map((j) => ({
@@ -179,19 +200,28 @@ export function liveMachine<C>(live: Live<C>) {
   );
 
   /** Takes every variant's state off, opens the part, shows this variant, and waits until
-   * the step is ready. A phase that fails stops the ones after it, with its reason. */
-  const showVariant = (step: DevStep<C>, index: number, context: C) =>
+   * the step is ready. A phase that fails stops the ones after it, with its reason. Each phase
+   * that runs adds its time to `phases`, for the log. */
+  const showVariant = (step: DevStep<C>, index: number, context: C, phases: Phase[] = []) =>
     Effect.gen(function* () {
-      if (step.reset !== undefined) yield* serial(phase(step, "reset", step.reset, context));
-      yield* phase(step, "setup", step.setup, context);
+      const timed = timedInto(phases);
+      if (step.reset !== undefined)
+        yield* timed("reset", serial(phase(step, "reset", step.reset, context)));
+      if (step.setup !== undefined)
+        yield* timed("setup", phase(step, "setup", step.setup, context));
       const variant = step.variants?.[index];
       if (variant?.choice !== undefined) {
         const [name, option] = variant.choice;
-        const choice = yield* choiceNamed(name);
+        const choice = yield* timed("choice", choiceNamed(name));
         choice?.choose(option);
       }
-      yield* phase(step, `the variant ${variant?.label ?? ""}`.trim(), variant?.apply, context);
-      yield* phase(step, "ready", step.ready, context);
+      if (variant?.apply !== undefined)
+        yield* timed(
+          "variant",
+          phase(step, `the variant ${variant.label}`.trim(), variant.apply, context),
+        );
+      if (step.ready !== undefined)
+        yield* timed("ready", phase(step, "ready", step.ready, context));
     });
 
   /** Runs a step's code to its end and says why it failed, as its row shows it; a step the
@@ -216,36 +246,61 @@ export function liveMachine<C>(live: Live<C>) {
         for (const [part, variant] of Object.entries(input.kept))
           parts.show(part, { variant, state: parts.shown(part).state });
       });
+      const asked = yield* Clock.currentTimeMillis;
+      const phases: Phase[] = [];
+      const timed = timedInto(phases);
       cleanup(input.leaving);
-      yield* cleaned;
+      // The last step's reset and exit, which this one waits for.
+      yield* timed("leave", cleaned);
       opened = { journey: input.journey, at: input.at, variant: input.variant, run: input.run };
       const started = yield* Clock.currentTimeMillis;
       let shown = false;
+      let trouble: string | undefined;
       yield* troubled(
         step,
-        sendBack,
+        (event) => {
+          if (event.type === "trouble") trouble = event.reason;
+          sendBack(event);
+        },
         Effect.gen(function* () {
           // A step of the page's review is on the page already.
           const context =
             input.journey === PAGE_JOURNEY
               ? adapter.context()
-              : yield* bounded(
-                  step,
+              : yield* timed(
                   "enter",
-                  (_: C, signal) =>
-                    adapter.enter(step, {
-                      fresh: input.fresh,
-                      // A step the walk left shows nothing more over the next one.
-                      show: (shift) => {
-                        if (signal.aborted) return;
-                        shown ||= shift !== undefined;
-                        live.shift(shift);
-                      },
-                      signal,
-                    }),
-                  adapter.context(),
+                  bounded(
+                    step,
+                    "enter",
+                    (_: C, signal) =>
+                      adapter.enter(step, {
+                        fresh: input.fresh,
+                        // A step the walk left shows nothing more over the next one.
+                        show: (shift) => {
+                          if (signal.aborted) return;
+                          shown ||= shift !== undefined;
+                          live.shift(shift);
+                        },
+                        signal,
+                      }),
+                    adapter.context(),
+                  ),
                 );
-          yield* showVariant(step, input.variant, context);
+          yield* showVariant(step, input.variant, context, phases);
+        }),
+      );
+      const done = yield* Clock.currentTimeMillis;
+      // The log waits for nothing: the step is open.
+      yield* Effect.forkDetach(
+        postLog(routes.log, {
+          event: "step",
+          journey: input.journey,
+          step: step.id,
+          variant: step.variants?.[input.variant]?.label,
+          asked,
+          phases: phases.filter((p) => p.ms > 0 || p.name !== "leave"),
+          total: done - asked,
+          ...(trouble === undefined ? {} : { trouble }),
         }),
       );
       if (shown) {

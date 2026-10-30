@@ -16,6 +16,7 @@ export const USAGE = `Usage:
   blueline reply <status.json> <note id> settled
   blueline blocks
   blueline request <title> [--body <text>]
+  blueline log <feedback.jsonl> [--note <id>]
   blueline apply <feedback.jsonl> --part <name> [--keep <variant>] [--src <dir>]
   blueline mcp <feedback.jsonl> [--journey <id>] [--as <name>] [--status <status.json>] [--src <dir>] [--wait <seconds>]
   blueline hook <claude|codex> [--as <name>] [--warm <minutes>] [--feedback <feedback.jsonl>]
@@ -40,6 +41,8 @@ export type Command =
   | { readonly kind: "serve"; readonly stop: boolean }
   /** Prints how a reply shows more than words: the blocks, by when to use each. */
   | { readonly kind: "blocks" }
+  /** Reads the review's log: each note's story and the steps' times, or one note's entries. */
+  | { readonly kind: "log"; readonly file: string; readonly note: string | undefined }
   /** Asks for a change to Blueline itself, as an issue on its repository (bin/request.ts). */
   | { readonly kind: "request"; readonly title: string; readonly body: string | undefined }
   /** Keeps an origin for a script tag by hand, or removes it. */
@@ -180,6 +183,10 @@ export function commandOf(args: readonly string[]): Command | undefined {
   }
   const [kind, file, id, state, text] = words;
   if (kind === "blocks" && flags.size === 0 && words.length === 1) return { kind };
+  if (kind === "log" && file !== undefined && words.length === 2)
+    return [...flags.keys()].every((flag) => flag === "note")
+      ? { kind, file, note: flags.get("note") }
+      : undefined;
   if (kind === "request" && file !== undefined && file.trim() !== "" && words.length === 2)
     return [...flags.keys()].every((flag) => flag === "body")
       ? { kind, title: file.trim(), body: flags.get("body") }

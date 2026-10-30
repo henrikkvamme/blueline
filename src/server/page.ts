@@ -16,13 +16,16 @@ export const ROUTES = {
   status: "/__devtools/status",
   images: "/__devtools/images",
   listening: "/__devtools/listening",
+  log: "/__devtools/log",
 };
-export type Routes = typeof ROUTES;
+/** The page's routes; an app's own may leave out the log, which then goes to Blueline's. */
+export type Routes = Omit<typeof ROUTES, "log"> & { readonly log?: string | undefined };
 export const CHANNEL_ROUTES: readonly ChannelRoute[] = [
   "feedback",
   "status",
   "images",
   "listening",
+  "log",
 ];
 /** The overlay from the server, and the module that mounts it on the page. */
 export const OVERLAY = "/__devtools/overlay.js";

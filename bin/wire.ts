@@ -23,6 +23,7 @@ import {
   NO_CLAIMS,
   type Claims,
 } from "./claims.ts";
+import { logPath } from "../src/io/log.ts";
 import { takeLines, type Line } from "./lines.ts";
 
 /*
@@ -136,6 +137,19 @@ const MarksFile = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Int)
 
 export const claimsPath = (feedback: string) => `${feedback}.claims.json`;
 
+/** Adds entries to the review's log (src/io/log.ts), each with the time now. A write that
+ * fails loses them and stops nothing. */
+export const logged = Effect.fn(function* (feedback: string, entries: readonly object[]) {
+  if (entries.length === 0) return;
+  const at = yield* Clock.currentTimeMillis;
+  const text = entries.map((e) => `${JSON.stringify({ at, ...e })}\n`).join("");
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.writeFileString(logPath(feedback), text, { flag: "a" }).pipe(Effect.ignore);
+});
+
+/** A line as the log names it. */
+const named = (l: Line) => ({ line: l.id, note: l.answers, kind: l.kind });
+
 /** The times of the agent's answers in the status file beside the feedback file, by note: all
  * a claim's lapse reads. An entry that is not an answer has none. */
 const AnswerTimes = Schema.Struct({
@@ -224,6 +238,9 @@ export const claim = Effect.fn(function* (
         const answered = yield* answersBeside(feedback);
         const kept = claims;
         if (answered !== undefined) claims = lapsed(lines, claims, answered, now);
+        const freed = lines.filter(
+          (l) => kept.claimed[l.id] !== undefined && claims.claimed[l.id] === undefined,
+        );
         const picked = pick(freshFor(lines, claims, reader));
         const { take } = picked;
         const through = laterOf(lines, claims.cursors[reader], picked.through);
@@ -234,6 +251,15 @@ export const claim = Effect.fn(function* (
           yield* writeWhole(claimsPath(feedback), yield* Schema.encodeEffect(ClaimsFile)(next));
           if (take.length > 0) claimed?.(take);
         }
+        yield* logged(feedback, [
+          ...freed.map((l) => ({
+            event: "lapsed",
+            ...named(l),
+            by: kept.claimed[l.id]?.by,
+            claimedAt: kept.claimed[l.id]?.at,
+          })),
+          ...take.map((l) => ({ event: "claimed", ...named(l), by: reader })),
+        ]);
         return take;
       }),
     ),
@@ -253,8 +279,14 @@ export const unclaim = Effect.fn(function* (
       Effect.gen(function* () {
         const claims = yield* readFile(claimsPath(feedback), ClaimsFile, NO_CLAIMS);
         const next = givenBack(claims, reader, ids, yield* Clock.currentTimeMillis);
-        if (next !== claims)
+        if (next !== claims) {
           yield* writeWhole(claimsPath(feedback), yield* Schema.encodeEffect(ClaimsFile)(next));
+          const back = ids.filter((id) => claims.claimed[id]?.by === reader);
+          yield* logged(
+            feedback,
+            back.map((line) => ({ event: "returned", line, by: reader })),
+          );
+        }
       }),
     ),
   );

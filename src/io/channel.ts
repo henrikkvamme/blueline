@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ImageSchema } from "../notes/note";
 import { ListeningSchema } from "./listening";
+import type { PageEntry } from "./log";
 import { RepliesSchema } from "./replies";
 
 /*
@@ -27,6 +28,11 @@ export const postLine = (route: string, line: unknown) =>
       );
     }),
   );
+
+/** Tells the review's log (io/log.ts) an entry of the page's. It never fails: the log is for
+ * reading after, and a lost entry stops nothing. */
+export const postLog = (route: string | undefined, entry: PageEntry) =>
+  route === undefined ? Effect.void : postLine(route, entry).pipe(Effect.ignore);
 
 export const readReplies = (route: string) =>
   http(

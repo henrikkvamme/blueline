@@ -1,6 +1,8 @@
-import { DateTime } from "effect";
+import { DateTime, Effect } from "effect";
+import { postLog } from "../io/channel";
 import { createActor, type SnapshotFrom } from "xstate";
 import { linkedReview } from "../io/link";
+import { ROUTES } from "../io/routes";
 import { keptOf, loadKept, saveKept } from "../io/storage";
 import { isKept } from "../notes/note";
 import { PAGE_JOURNEY, pageJourney, pageParts, placeId } from "../part/page";
@@ -193,6 +195,19 @@ export function startSession<C>({
   );
   const judging = actor.subscribe(judge);
   judge(actor.getSnapshot());
+  // The review's log gets each new state the panel shows a note in, from the states it has now.
+  const logRoute = (adapter.channel ?? ROUTES).log;
+  const states = new Map(actor.getSnapshot().context.notes.map((n) => [n.id, n.state]));
+  const showing = actor.subscribe((s) => {
+    for (const n of s.context.notes) {
+      if (states.get(n.id) === n.state) continue;
+      states.set(n.id, n.state);
+      if (n.state !== "new")
+        Effect.runFork(
+          postLog(logRoute, { event: "shown", note: n.id, step: n.step, state: n.state }),
+        );
+    }
+  });
   const partsMoved = parts.subscribe(moved);
   followLink();
 
@@ -209,6 +224,7 @@ export function startSession<C>({
     dispose: () => {
       partsMoved();
       judging.unsubscribe();
+      showing.unsubscribe();
       kept.unsubscribe();
       const { entered, opening } = actor.getSnapshot().context;
       actor.stop();
