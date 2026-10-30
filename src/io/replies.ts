@@ -9,6 +9,9 @@ import { BlockSchema } from "../notes/blocks.ts";
 
 export const ReplySchema = Schema.Struct({
   state: Schema.Literals(["working", "replied"]),
+  /** When the agent last said it works on the note, in ms: a working state from before the
+   * reviewer's newest message is no answer to it. A file from before 0.1.14 has none. */
+  workingAt: Schema.optional(Schema.Finite),
   /** The agent settles a note only after the reviewer said it is right. */
   settled: Schema.optional(Schema.Boolean),
   /** When the agent settled it, in ms: a message the reviewer wrote after it opens the note

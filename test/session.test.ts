@@ -487,6 +487,20 @@ describe("the review session", () => {
       replies: { [id]: { state: "replied", replies: [{ text: "Bold now" }] } },
     });
     expect([chat(replied)?.state, chat(replied)?.progress]).toEqual(["replied", undefined]);
+    // A working state from before the next message is no answer to it: the message waits.
+    const again = after(replied, { type: "send", id, step: "a", at: 10, text: "Bolder" });
+    const old = after(again, {
+      type: "replies",
+      replies: { [id]: { state: "working", workingAt: 5, replies: [{ text: "Bold now", at: 6 }] } },
+    });
+    expect(chat(old)?.state).toBe("waiting");
+    const taken = after(again, {
+      type: "replies",
+      replies: {
+        [id]: { state: "working", workingAt: 11, replies: [{ text: "Bold now", at: 6 }] },
+      },
+    });
+    expect([chat(taken)?.state, chat(taken)?.workingSince]).toEqual(["working", 11]);
   });
 
   it("empties the step's chat with /clear, and its old replies stay out of the new one", () => {

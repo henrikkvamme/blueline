@@ -612,7 +612,14 @@ blueline reply <status.json> <note id> working --blocks <plan.json>
 The plan shows under "The agent is on it" in the message's chat. Each working reply puts its
 blocks in place of the last, so the plan changes as the agent goes on; a working reply with
 no `--blocks` takes the plan away. The agent's reply ends it: the plan leaves the chat, and
-the reply shows.
+the reply shows. After a minute, the line also says how long the agent has worked.
+
+Say `working` at once when you take a message. A reader that takes a line holds it for three
+minutes. When no answer comes in that time, the line goes back to every reader: the reader
+that took it may be gone, as a listener whose watch ended. The next listener, hook or wake
+then delivers it, so a message never waits for an agent that is not there. A working state
+from before the reviewer's newest message is no answer to it: the chat says "Sent" until you
+say `working` again.
 
 Each reply keeps the time you wrote it, and the chat shows it in that place among the
 reviewer's messages. A reply written before the reviewer's newest message does not answer

@@ -6,7 +6,7 @@
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Runtime, Stdio } from "effect";
-import { commandOf, USAGE } from "./lines.ts";
+import { commandOf, helpOf, USAGE } from "./lines.ts";
 
 /*
  * Each command loads its own file only when it runs. A harness runs `blueline hook` at each
@@ -20,12 +20,10 @@ let signalExit: () => number | undefined = () => undefined;
 /** The exit code of a command line Blueline does not take: the usage, with no error log. */
 let usageExit: number | undefined;
 
-/** Help asked for: the usage on its own. */
-const HELP = new Set(["--help", "-h", "help"]);
-
 const program = Effect.gen(function* () {
   const args = yield* (yield* Stdio.Stdio).args;
-  if (args.length === 1 && HELP.has(args[0] ?? "")) return yield* Console.log(USAGE);
+  const help = helpOf(args);
+  if (help !== undefined) return yield* Console.log(help);
   const command = commandOf(args);
   if (command === undefined) {
     usageExit = 2;

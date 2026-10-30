@@ -7,7 +7,9 @@ import type { Line } from "./lines.ts";
  * agent's hook or a wake, has a cursor: the ID of the last line it went past. A line one
  * reader claimed is no other reader's, so a pull and a wake never both deliver it. A reader
  * that could not deliver a line gives it back (`givenBack`): it is then fresh for every
- * reader, also behind its cursor, until one claims it.
+ * reader, also behind its cursor, until one claims it. A claim on a line that asks an answer
+ * lapses when no answer came in `LEASE_MS` (`lapsed`): the reader that took it may be gone, as
+ * a listener whose watch ended, so the line goes back to every reader, and the next agent.
  */
 
 export const ClaimsSchema = Schema.Struct({
@@ -97,3 +99,42 @@ export function givenBack(
  * that starts before it. */
 export const cursorAtByte = (lines: readonly Line[], mark: number): string | undefined =>
   lines.filter((l) => l.start < mark).at(-1)?.id;
+
+/** How long a reader holds a line that asks an answer before it lapses: an agent says it is
+ * working at once (the MCP and hook guides), so a claim with no word in this time has no
+ * agent behind it. */
+export const LEASE_MS = 3 * 60_000;
+
+/** The claims after each claim that lapsed is given back: a claim on a line that asks an
+ * answer, older than `LEASE_MS`, on a note with no answer since the claim. `answeredSince`
+ * says whether the note got one at or after the time. The same claims when none lapsed. */
+export function lapsed(
+  lines: readonly Line[],
+  claims: Claims,
+  answeredSince: (note: string, since: number) => boolean,
+  now: number,
+): Claims {
+  const gone = lines.flatMap((l) => {
+    const held = claims.claimed[l.id];
+    if (held === undefined || l.answers === undefined || now - held.at < LEASE_MS) return [];
+    return answeredSince(l.answers, held.at) ? [] : [{ id: l.id, by: held.by }];
+  });
+  return gone.reduce((c, g) => givenBack(c, g.by, [g.id], now), claims);
+}
+
+/** Whether the agent's answer on a note came at or after `since`, in ms: a reply, a settle or
+ * a working state. */
+export const answeredAt = (
+  reply:
+    | {
+        readonly workingAt?: number | undefined;
+        readonly settledAt?: number | undefined;
+        readonly replies?: readonly { readonly at?: number | undefined }[] | undefined;
+      }
+    | undefined,
+  since: number,
+) =>
+  reply !== undefined &&
+  [reply.workingAt, reply.settledAt, ...(reply.replies ?? []).map((r) => r.at)].some(
+    (at) => at !== undefined && at >= since,
+  );

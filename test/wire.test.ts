@@ -6,7 +6,17 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { claimedBy, cursorAtByte, freshFor, givenBack, laterOf, NO_CLAIMS } from "../bin/claims";
+import {
+  answeredAt,
+  claimedBy,
+  cursorAtByte,
+  freshFor,
+  givenBack,
+  lapsed,
+  laterOf,
+  LEASE_MS,
+  NO_CLAIMS,
+} from "../bin/claims";
 import { takeLines, type Line } from "../bin/lines";
 import { listenerPick } from "../bin/listen";
 import { reply } from "../bin/reply";
@@ -38,6 +48,31 @@ describe("a line's identity", () => {
     expect(stamp).toBe("S");
     // Another line in the same place, as in a file started again, has another ID.
     expect(ids(linesOf(line({ kind: "note", text: "Ny" })))[0]).not.toBe(old);
+  });
+});
+
+describe("a claim with no answer", () => {
+  const lines = linesOf(
+    line({ line: "a", id: "note-a", kind: "note" }) +
+      line({ line: "b", kind: "settle", settled: true, left: 2 }),
+  );
+  const held = claimedBy(NO_CLAIMS, "gone", lines, "b", 1_000);
+
+  it("lapses after its lease, so the line goes to the next reader", () => {
+    const none = () => false;
+    expect(lapsed(lines, held, none, 1_000 + LEASE_MS - 1)).toBe(held);
+    const after = lapsed(lines, held, none, 1_000 + LEASE_MS);
+    expect(Object.keys(after.claimed)).toEqual(["b"]);
+    expect(ids(freshFor(lines, after, "next"))).toEqual(["a"]);
+  });
+
+  it("stays while the note got an answer since the claim", () => {
+    const answered = (note: string, since: number) =>
+      note === "note-a" && answeredAt({ workingAt: 1_500 }, since);
+    expect(lapsed(lines, held, answered, 1_000 + LEASE_MS)).toBe(held);
+    expect(answeredAt({ replies: [{ at: 999 }] }, 1_000)).toBe(false);
+    expect(answeredAt({ settledAt: 1_000 }, 1_000)).toBe(true);
+    expect(answeredAt(undefined, 0)).toBe(false);
   });
 });
 

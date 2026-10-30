@@ -1,3 +1,4 @@
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   Clock,
@@ -11,11 +12,13 @@ import {
   Semaphore,
 } from "effect";
 import {
+  answeredAt,
   ClaimsSchema,
   claimedBy,
   cursorAtByte,
   freshFor,
   givenBack,
+  lapsed,
   laterOf,
   NO_CLAIMS,
   type Claims,
@@ -133,6 +136,27 @@ const MarksFile = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Int)
 
 export const claimsPath = (feedback: string) => `${feedback}.claims.json`;
 
+/** The times of the agent's answers in the status file beside the feedback file, by note: all
+ * a claim's lapse reads. An entry that is not an answer has none. */
+const AnswerTimes = Schema.Struct({
+  workingAt: Schema.optional(Schema.Finite),
+  settledAt: Schema.optional(Schema.Finite),
+  replies: Schema.optional(Schema.Array(Schema.Struct({ at: Schema.optional(Schema.Finite) }))),
+});
+const decodeAnswer = Schema.decodeUnknownOption(AnswerTimes);
+const StatusEntries = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+
+/** Whether the note has an answer since a time, by the status file; undefined when the file
+ * does not read, so no claim lapses on a failed read. */
+const answersBeside = (feedback: string) =>
+  readFile(path.join(path.dirname(feedback), "status.json"), StatusEntries, {}).pipe(
+    Effect.map(
+      (entries) => (note: string, since: number) =>
+        answeredAt(Option.getOrUndefined(decodeAnswer(entries[note])), since),
+    ),
+    Effect.orElseSucceed(() => undefined),
+  );
+
 /** The feedback file's bytes; a missing file has none. Any other failure fails, so a reader
  * tries again rather than take a failed read for an empty file. */
 const feedbackBytes = Effect.fn(function* (feedback: string) {
@@ -192,13 +216,18 @@ export const claim = Effect.fn(function* (
             migrated = true;
           }
         }
+        // A claim with no answer in its lease is given back first, to every reader.
+        const now = yield* Clock.currentTimeMillis;
+        const answered = yield* answersBeside(feedback);
+        const kept = claims;
+        if (answered !== undefined) claims = lapsed(lines, claims, answered, now);
         const picked = pick(freshFor(lines, claims, reader));
         const { take } = picked;
         const through = laterOf(lines, claims.cursors[reader], picked.through);
         // A round with nothing new writes nothing, as a listener reads every second.
         const moved = through !== undefined && through !== claims.cursors[reader];
-        if (take.length > 0 || moved || migrated) {
-          const next = claimedBy(claims, reader, take, through, yield* Clock.currentTimeMillis);
+        if (take.length > 0 || moved || migrated || claims !== kept) {
+          const next = claimedBy(claims, reader, take, through, now);
           yield* writeWhole(claimsPath(feedback), yield* Schema.encodeEffect(ClaimsFile)(next));
           if (take.length > 0) claimed?.(take);
         }

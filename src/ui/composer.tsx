@@ -247,6 +247,7 @@ export function NoteState({ note }: { readonly note: Note | undefined }) {
         <>
           <LoaderCircle className="size-3 animate-spin" aria-hidden />
           The agent is on it
+          <WorkingFor since={note.workingSince} />
         </>
       )}
       {state === "settled" && (
@@ -266,6 +267,22 @@ export function NoteState({ note }: { readonly note: Note | undefined }) {
       </div>
     </div>
   );
+}
+
+/** How long the agent has worked on the note, in whole minutes, from a minute on: a note
+ * that stays on for long says so. It counts on each minute. */
+function WorkingFor({ since }: { readonly since: number | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (since === undefined) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [since]);
+  if (since === undefined) return null;
+  const minutes = Math.floor((now - since) / 60_000);
+  if (minutes < 1) return null;
+  const words = minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h`;
+  return <span className="text-dt-faint">· {words}</span>;
 }
 
 /** The pointed notes that go with the next message, as chips above the composer: each

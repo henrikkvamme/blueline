@@ -94,6 +94,8 @@ export const NoteSchema = Schema.Struct({
   skip: Schema.optional(Schema.Finite),
   /** What the agent shows while it works, as a plan, in place as it goes on (blocks.ts). */
   progress: Schema.optional(Schema.Array(BlockSchema)),
+  /** Since when the agent works on it, in ms; none from an agent before 0.1.14. */
+  workingSince: Schema.optional(Schema.Finite),
 });
 export type Note = typeof NoteSchema.Type;
 
@@ -117,7 +119,11 @@ export type NoteEvent =
   /** The dev server did not take it: the words go back to the draft. */
   | { readonly type: "failed" }
   /** The agent works on the note, and shows `progress` while it does. */
-  | { readonly type: "working"; readonly progress?: Message["blocks"] }
+  | {
+      readonly type: "working";
+      readonly progress?: Message["blocks"];
+      readonly since?: number | undefined;
+    }
   | {
       readonly type: "reply";
       /** The time of a reply that has none of its own. */
@@ -213,8 +219,10 @@ const lifecycle = setup({
     addEarlier: assign(({ context, event }) =>
       event.type === "earlier" ? { thread: withReplies(context, event.replies, 0) } : {},
     ),
-    progress: assign(({ event }) => (event.type === "working" ? { progress: event.progress } : {})),
-    endProgress: assign({ progress: undefined }),
+    progress: assign(({ event }) =>
+      event.type === "working" ? { progress: event.progress, workingSince: event.since } : {},
+    ),
+    endProgress: assign({ progress: undefined, workingSince: undefined }),
     settledByYou: assign({ settledBy: "you" as const, unread: false }),
     settledByAgent: assign({ settledBy: "agent" as const }),
     unsettle: assign({ settledBy: undefined }),

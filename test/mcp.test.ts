@@ -316,10 +316,15 @@ describe("reply", () => {
     const call = (args: Record<string, unknown>) =>
       client.callTool({ name: "reply", arguments: args });
     expect((await call({ id: "note-a", state: "working", blocks: plan })).isError).toBeFalsy();
-    expect(status()["note-a"]).toEqual({ state: "working", progress: plan });
+    expect(status()["note-a"]).toEqual({
+      state: "working",
+      workingAt: expect.any(Number),
+      progress: plan,
+    });
     await call({ id: "note-a", state: "replied", text: "Moved", variant: "B" });
     expect(status()["note-a"]).toEqual({
       state: "replied",
+      workingAt: expect.any(Number),
       replies: [{ text: "Moved", at: expect.any(Number), variant: "B" }],
     });
     await call({ id: "note-a", state: "settled" });

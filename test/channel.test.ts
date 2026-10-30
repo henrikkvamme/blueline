@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ageOf, cameLate, commandOf, replyAfter, takeLines, wakes } from "../bin/lines";
+import { ageOf, cameLate, commandOf, helpOf, replyAfter, takeLines, wakes } from "../bin/lines";
 import { tagged } from "../bin/listen";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
@@ -15,6 +15,7 @@ describe("the agent's side of the channel", () => {
         start: 0,
         journey: "preparation",
         sentAt: "2026-10-20T19:13:10.380Z",
+        answers: "a",
       },
     ]);
     expect(used).toBe(bytes(`${one}not json\n`).length);
@@ -41,6 +42,20 @@ describe("the agent's side of the channel", () => {
     expect(wake({ kind: "settle", settled: true, left: 2 })).toBe(false);
     expect(wake({ kind: "settle", settled: false, left: 0 })).toBe(false);
     expect(wake({ kind: "settle", settled: true, left: 0 })).toBe(true);
+  });
+
+  it("prints a command's help for --help anywhere, and takes no flag as a word", () => {
+    expect(helpOf(["request", "--help"])).toBe(
+      "Usage:\n  blueline request <title> [--body <text>]",
+    );
+    expect(helpOf(["request", "Pins drift", "-h"])).toContain("blueline request <title>");
+    expect(helpOf(["--help"])).toContain("blueline apply");
+    expect(helpOf(["help"])).toContain("blueline apply");
+    expect(helpOf(["request", "help"])).toBeUndefined();
+    expect(helpOf(["dev", "--", "vite", "--help"])).toBeUndefined();
+    expect(helpOf(["request", "Pins drift"])).toBeUndefined();
+    expect(commandOf(["request", "--help"])).toBeUndefined();
+    expect(commandOf(["request", "Pins", "--body"])).toBeUndefined();
   });
 
   it("wakes the agent for a settle with verdicts, to apply them at once", () => {
@@ -161,6 +176,7 @@ describe("the agent's side of the channel", () => {
     // Each reply keeps when it was written, so the page draws it in its place in the chat.
     expect(second).toEqual({
       state: "replied",
+      workingAt: 1,
       replies: [
         { text: "One", at: 2 },
         { text: "Two", at: 3 },
@@ -180,12 +196,15 @@ describe("the agent's side of the channel", () => {
     const plan = (state: "doing" | "done") =>
       [{ kind: "plan", items: [{ text: "Make it bold", state }] }] as const;
     const first = replyAfter(undefined, command, 1, plan("doing"));
-    expect(first).toEqual({ state: "working", progress: plan("doing") });
+    expect(first).toEqual({ state: "working", workingAt: 1, progress: plan("doing") });
     const next = replyAfter(first, command, 2, plan("done"));
-    expect(next).toEqual({ state: "working", progress: plan("done") });
+    expect(next).toEqual({ state: "working", workingAt: 2, progress: plan("done") });
     const replied = replyAfter(next, { ...command, state: "replied", text: "Bold" }, 3);
-    expect(replied).toEqual({ state: "replied", replies: [{ text: "Bold", at: 3 }] });
-    expect(replyAfter(next, { ...command, blocks: undefined }, 3)).toEqual({ state: "working" });
+    expect(replied).toEqual({ state: "replied", workingAt: 2, replies: [{ text: "Bold", at: 3 }] });
+    expect(replyAfter(next, { ...command, blocks: undefined }, 3)).toEqual({
+      state: "working",
+      workingAt: 3,
+    });
     const settled = replyAfter(next, { ...command, state: "settled" }, 4);
     expect(settled.progress).toBeUndefined();
     expect(commandOf(["reply", "s.json", "n", "settled", "--blocks", "p.json"])).toMatchObject({

@@ -89,6 +89,14 @@ describe("a request for a change to Blueline", () => {
     expect(called()).not.toContain("create");
   });
 
+  it("prints its help for --help, and files nothing", () => {
+    const { blueline, called } = gh("[]");
+    const ran = blueline("request", "--help");
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).toContain("blueline request <title>");
+    expect(called()).toBe("");
+  });
+
   it("prints a link that files it when gh cannot, and fails", () => {
     const { blueline } = gh("[]", true);
     const ran = blueline("request", "Pins drift");

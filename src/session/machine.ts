@@ -238,6 +238,8 @@ export interface Reply {
   readonly settled?: boolean | undefined;
   /** When the agent settled the note, in ms (io/replies.ts). */
   readonly settledAt?: number | undefined;
+  /** When the agent last said it works on the note, in ms (io/replies.ts). */
+  readonly workingAt?: number | undefined;
   readonly replies?: readonly AgentReply[];
   /** What the agent shows while it works, as a plan, in place of the last. */
   readonly progress?: AgentReply["blocks"];
@@ -880,9 +882,18 @@ export const sessionMachine = setup({
           const fresh = all.filter((r) => !earlier.includes(r));
           const was =
             earlier.length === 0 ? n : noteAfter(n, { type: "earlier", replies: earlier });
+          // A working state from before the newest message was for an earlier one: the newest
+          // waits until the agent says it works on it. A file from before 0.1.14 has no time.
+          const working =
+            reply.state === "working" &&
+            (reply.workingAt === undefined || reply.workingAt >= wrote);
           if (fresh.length === 0 && !settled)
-            return reply.state === "working"
-              ? noteAfter(was, { type: "working", progress: reply.progress })
+            return working
+              ? noteAfter(was, {
+                  type: "working",
+                  progress: reply.progress,
+                  since: reply.workingAt,
+                })
               : was;
           const next = noteAfter(was, {
             type: "reply",

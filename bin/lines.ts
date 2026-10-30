@@ -142,6 +142,26 @@ const WAIT_MAX_S = 3540;
 const WAIT_S = 50;
 
 /** The command in the arguments, or none when they make no command. */
+/** Help asked for anywhere on the line, before a `--`: the command does nothing else. */
+const HELP = new Set(["--help", "-h", "help"]);
+
+/**
+ * The usage to print for a line that asks for help: the command's own lines, or all of them.
+ * Undefined when the line does not ask. A help word after `--` is the dev command's.
+ */
+export function helpOf(args: readonly string[]): string | undefined {
+  const end = args.indexOf("--");
+  const before = end < 0 ? args : args.slice(0, end);
+  if (!before.some((a) => HELP.has(a) && (a !== "help" || before.length === 1))) return undefined;
+  const kind = before[0];
+  const own = USAGE.split("\n").filter(
+    (l) => l.startsWith(`  blueline ${kind ?? ""} `) || l === `  blueline ${kind ?? ""}`,
+  );
+  return own.length === 0 || kind === undefined || HELP.has(kind)
+    ? USAGE
+    : ["Usage:", ...own].join("\n");
+}
+
 export function commandOf(args: readonly string[]): Command | undefined {
   if (args[0] === "dev") return devOf(args.slice(1));
   const words: string[] = [];
@@ -153,7 +173,10 @@ export function commandOf(args: readonly string[]): Command | undefined {
     else if (arg.startsWith("--") && value !== undefined) {
       flags.set(arg.slice(2), value);
       i += 1;
-    } else words.push(arg);
+    }
+    // A flag with no value is no word: `request --help` files no issue named "--help".
+    else if (arg.startsWith("--")) return undefined;
+    else words.push(arg);
   }
   const [kind, file, id, state, text] = words;
   if (kind === "blocks" && flags.size === 0 && words.length === 1) return { kind };
@@ -280,6 +303,8 @@ export interface Line {
   readonly settled?: boolean | undefined;
   /** The steps still open after a settle. */
   readonly left?: number | undefined;
+  /** The note or hand-off the line asks an answer on: its `id`. A settle has none. */
+  readonly answers?: string | undefined;
   /** What to apply to the code now: the line carries the reviewer's verdicts on parts. */
   readonly apply?: string | undefined;
 }
@@ -290,6 +315,7 @@ const NEWLINE = 10;
 const LineSchema = Schema.fromJsonString(
   Schema.Struct({
     line: Schema.optional(Schema.String),
+    id: Schema.optional(Schema.String),
     kind: Schema.optional(Schema.String),
     journey: Schema.optional(Schema.String),
     sentAt: Schema.optional(Schema.String),
@@ -321,9 +347,15 @@ export function takeLines(bytes: Uint8Array, base = 0): { lines: Line[]; used: n
   for (const raw of new TextDecoder().decode(bytes.subarray(0, used)).split("\n")) {
     const decoded = decodeLine(raw);
     if (Option.isSome(decoded)) {
-      const { line, ...fields } = decoded.value;
+      const { line, id: answers, ...fields } = decoded.value;
       const id = line ?? `@${String(base + start)}:${hashOf(raw)}`;
-      lines.push({ raw, id, start: base + start, ...fields });
+      lines.push({
+        raw,
+        id,
+        start: base + start,
+        ...fields,
+        ...(answers === undefined ? {} : { answers }),
+      });
     }
     start += encoder.encode(raw).length + 1;
   }
@@ -373,7 +405,12 @@ export function replyAfter(
 ): Reply {
   const { progress: _, ...before }: Reply = dated(was ?? { state: "working" });
   if (command.state === "working")
-    return { ...before, state: "working", ...(blocks === undefined ? {} : { progress: blocks }) };
+    return {
+      ...before,
+      state: "working",
+      workingAt: now,
+      ...(blocks === undefined ? {} : { progress: blocks }),
+    };
   if (command.state === "settled")
     return { ...before, state: "replied", settled: true, settledAt: now };
   const reply = {
