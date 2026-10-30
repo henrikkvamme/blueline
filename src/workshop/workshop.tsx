@@ -10,6 +10,7 @@ import { ToolsContext, now, type Tools } from "../ui/session";
 import { KEPT, STATES, WORKSHOP } from "./chats";
 import { LiftWorkshop } from "./lift/lift-workshop";
 import { NamesWorkshop } from "./names/names-workshop";
+import { QueueWorkshop } from "./queue/queue-workshop";
 import { Tour } from "./tour/tour";
 
 /*
@@ -48,6 +49,7 @@ const TABS = [
   { hash: "#lift", label: "Lift" },
   { hash: "#tour", label: "Tour" },
   { hash: "#names", label: "Names" },
+  { hash: "#queue", label: "Queue" },
 ] as const;
 
 /** The tab a hash shows: the tour's pages are its own routes, as `#tour/approvers`. */
@@ -85,6 +87,8 @@ export function Workshop() {
         <Tour hash={hash} />
       ) : hash === "#names" ? (
         <NamesWorkshop />
+      ) : tabOf(hash) === "#queue" ? (
+        <QueueWorkshop hash={hash} />
       ) : (
         <ChatWorkshop />
       )}
