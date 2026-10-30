@@ -1,5 +1,5 @@
 import { Clock, DateTime, Effect, Fiber, Option, Schedule } from "effect";
-import { fromCallback } from "xstate";
+import { createCallbackLogic } from "xstate";
 import { registry } from "../core/registry";
 import { fromResult } from "../core/result";
 import { postLine, postLog, readListening, readReplies } from "../io/channel";
@@ -10,6 +10,7 @@ import { parts } from "../part/store";
 import type { DevAdapter, DevResult, DevShift, DevStep, JourneyInfo } from "../types";
 import { postedLine } from "./lines";
 import {
+  postId,
   sessionMachine,
   type EnterInput,
   type Event,
@@ -313,7 +314,7 @@ export function liveMachine<C>(live: Live<C>) {
 
   const machine = sessionMachine.provide({
     actors: {
-      enterStep: fromCallback<Event, EnterInput>(({ input, sendBack }) => {
+      enterStep: createCallbackLogic<Event, EnterInput>(({ input, sendBack }) => {
         report = sendBack;
         return run(
           enter(input, sendBack).pipe(
@@ -322,12 +323,12 @@ export function liveMachine<C>(live: Live<C>) {
         );
       }),
       // The walk left the step for the page: its reset and exit run to their end.
-      leaveStep: fromCallback<Event, Entered | undefined>(({ input, sendBack }) => {
+      leaveStep: createCallbackLogic<Event, Entered | undefined>(({ input, sendBack }) => {
         report = sendBack;
         cleanup(input);
         return () => undefined;
       }),
-      switchVariant: fromCallback<Event, SwitchInput>(({ input, sendBack }) =>
+      switchVariant: createCallbackLogic<Event, SwitchInput>(({ input, sendBack }) =>
         run(
           Effect.gen(function* () {
             const step = stepAt(input.journey, input.at);
@@ -340,7 +341,7 @@ export function liveMachine<C>(live: Live<C>) {
       // A page that loads late can draw the step's part again, as a draft that opens on its
       // own step. While the part is not there, the walk shows the variant again from its
       // start, a few times.
-      keep: fromCallback<Event, KeepInput>(({ input, sendBack }) =>
+      keep: createCallbackLogic<Event, KeepInput>(({ input, sendBack }) =>
         run(
           Effect.gen(function* () {
             const step = stepAt(input.journey, input.at);
@@ -356,7 +357,7 @@ export function liveMachine<C>(live: Live<C>) {
       ),
       // A post ends once sent: a session the page builds again from its snapshot, as on a
       // code change, then starts no post a second time.
-      post: fromCallback<Event, Post>(({ input, sendBack, self }) =>
+      post: createCallbackLogic<Event, Post>(({ input, sendBack, self }) =>
         run(
           Effect.gen(function* () {
             for (const post of chainOf(input)) {
@@ -369,11 +370,11 @@ export function liveMachine<C>(live: Live<C>) {
                 sendBack({ type: "failed", ids: chainOf(input).flatMap((post) => post.ids) }),
               ),
             ),
-            Effect.ensuring(Effect.sync(() => sendBack({ type: "posted", child: self.id }))),
+            Effect.ensuring(Effect.sync(() => sendBack({ type: "posted", child: postId(self) }))),
           ),
         ),
       ),
-      poll: fromCallback<Event>(({ sendBack }) =>
+      poll: createCallbackLogic<Event>(({ sendBack }) =>
         run(
           Effect.all(
             [

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createActor,
-  fromCallback,
+  createCallbackLogic,
   initialTransition,
   transition,
   type SnapshotFrom,
@@ -10,6 +10,7 @@ import { isWithAgent } from "../src/notes/note";
 import {
   sessionMachine,
   stepNoteId,
+  postId,
   treeShown,
   type EnterInput,
   type Event,
@@ -256,8 +257,8 @@ describe("the review session", () => {
       expect(s.context.opening?.variant).toBe(0);
       // The running switch stops, so its signal aborts, and a new one starts.
       const kinds = actions.map((a) => a.type);
-      expect(kinds).toContain("xstate.stopChild");
-      expect(kinds).toContain("xstate.spawnChild");
+      expect(kinds).toContain("@xstate.stop");
+      expect(kinds).toContain("@xstate.spawn");
     });
 
     it("ends when a step opens, and the step comes back on the variant it keeps", () => {
@@ -388,7 +389,7 @@ describe("the review session", () => {
     });
     expect(sent.context.notes.some((n) => n.id === "p1")).toBe(false);
     expect(sent.context.notes.find((n) => n.id === stepNoteId("b"))?.state).toBe("waiting");
-    expect(actions.some((a) => a.type === "xstate.spawnChild")).toBe(true);
+    expect(actions.some((a) => a.type === "@xstate.spawn")).toBe(true);
   });
 
   it("sends the pointed notes alone as a message with no words, and keeps the step's draft", () => {
@@ -413,9 +414,9 @@ describe("the review session", () => {
     let posts = 0;
     const machine = sessionMachine.provide({
       actors: {
-        post: fromCallback<Event, Post>(({ sendBack, self }) => {
+        post: createCallbackLogic<Event, Post>(({ sendBack, self }) => {
           posts += 1;
-          sendBack({ type: "posted", child: self.id });
+          sendBack({ type: "posted", child: postId(self) });
         }),
       },
     });
@@ -899,10 +900,10 @@ describe("the review's end", () => {
     const sent: Post[] = [];
     const machine = sessionMachine.provide({
       actors: {
-        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+        post: createCallbackLogic<Event, Post>(({ input, sendBack, self }) => {
           for (let post: Post | undefined = input; post !== undefined; post = post.next)
             sent.push(post);
-          sendBack({ type: "posted", child: self.id });
+          sendBack({ type: "posted", child: postId(self) });
         }),
       },
     });
@@ -1280,7 +1281,7 @@ describe("the verdicts on a part's variants", () => {
     const inputs: EnterInput[] = [];
     const machine = sessionMachine.provide({
       actors: {
-        enterStep: fromCallback<Event, EnterInput>(({ input }) => {
+        enterStep: createCallbackLogic<Event, EnterInput>(({ input }) => {
           inputs.push(input);
         }),
       },
@@ -1563,7 +1564,7 @@ describe("what the agent hears of the settles", () => {
     const ids = JOURNEYS[0]?.steps.map((st) => st.id) ?? [];
     const machine = sessionMachine.provide({
       actors: {
-        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+        post: createCallbackLogic<Event, Post>(({ input, sendBack, self }) => {
           for (let post: Post | undefined = input; post !== undefined; post = post.next) {
             if (post.kind !== "settle" || post.step === undefined) continue;
             const line = postedLine(DEV, post, "now");
@@ -1581,7 +1582,7 @@ describe("what the agent hears of the settles", () => {
                 `${post.step}: the line says ${String(line.left)} left, the agent knows ${String(open)}`,
               );
           }
-          sendBack({ type: "posted", child: self.id });
+          sendBack({ type: "posted", child: postId(self) });
         }),
       },
     });
@@ -1665,10 +1666,10 @@ describe("what the agent hears of the settles", () => {
     const journeys: string[] = [];
     const machine = sessionMachine.provide({
       actors: {
-        post: fromCallback<Event, Post>(({ input, sendBack, self }) => {
+        post: createCallbackLogic<Event, Post>(({ input, sendBack, self }) => {
           for (let post: Post | undefined = input; post !== undefined; post = post.next)
             journeys.push(post.session.journey);
-          sendBack({ type: "posted", child: self.id });
+          sendBack({ type: "posted", child: postId(self) });
         }),
       },
     });

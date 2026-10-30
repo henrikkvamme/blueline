@@ -1,5 +1,5 @@
-import { Schema } from "effect";
-import { assign, setup, transition } from "xstate";
+import { Schema, Struct } from "effect";
+import { setup, transition, types } from "xstate";
 import { BlockSchema } from "./blocks";
 
 /*
@@ -138,7 +138,12 @@ export type NoteEvent =
   | { readonly type: "reopen" }
   | { readonly type: "read" };
 
-type Context = Omit<Note, "state">;
+/** The note without its state, which the machine keeps as its own. */
+const ContextSchema = NoteSchema.mapFields(Struct.omit(["state"]));
+type Context = typeof ContextSchema.Type;
+
+type Send = Extract<NoteEvent, { readonly type: "send" }>;
+type Reply = Extract<NoteEvent, { readonly type: "reply" }>;
 
 const words = (context: Context, event: NoteEvent) =>
   (event.type === "send" ? (event.text ?? context.draft) : "").trim();
@@ -163,141 +168,150 @@ const withReplies = (context: Context, replies: readonly AgentReply[], at: numbe
 
 const agentSaid = (context: Context) => context.thread.some((m) => m.by === "agent");
 
+const hasWords = (context: Context, event: Send) =>
+  words(context, event) !== "" ||
+  imagesOf(context, event).length > 0 ||
+  (event.pins?.length ?? 0) > 0;
+
+const sent = (context: Context, event: Send) => {
+  const images = imagesOf(context, event);
+  return {
+    thread: [
+      ...context.thread,
+      {
+        by: "you" as const,
+        text: words(context, event),
+        at: event.at,
+        variant: event.variant,
+        ...(images.length === 0 ? {} : { images }),
+        ...((event.pins?.length ?? 0) === 0 ? {} : { pins: event.pins }),
+        ...(event.withdraws === undefined ? {} : { withdraws: event.withdraws }),
+      },
+    ],
+    draft: event.text === undefined ? "" : context.draft,
+    images: event.text === undefined ? undefined : context.images,
+    unread: false,
+  };
+};
+
+// A message the dev server did not take leaves the chat, and its words go back to the
+// draft. A take-back's words are Blueline's: they only leave.
+const takenBack = (context: Context) => {
+  const last = context.thread.at(-1);
+  if (last?.by !== "you") return {};
+  const thread = context.thread.slice(0, -1);
+  if (last.withdraws !== undefined) return { thread };
+  return { thread, draft: last.text, images: last.images };
+};
+
+const withAnswer = (context: Context, event: Reply) => ({
+  thread: withReplies(context, event.replies, event.at),
+  unread: event.replies.length > 0 ? true : context.unread,
+});
+
+const progressOf = (event: Extract<NoteEvent, { readonly type: "working" }>) => ({
+  progress: event.progress,
+  workingSince: event.since,
+});
+
+const settledByYou = { settledBy: "you" as const, unread: false };
+
+/** A send with words: the note waits for the agent. */
+const send = ({ context, event }: { context: Context; event: Send }) =>
+  hasWords(context, event)
+    ? { target: "waiting" as const, context: sent(context, event) }
+    : undefined;
+
+/** A reply settles the note when the agent settled it after it said something, and the
+ * note shows the reply when it has one. */
+const reply = ({ context, event }: { context: Context; event: Reply }) =>
+  event.settled && (event.replies.length > 0 || agentSaid(context))
+    ? {
+        target: "settled" as const,
+        context: { ...withAnswer(context, event), settledBy: "agent" as const },
+      }
+    : event.replies.length > 0
+      ? { target: "replied" as const, context: withAnswer(context, event) }
+      : undefined;
+
+const event = <T extends NoteEvent["type"]>() =>
+  types<Omit<Extract<NoteEvent, { readonly type: T }>, "type">>();
+
 const lifecycle = setup({
-  types: { context: {} as Context, events: {} as NoteEvent, input: {} as Context },
-  guards: {
-    hasWords: ({ context, event }) =>
-      words(context, event) !== "" ||
-      imagesOf(context, event).length > 0 ||
-      (event.type === "send" && (event.pins?.length ?? 0) > 0),
-    hasReplies: ({ event }) => event.type === "reply" && event.replies.length > 0,
-    settlesAfterReply: ({ context, event }) =>
-      event.type === "reply" && event.settled && (event.replies.length > 0 || agentSaid(context)),
-    agentSaid: ({ context }) => agentSaid(context),
-  },
-  actions: {
-    write: assign(({ context, event }) =>
-      event.type === "write" ? { draft: event.draft, images: event.images ?? context.images } : {},
-    ),
-    send: assign(({ context, event }) => {
-      if (event.type !== "send") return {};
-      const images = imagesOf(context, event);
-      return {
-        thread: [
-          ...context.thread,
-          {
-            by: "you" as const,
-            text: words(context, event),
-            at: event.at,
-            variant: event.variant,
-            ...(images.length === 0 ? {} : { images }),
-            ...((event.pins?.length ?? 0) === 0 ? {} : { pins: event.pins }),
-            ...(event.withdraws === undefined ? {} : { withdraws: event.withdraws }),
-          },
-        ],
-        draft: event.text === undefined ? "" : context.draft,
-        images: event.text === undefined ? undefined : context.images,
-        unread: false,
-      };
-    }),
-    // A message the dev server did not take leaves the chat, and its words go back to the
-    // draft. A take-back's words are Blueline's: they only leave.
-    takeBack: assign(({ context }) => {
-      const last = context.thread.at(-1);
-      if (last?.by !== "you") return {};
-      const thread = context.thread.slice(0, -1);
-      if (last.withdraws !== undefined) return { thread };
-      return { thread, draft: last.text, images: last.images };
-    }),
-    addReplies: assign(({ context, event }) => {
-      if (event.type !== "reply") return {};
-      return {
-        thread: withReplies(context, event.replies, event.at),
-        unread: event.replies.length > 0 ? true : context.unread,
-      };
-    }),
-    addEarlier: assign(({ context, event }) =>
-      event.type === "earlier" ? { thread: withReplies(context, event.replies, 0) } : {},
-    ),
-    progress: assign(({ event }) =>
-      event.type === "working" ? { progress: event.progress, workingSince: event.since } : {},
-    ),
-    endProgress: assign({ progress: undefined, workingSince: undefined }),
-    settledByYou: assign({ settledBy: "you" as const, unread: false }),
-    settledByAgent: assign({ settledBy: "agent" as const }),
-    unsettle: assign({ settledBy: undefined }),
-    read: assign({ unread: false }),
+  schemas: {
+    context: Schema.toStandardSchemaV1(ContextSchema),
+    input: Schema.toStandardSchemaV1(ContextSchema),
+    events: {
+      write: event<"write">(),
+      send: event<"send">(),
+      failed: event<"failed">(),
+      working: event<"working">(),
+      reply: event<"reply">(),
+      earlier: event<"earlier">(),
+      settle: event<"settle">(),
+      reopen: event<"reopen">(),
+      read: event<"read">(),
+    },
   },
 }).createMachine({
   id: "note",
   context: ({ input }) => input,
   initial: "new",
   on: {
-    write: { actions: "write" },
-    read: { actions: "read" },
-    earlier: { actions: "addEarlier" },
+    write: ({ context, event }) => ({
+      context: { draft: event.draft, images: event.images ?? context.images },
+    }),
+    read: () => ({ context: { unread: false } }),
+    earlier: ({ context, event }) => ({
+      context: { thread: withReplies(context, event.replies, 0) },
+    }),
   },
   states: {
-    new: { on: { send: { guard: "hasWords", target: "waiting", actions: "send" } } },
+    new: { on: { send } },
     waiting: {
       on: {
-        send: { guard: "hasWords", target: "waiting", actions: "send" },
-        failed: [
-          { guard: "agentSaid", target: "replied", actions: "takeBack" },
-          { target: "new", actions: "takeBack" },
-        ],
-        working: { target: "working", actions: "progress" },
-        settle: { target: "settled", actions: "settledByYou" },
-        reply: [
-          {
-            guard: "settlesAfterReply",
-            target: "settled",
-            actions: ["addReplies", "settledByAgent"],
-          },
-          { guard: "hasReplies", target: "replied", actions: "addReplies" },
-        ],
+        send,
+        failed: ({ context }) => ({
+          target: agentSaid(context) ? "replied" : "new",
+          context: takenBack(context),
+        }),
+        working: ({ event }) => ({ target: "working", context: progressOf(event) }),
+        settle: { target: "settled", context: settledByYou },
+        reply,
       },
     },
     working: {
       // The progress is for the work: a reply, a settle or a new message ends it.
-      exit: "endProgress",
+      exit: () => ({ context: { progress: undefined, workingSince: undefined } }),
       on: {
-        working: { actions: "progress" },
-        send: { guard: "hasWords", target: "waiting", actions: "send" },
-        settle: { target: "settled", actions: "settledByYou" },
-        reply: [
-          {
-            guard: "settlesAfterReply",
-            target: "settled",
-            actions: ["addReplies", "settledByAgent"],
-          },
-          { guard: "hasReplies", target: "replied", actions: "addReplies" },
-        ],
+        working: ({ event }) => ({ context: progressOf(event) }),
+        send,
+        settle: { target: "settled", context: settledByYou },
+        reply,
       },
     },
     replied: {
       on: {
-        send: { guard: "hasWords", target: "waiting", actions: "send" },
-        settle: { target: "settled", actions: "settledByYou" },
-        reply: [
-          {
-            guard: "settlesAfterReply",
-            target: "settled",
-            actions: ["addReplies", "settledByAgent"],
-          },
-          { guard: "hasReplies", target: "replied", actions: "addReplies" },
-        ],
+        send,
+        settle: { target: "settled", context: settledByYou },
+        reply,
       },
     },
     settled: {
       on: {
         // The agent may still answer a settled note: it stays settled, and the answer shows.
-        reply: { guard: "hasReplies", actions: "addReplies" },
-        send: { guard: "hasWords", target: "waiting", actions: ["unsettle", "send"] },
-        reopen: [
-          { guard: "agentSaid", target: "replied", actions: "unsettle" },
-          { target: "new", actions: "unsettle" },
-        ],
+        reply: ({ context, event }) =>
+          event.replies.length > 0 ? { context: withAnswer(context, event) } : undefined,
+        send: (args) => {
+          const next = send(args);
+          return next === undefined
+            ? undefined
+            : { ...next, context: { ...next.context, settledBy: undefined } };
+        },
+        reopen: ({ context }) => ({
+          target: agentSaid(context) ? "replied" : "new",
+          context: { settledBy: undefined },
+        }),
       },
     },
   },
