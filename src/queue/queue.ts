@@ -31,6 +31,9 @@ export interface Beat {
   /** A variant to preview while the beat shows. It ends with the beat; only the reviewer
    * keeps a variant. */
   readonly peek?: string;
+  /** A state to show while the beat shows, such as a long name or an error. It ends with
+   * the beat. */
+  readonly state?: string;
 }
 
 export interface Remark {
@@ -46,12 +49,37 @@ export interface Remark {
   readonly answers?: readonly string[];
   /** For a choice: the variants, by their labels. */
   readonly variants?: readonly string[];
+  /** For a choice: what the part can show, to go through with each variant. The first is
+   * what the page shows now. */
+  readonly states?: readonly string[];
   /** For a question: the answers to choose from. */
   readonly options?: readonly string[];
   /** When the agent wrote it, in ms. */
   readonly at: number;
   /** The agent's cursor shows the remark: where to look, and what to try. */
   readonly walk?: readonly Beat[];
+}
+
+/** An element that he pointed at while he spoke, and the words he said while he did. */
+export interface Pointed {
+  readonly target: string;
+  readonly words: string;
+}
+
+/** A stroke he drew while he spoke, as an SVG path in page coordinates, and the element it
+ * snapped to. */
+export interface Drawn {
+  readonly path: string;
+  readonly target: string | undefined;
+}
+
+/** What showed when he wrote or spoke, so the agent sees what he saw. */
+export interface Moment {
+  /** The variant and the state that the part showed, when not its own. */
+  readonly variant?: string | undefined;
+  readonly state?: string | undefined;
+  /** The line the agent's cursor said when he spoke over it. */
+  readonly over?: string | undefined;
 }
 
 export interface Annotation {
@@ -62,6 +90,11 @@ export interface Annotation {
   /** The remark that showed when the reviewer wrote it. */
   readonly on: string | undefined;
   readonly at: number;
+  /** Spoken: each element he pointed at while he spoke, in order. */
+  readonly pointed?: readonly Pointed[] | undefined;
+  /** Spoken: what he drew while he spoke. */
+  readonly drawn?: readonly Drawn[] | undefined;
+  readonly moment?: Moment | undefined;
 }
 
 export interface Queue {

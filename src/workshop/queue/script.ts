@@ -34,6 +34,9 @@ export const TARGETS: Readonly<Record<string, string>> = {
 export const selectorOf = (target: string) => `[data-q="${target}"]`;
 export const targetOf = (selector: string) => /data-q="([^"]+)"/.exec(selector)?.[1] ?? "";
 
+/** What the request's status can say, the page's own first. */
+export const STATUSES = ["In review", "Waits for Ingrid Berg", "Approved", "Sent back"];
+
 const beat = (target: string, say: string, more: Partial<Beat> = {}): Beat => ({
   target: selectorOf(target),
   name: TARGETS[target] ?? "the element",
@@ -70,6 +73,7 @@ const REMARKS: readonly Remark[] = [
   remark("r-status", "/request", "status", "How should the status look?", {
     kind: "choice",
     variants: ["Dot", "Pill", "Steps"],
+    states: STATUSES,
     text: "Three looks for the request's status.",
     walk: [
       beat("status", "Here is the dot: quiet, with the words beside it.", {
@@ -87,8 +91,14 @@ const REMARKS: readonly Remark[] = [
         note: "3 · Steps",
         draw: "circle",
       }),
-      beat("status", "Hover one in the panel to see it here. A click keeps it.", {
-        note: "Hover to see, click to keep",
+      beat("status", "Each must also hold a long state, when it waits on a person.", {
+        peek: "Pill",
+        state: "Waits for Ingrid Berg",
+        note: "A long state",
+        draw: "circle",
+      }),
+      beat("status", "Go through the looks and the states in the panel. A click keeps one.", {
+        note: "Try each look in each state",
       }),
     ],
   }),

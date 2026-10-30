@@ -6,6 +6,8 @@ import {
   VolumeX,
   ArrowRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleHelp,
   CornerDownRight,
   Eye,
@@ -26,7 +28,10 @@ import {
   order,
   seen,
   waiting,
+  type Drawn,
   type Kind,
+  type Moment,
+  type Pointed,
   type Queue,
   type Remark,
 } from "../../queue/queue";
@@ -45,6 +50,12 @@ import type { Phase } from "./walker";
 export interface Composer {
   readonly target: string;
   readonly text: string;
+  /** Spoken words send themselves at this time, in ms, unless he holds them to edit. */
+  readonly sendsAt?: number | undefined;
+  /** Spoken: the elements he pointed at and what he drew, and what showed. */
+  readonly pointed?: readonly Pointed[] | undefined;
+  readonly drawn?: readonly Drawn[] | undefined;
+  readonly moment?: Moment | undefined;
 }
 
 export interface Ship {
@@ -63,11 +74,13 @@ export interface PanelProps {
   readonly toast: readonly string[];
   readonly ship: Ship | undefined;
   /** Draws one variant of a choice, small, in the app's own look. */
-  readonly preview?: (remark: Remark, variant: string) => ReactNode;
+  readonly preview?: (remark: Remark, variant: string, state: string | undefined) => ReactNode;
   readonly onNext: () => void;
   readonly onBack: () => void;
   readonly onAnnotate: () => void;
   readonly onWrite: (text: string) => void;
+  /** He touched the spoken words: they wait for his Send. */
+  readonly onHold?: () => void;
   readonly onSend: () => void;
   readonly onCancel: () => void;
   readonly onPick: (value: string) => void;
@@ -81,6 +94,9 @@ export interface PanelProps {
   /** The choice that shows on the page and is not kept. */
   readonly peek?: string | undefined;
   readonly onPeek?: (value: string | undefined) => void;
+  /** The state that a choice's part shows, of its states; none for the page's own. */
+  readonly state?: string | undefined;
+  readonly onState?: (state: string | undefined) => void;
   /** Where the agent's cursor is on this remark's walk; none when it has no walk. */
   readonly walk?: Phase | undefined;
   /** Pause the walk, go on with it, or walk again. */
@@ -334,11 +350,13 @@ function Agent({ count, eta }: { readonly count: number; readonly eta: number | 
 }
 
 const KEYS = [
-  ["j  →", "Next"],
-  ["k  ←", "Back"],
-  ["h", "Seen: the remarks before"],
+  ["j", "Next"],
+  ["k", "Back"],
+  ["s", "Seen: the remarks before"],
+  ["←  →", "The variant before, after"],
+  ["↑  ↓", "The state before, after"],
   ["a", "Annotate what shows"],
-  ["Alt+click", "Annotate any element"],
+  ["⌥⌘ held", "Point, draw and talk"],
   ["1–9", "Preview a variant or an answer"],
   ["Enter", "Keep what the preview shows"],
   ["y", "Settle now and go on"],
@@ -398,9 +416,14 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
           picked={q.picks[r.id]}
           peek={props.peek}
           verb="Keep"
-          draw={props.preview === undefined ? undefined : (v) => props.preview?.(r, v)}
+          draw={props.preview === undefined ? undefined : (v) => props.preview?.(r, v, props.state)}
           onPeek={props.onPeek}
           onPick={props.onPick}
+          states={
+            r.states === undefined ? undefined : (
+              <States states={r.states} shown={props.state} onState={props.onState} />
+            )
+          }
         />
       )}
       {r.kind === "question" && r.options !== undefined && (
@@ -505,6 +528,7 @@ function Choices({
   draw,
   onPeek,
   onPick,
+  states,
 }: {
   readonly values: readonly string[];
   readonly picked: string | undefined;
@@ -515,10 +539,13 @@ function Choices({
   readonly draw: ((value: string) => ReactNode) | undefined;
   readonly onPeek: ((value: string | undefined) => void) | undefined;
   readonly onPick: (value: string) => void;
+  /** Goes through the part's states, above the variants that it draws. */
+  readonly states?: ReactNode;
 }) {
   const pending = peek !== undefined && peek !== picked ? peek : undefined;
   return (
     <div className="flex flex-col gap-2">
+      {states}
       <ol className="flex flex-col gap-2" onPointerLeave={() => onPeek?.(undefined)}>
         {values.map((v, i) => {
           const kept = picked === v;
@@ -576,6 +603,63 @@ function Choices({
           {verb} {pending}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The part's states, one at a time: back and on, the state's name at a fixed width, and a dot
+ * for each state. The page and every variant above show the state; none is kept.
+ */
+function States({
+  states,
+  shown,
+  onState,
+}: {
+  readonly states: readonly string[];
+  readonly shown: string | undefined;
+  readonly onState: ((state: string | undefined) => void) | undefined;
+}) {
+  const at = Math.max(0, states.indexOf(shown ?? ""));
+  const go = (i: number) => {
+    const n = (i + states.length) % states.length;
+    onState?.(n === 0 ? undefined : states[n]);
+  };
+  const step =
+    "grid size-7 shrink-0 place-items-center rounded-[6px] text-dt-muted hover:bg-dt-line hover:text-dt-text";
+  return (
+    <div className="flex h-9 items-center gap-1 rounded-dt-control bg-dt-raised pr-2.5 pl-1 text-[13px]">
+      <button
+        type="button"
+        aria-label="The state before"
+        className={step}
+        onClick={() => go(at - 1)}
+      >
+        <ChevronLeft className="size-4" aria-hidden />
+      </button>
+      <span className="min-w-0 flex-1 truncate text-center font-medium">{states[at]}</span>
+      <button type="button" aria-label="The next state" className={step} onClick={() => go(at + 1)}>
+        <ChevronRight className="size-4" aria-hidden />
+      </button>
+      <span className="flex items-center gap-1 pl-1.5">
+        {states.map((s, i) => (
+          <button
+            key={s}
+            type="button"
+            aria-label={s}
+            title={s}
+            onClick={() => go(i)}
+            className="grid size-3 place-items-center"
+          >
+            <span
+              className={cx(
+                "size-1.5 rounded-full transition-colors",
+                i === at ? "bg-dt-accent" : "bg-dt-faint/50 hover:bg-dt-muted",
+              )}
+            />
+          </button>
+        ))}
+      </span>
     </div>
   );
 }
@@ -777,6 +861,55 @@ function Toast({ count, onUndo }: { readonly count: number; readonly onUndo: () 
   );
 }
 
+const nameOf = (target: string | undefined) =>
+  target === undefined ? undefined : TARGETS[targetOf(target)];
+
+/**
+ * What goes to the agent with the words, so he can check it: the elements he pointed at or
+ * drew on while he spoke, the variant and the state that showed, and the agent's line that
+ * he spoke over. Each is a quiet chip; the whole line is in its title.
+ */
+function Context({ composer }: { readonly composer: Composer }) {
+  const own = nameOf(composer.target);
+  const elements = [
+    ...new Set(
+      [...(composer.pointed ?? []), ...(composer.drawn ?? [])]
+        .map((p) => nameOf(p.target))
+        .filter((n): n is string => n !== undefined && n !== own),
+    ),
+  ];
+  const drew = (composer.drawn?.length ?? 0) > 0;
+  const { variant, state, over } = composer.moment ?? {};
+  const chips = [
+    ...elements.map((e) => ({ key: `e-${e}`, text: `Also ${e}`, title: undefined })),
+    ...(drew ? [{ key: "drew", text: "Drawing", title: undefined }] : []),
+    ...(variant !== undefined || state !== undefined
+      ? [
+          {
+            key: "shown",
+            text: [variant, state].filter((x) => x !== undefined).join(" · "),
+            title: "What the part showed",
+          },
+        ]
+      : []),
+    ...(over !== undefined ? [{ key: "over", text: "Over the agent", title: over }] : []),
+  ];
+  if (chips.length === 0) return null;
+  return (
+    <span className="-mt-1 flex flex-wrap gap-1 px-0.5">
+      {chips.map((c) => (
+        <span
+          key={c.key}
+          title={c.title}
+          className="max-w-full truncate rounded-[6px] bg-dt-raised px-1.5 py-0.5 text-[11px] text-dt-muted"
+        >
+          {c.text}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function ComposerView(props: PanelProps & { readonly composer: Composer }) {
   const { composer } = props;
   return (
@@ -785,6 +918,7 @@ function ComposerView(props: PanelProps & { readonly composer: Composer }) {
         <PenLine className="size-3" aria-hidden />
         On {TARGETS[targetOf(composer.target)] ?? "the page"}
       </span>
+      <Context composer={composer} />
       <textarea
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- the composer opens to be written in
         autoFocus
@@ -792,7 +926,9 @@ function ComposerView(props: PanelProps & { readonly composer: Composer }) {
         value={composer.text}
         placeholder="What should change?"
         onChange={(e) => props.onWrite(e.target.value)}
+        onPointerDown={props.onHold}
         onKeyDown={(e) => {
+          if (e.key !== "Enter") props.onHold?.();
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             props.onSend();
@@ -807,12 +943,25 @@ function ComposerView(props: PanelProps & { readonly composer: Composer }) {
         </button>
         <button
           type="button"
-          className={primary}
+          className={cx(primary, "relative overflow-hidden")}
           disabled={composer.text.trim() === ""}
           onClick={props.onSend}
         >
-          Send
-          <ArrowRight className="size-4" aria-hidden />
+          {composer.sendsAt !== undefined && (
+            // Spoken words send themselves when the light drains, unless he touches them.
+            <span
+              key={composer.sendsAt}
+              aria-hidden
+              className="absolute inset-0 origin-left bg-white/20"
+              style={{
+                animation: `dt-drain ${String(Math.max(0, composer.sendsAt - Date.now()))}ms linear both`,
+              }}
+            />
+          )}
+          <span className="relative flex items-center gap-1.5">
+            Send
+            <ArrowRight className="size-4" aria-hidden />
+          </span>
         </button>
       </div>
     </footer>

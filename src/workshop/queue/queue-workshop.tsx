@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   annotate,
   annotationsOn,
@@ -14,6 +14,7 @@ import {
   show,
   unsettle,
   waiting,
+  type Moment,
   type Move,
   type Queue,
   type Remark,
@@ -25,7 +26,8 @@ import { Panel, SHIP_SECONDS, type Composer, type Ship } from "./panel";
 import { AppNav, AppPage, Status } from "./app";
 import { Guide, GuideToggle } from "./guide";
 import { VOICES } from "./voice";
-import { Walker } from "./walker";
+import { Walker, type Preview } from "./walker";
+import { Strokes, TalkView, usePointAndTalk } from "./talk";
 import { answerTo, selectorOf, start, targetOf, type Path } from "./script";
 import { QueueStates } from "./queue-states";
 
@@ -44,6 +46,9 @@ interface State {
   /** When the reviewer stopped the ship; a new settle starts it again. */
   readonly stopped: boolean;
 }
+
+/** How long spoken words wait before they send themselves, in ms. */
+const SPOKEN = 3000;
 
 const fresh = (delay = 8): State => ({
   queue: next(start()).queue,
@@ -99,7 +104,9 @@ function Live() {
   // A variant that shows on the page and is not kept: the reviewer's own preview, and the
   // guide's while a beat shows it.
   const [peek, setPeek] = useState<string | undefined>(undefined);
-  const [guidePeek, setGuidePeek] = useState<string | undefined>(undefined);
+  // The state that the part shows, of a choice's states; none for the page's own.
+  const [shown, setShown] = useState<string | undefined>(undefined);
+  const [guidePeek, setGuidePeek] = useState<Preview | undefined>(undefined);
   const walker = useMemo(
     () =>
       new Walker(
@@ -125,6 +132,7 @@ function Live() {
   // Each remark walks when it shows, with walks on; its preview ends when it goes.
   useEffect(() => {
     setPeek(undefined);
+    setShown(undefined);
     if (guide.on && here?.walk !== undefined) walker.start(here.walk, here.page);
     else walker.stop();
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new remark starts a walk, not a new setting
@@ -180,9 +188,44 @@ function Live() {
     setToast([]);
   };
 
+  /** What shows now, for the agent to see what he saw: the variant and the state of the
+   * part, and the line the agent's cursor says, if it speaks. */
+  const momentNow = (): Moment => {
+    const snap = walker.snapshot();
+    return {
+      variant: here?.kind === "choice" ? (peek ?? guidePeek?.variant) : undefined,
+      state: shown ?? guidePeek?.state,
+      over: walker.active() ? here?.walk?.[snap.beat]?.say : undefined,
+    };
+  };
+  const moment = useRef<Moment>({});
+  // Point and talk: ⌥⌘ held stops the walk; the words go to the composer and send
+  // themselves in a moment, unless he touches them. A drawing with no words waits for his
+  // words.
+  const talk = usePointAndTalk({
+    onStart: () => {
+      moment.current = momentNow();
+      walker.pause();
+    },
+    onWords: (target, text, pointed, drawn) =>
+      setComposer({
+        target: target ?? here?.target ?? selectorOf("title"),
+        text,
+        pointed,
+        drawn,
+        moment: moment.current,
+        sendsAt: text === "" ? undefined : Date.now() + SPOKEN,
+      }),
+  });
+  useEffect(() => {
+    if (composer?.sendsAt !== undefined && clock >= composer.sendsAt) send();
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- the clock decides, not send
+  }, [clock, composer?.sendsAt]);
+
   const open = (target: string) => {
+    const now = momentNow();
     walker.pause();
-    setComposer({ target, text: "" });
+    setComposer({ target, text: "", moment: now });
   };
   const send = () => {
     if (composer === undefined || composer.text.trim() === "") return;
@@ -195,6 +238,9 @@ function Live() {
         text: composer.text.trim(),
         on: current(s.queue)?.id,
         at: Date.now(),
+        pointed: composer.pointed,
+        drawn: composer.drawn,
+        moment: composer.moment,
       }),
     }));
     setComposer(undefined);
@@ -210,9 +256,24 @@ function Live() {
       if (composer !== undefined || e.metaKey || e.ctrlKey || e.altKey) return;
       const values = here?.variants ?? here?.options ?? [];
       const n = Number(e.key);
-      if (e.key === "j" || e.key === "ArrowRight") move(next);
+      // The arrows go through a choice's variants, in a row, and its states, in a column, as
+      // the lift does. On another remark, ← and → are Back and Next.
+      const states = here?.states ?? [];
+      const along = (d: number) => {
+        const from = values.indexOf(peek ?? q.picks[here?.id ?? ""] ?? "");
+        setPeek(values[(Math.max(from, d > 0 ? -1 : 0) + d + values.length) % values.length]);
+      };
+      const down = (d: number) => {
+        const n = (Math.max(0, states.indexOf(shown ?? "")) + d + states.length) % states.length;
+        setShown(n === 0 ? undefined : states[n]);
+      };
+      if (values.length > 0 && e.key === "ArrowRight") along(1);
+      else if (values.length > 0 && e.key === "ArrowLeft") along(-1);
+      else if (states.length > 0 && e.key === "ArrowDown") down(1);
+      else if (states.length > 0 && e.key === "ArrowUp") down(-1);
+      else if (e.key === "j" || e.key === "ArrowRight") move(next);
       else if (e.key === "k" || e.key === "ArrowLeft") move(back);
-      else if (e.key === "h") setSeen((o) => !o);
+      else if (e.key === "s") setSeen((o) => !o);
       else if (e.key === "Escape" && seen) setSeen(false);
       else if (e.key === "y") move(settleNow);
       else if (e.key === "u" && toast.length > 0) undo();
@@ -229,15 +290,6 @@ function Live() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
-
-  // Alt+click on an element of the app annotates it.
-  const onPage = (e: React.MouseEvent) => {
-    if (!e.altKey) return;
-    const el = (e.target as Element).closest("[data-q]");
-    if (el === null) return;
-    e.preventDefault();
-    open(selectorOf(el.getAttribute("data-q") ?? ""));
-  };
 
   const changed = new Set(
     q.annotations.filter((a) => answerOf(q, a.id) !== undefined).map((a) => targetOf(a.target)),
@@ -256,7 +308,6 @@ function Live() {
         }}
       />
       <main
-        onClickCapture={onPage}
         // The page narrows by the panel's width, so the panel covers nothing.
         style={{ marginRight: PANEL }}
         className="min-h-screen bg-[#fbfbfc] px-8 py-20 text-[#16161a]"
@@ -267,19 +318,23 @@ function Live() {
             path={page}
             changed={changed}
             status={
-              (here?.id === "r-status" ? (peek ?? guidePeek) : undefined) ??
+              (here?.id === "r-status" ? (peek ?? guidePeek?.variant) : undefined) ??
               q.picks["r-status"] ??
               "Dot"
             }
+            statusText={here?.id === "r-status" ? (shown ?? guidePeek?.state) : undefined}
           />
         </div>
       </main>
       <Pins queue={q} page={page} onShow={(id) => move((s) => show(s, id))} />
       <Guide walker={walker} reduced={guide.reduced} />
+      <TalkView talk={talk} reduced={guide.reduced} />
       <Panel
         docked
-        preview={(_, v) => <Status look={v} text="In review" />}
-        peek={peek ?? (here?.kind === "choice" ? guidePeek : undefined)}
+        preview={(_, v, state) => <Status look={v} text={state ?? "In review"} />}
+        peek={peek ?? (here?.kind === "choice" ? guidePeek?.variant : undefined)}
+        state={shown ?? guidePeek?.state}
+        onState={setShown}
         onPeek={setPeek}
         walk={here?.walk === undefined ? undefined : walk.phase}
         onWalk={toggleWalk}
@@ -296,7 +351,10 @@ function Live() {
         seen={seen}
         onSeen={setSeen}
         onAnnotate={() => here !== undefined && open(here.target)}
-        onWrite={(text) => setComposer((c) => (c === undefined ? c : { ...c, text }))}
+        onWrite={(text) =>
+          setComposer((c) => (c === undefined ? c : { ...c, text, sendsAt: undefined }))
+        }
+        onHold={() => setComposer((c) => (c === undefined ? c : { ...c, sendsAt: undefined }))}
         onSend={send}
         onCancel={() => setComposer(undefined)}
         onPick={choose}
@@ -413,6 +471,7 @@ function Pins({
     (r) => r.page === page && !isSettled(q, r.id) && r.id !== here?.id && r.target !== here?.target,
   );
   const mine = waiting(q).filter((a) => a.page === page);
+  const drawn = mine.flatMap((a) => a.drawn?.map((d) => d.path) ?? []);
   // Marks on one element stand side by side.
   // The light's tab takes the first place on its element.
   const taken = new Map<string, number>(
@@ -426,6 +485,8 @@ function Pins({
   const answer = here?.kind === "answer";
   return (
     <div className="blueline pointer-events-none fixed inset-0 z-[2147483001]">
+      {/* What he drew stays on the page while the agent works on it. */}
+      <Strokes paths={drawn} faint />
       {frame !== undefined && here !== undefined && (
         <span
           className={cx(

@@ -34,10 +34,13 @@ export function AppPage({
   path,
   changed,
   status,
+  statusText,
 }: {
   readonly path: Path;
   readonly changed: ReadonlySet<string>;
+  /** The status's look, and the state that it shows, when not its own. */
   readonly status: string;
+  readonly statusText?: string | undefined;
 }) {
   // The reviewer's own click adds an approver; the guide's cursor never clicks.
   const [added, setAdded] = useState(false);
@@ -103,7 +106,10 @@ export function AppPage({
           </span>
         </div>
         <span data-q="status" className="w-fit">
-          <Status look={status} text={changed.has("status") ? words("status") : "In review"} />
+          <Status
+            look={status}
+            text={statusText ?? (changed.has("status") ? words("status") : "In review")}
+          />
         </span>
       </div>
       <label data-q="amount" className="flex flex-col gap-1.5 text-[13px]">
@@ -145,6 +151,18 @@ const APPROVERS: readonly { readonly name: string; readonly role: string }[] = [
   { name: "Ingrid Berg", role: "Finance" },
 ];
 
+/** The colours of a status: blue while it moves, green when approved, red when sent back. */
+const TONES: Readonly<
+  Record<string, { readonly mark: string; readonly tint: string; readonly ink: string }>
+> = {
+  Approved: { mark: "#2f9e6a", tint: "#e3f5ec", ink: "#1f7a50" },
+  "Sent back": { mark: "#d6455d", tint: "#fbe7ea", ink: "#a8304a" },
+};
+const MOVING = { mark: "#4a6cf7", tint: "#e8edff", ink: "#3550c8" };
+
+/** How far each status has come, of three steps. */
+const DONE: Readonly<Record<string, number>> = { Approved: 3, "Sent back": 1 };
+
 export function Status({
   look,
   text,
@@ -152,24 +170,34 @@ export function Status({
   readonly look: string;
   readonly text: string;
 }): ReactNode {
+  const tone = TONES[text] ?? MOVING;
   if (look === "Pill")
     return (
-      <span className="rounded-full bg-[#e8edff] px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap text-[#3550c8]">
+      <span
+        className="rounded-full px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap"
+        style={{ background: tone.tint, color: tone.ink }}
+      >
         {text}
       </span>
     );
-  if (look === "Steps")
+  if (look === "Steps") {
+    const done = DONE[text] ?? 2;
     return (
       <span className="flex items-center gap-1 text-[12px] whitespace-nowrap text-[#5b5b66]">
-        <span className="h-1 w-6 rounded-full bg-[#4a6cf7]" />
-        <span className="h-1 w-6 rounded-full bg-[#4a6cf7]" />
-        <span className="h-1 w-6 rounded-full bg-[#dcdce3]" />
+        {[1, 2, 3].map((n) => (
+          <span
+            key={n}
+            className="h-1 w-6 rounded-full"
+            style={{ background: n <= done ? tone.mark : "#dcdce3" }}
+          />
+        ))}
         <span className="ml-1">{text}</span>
       </span>
     );
+  }
   return (
     <span className="flex items-center gap-1.5 text-[13px] whitespace-nowrap text-[#5b5b66]">
-      <span className="size-2 rounded-full bg-[#4a6cf7]" />
+      <span className="size-2 rounded-full" style={{ background: tone.mark }} />
       {text}
     </span>
   );

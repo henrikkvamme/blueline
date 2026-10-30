@@ -22,6 +22,12 @@ import { fetchLine, hush, say } from "./voice";
  * cursor library paints.
  */
 
+/** What a beat shows on the part while it shows: a variant, a state, or both. */
+export interface Preview {
+  readonly variant: string | undefined;
+  readonly state: string | undefined;
+}
+
 export type Phase = "idle" | "moving" | "speaking" | "turn" | "paused" | "lost" | "done";
 
 export interface Place {
@@ -147,13 +153,15 @@ export class Walker {
   private path = "";
   private previewing = false;
   private untrack: (() => void) | undefined;
+  /** The element of the beat that shows, while it shows. */
+  private element: Element | undefined;
   private unlisten: (() => void) | undefined;
   /** Resolves a turn: the reviewer clicked, or skipped it. */
   private turned: (() => void) | undefined;
 
   constructor(
     private readonly view: () => { readonly width: number; readonly height: number },
-    private readonly onPreview: (variant: string | undefined) => void,
+    private readonly onPreview: (preview: Preview | undefined) => void,
   ) {}
 
   readonly subscribe = (listener: () => void) => {
@@ -194,10 +202,11 @@ export class Walker {
     void this.play(this.generation);
   }
 
-  /** The reviewer did something: the walk waits where it is, and its voice stops. */
+  /** The reviewer did something: the walk waits where it is, and its voice stops. What the
+   * beat previews stays on the page, as he may speak about it. */
   pause() {
     if (!this.active()) return;
-    this.halt();
+    this.halt(true);
     this.set({
       ...this.snap,
       phase: "paused",
@@ -207,6 +216,15 @@ export class Walker {
           ? undefined
           : { ...this.snap.note, tone: "paused", line: undefined, key: "paused" },
     });
+    // The element may still change while the walk waits: the cursor and the note follow it,
+    // so they never cover it.
+    const beat = this.walk[this.at];
+    if (beat !== undefined && this.element?.isConnected === true)
+      this.track(beat, this.element, this.generation, (box) => {
+        const note = this.snap.note;
+        if (note !== undefined)
+          this.set({ ...this.snap, note: { ...note, place: aim(box, this.view()).place } });
+      });
   }
 
   /** Go on from the beat it stopped at, after a pause or a lost element. */
@@ -252,9 +270,9 @@ export class Walker {
     for (const listener of this.listeners) listener();
   }
 
-  /** Ends the running loop, its voice, its watchers and its preview. Escape still reaches the
-   * walker until it stops. */
-  private halt() {
+  /** Ends the running loop, its voice, its watchers, and its preview unless `keep`. Escape
+   * still reaches the walker until it stops. */
+  private halt(keep = false) {
     this.generation++;
     hush();
     this.turned = undefined;
@@ -262,7 +280,7 @@ export class Walker {
     this.untrack = undefined;
     // A move in flight stops where the cursor is.
     if (this.player !== undefined) this.player.place(this.player.pos);
-    if (this.previewing) {
+    if (this.previewing && !keep) {
       this.previewing = false;
       this.onPreview(undefined);
     }
@@ -292,9 +310,9 @@ export class Walker {
     while (this.at < this.walk.length) {
       const beat = this.walk[this.at];
       if (beat === undefined || !live()) return;
-      if (beat.peek !== undefined) {
+      if (beat.peek !== undefined || beat.state !== undefined) {
         this.previewing = true;
-        this.onPreview(beat.peek);
+        this.onPreview({ variant: beat.peek, state: beat.state });
         // The page draws the preview before the cursor measures it.
         await sleep(60);
         if (!live()) return;
@@ -343,6 +361,7 @@ export class Walker {
       let last = rect;
       let heard = voice !== undefined;
       show(rect, heard);
+      this.element = element;
       this.track(beat, element, generation, (box) => {
         last = box;
         show(box, heard);
@@ -365,7 +384,7 @@ export class Walker {
       if (!live()) return;
       this.untrack?.();
       this.untrack = undefined;
-      if (beat.peek !== undefined && this.previewing) {
+      if (this.previewing) {
         this.previewing = false;
         this.onPreview(undefined);
       }

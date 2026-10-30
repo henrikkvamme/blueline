@@ -90,7 +90,10 @@ export function QueueStates() {
           <figure key={s.name} className="flex flex-col gap-2">
             <figcaption className="text-[12px] font-medium text-[#5b5b66]">{s.name}</figcaption>
             <div className="h-[560px]">
-              <Panel {...s.props} preview={(_, v) => <Status look={v} text="In review" />} />
+              <Panel
+                {...s.props}
+                preview={(_, v, state) => <Status look={v} text={state ?? "In review"} />}
+              />
             </div>
           </figure>
         ))}
