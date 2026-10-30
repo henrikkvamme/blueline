@@ -1,16 +1,5 @@
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import {
-  Clock,
-  Effect,
-  FileSystem,
-  Path,
-  PlatformError,
-  Random,
-  Option,
-  Schema,
-  Semaphore,
-} from "effect";
+import { Clock, Effect, FileSystem, Path, PlatformError, Random, Option, Schema } from "effect";
 import {
   answeredAt,
   ClaimsSchema,
@@ -23,6 +12,7 @@ import {
   NO_CLAIMS,
   type Claims,
 } from "./claims.ts";
+import { holding } from "../src/io/lock.ts";
 import { logPath } from "../src/io/log.ts";
 import { takeLines, type Line } from "./lines.ts";
 
@@ -59,47 +49,6 @@ export const readFile = Effect.fn(function* <A>(
 
 const isMissing = (error: PlatformError.PlatformError) => error.reason._tag === "NotFound";
 
-/** Each lock's queue in this process, by the lock's path. */
-const queues = new Map<string, Semaphore.Semaphore>();
-
-const queueOf = (lock: string) => {
-  const known = queues.get(lock);
-  if (known !== undefined) return known;
-  const made = Semaphore.makeUnsafe(1);
-  queues.set(lock, made);
-  return made;
-};
-
-/**
- * Opens the lock's database and starts a write transaction on it, which SQLite lets only one
- * connection hold; undefined at once while another holds it. It does not wait.
- */
-const openLock = (lock: string) =>
-  Effect.sync(() => {
-    const db = new DatabaseSync(lock, { timeout: 0 });
-    try {
-      db.exec("BEGIN IMMEDIATE");
-      return db;
-    } catch {
-      db.close();
-      return undefined;
-    }
-  });
-
-const closeLock = (db: DatabaseSync | undefined) =>
-  Effect.sync(() => {
-    if (db === undefined) return;
-    try {
-      db.exec("ROLLBACK");
-    } finally {
-      db.close();
-    }
-  });
-
-/** How long to wait between tries, and how many: about 10 s, then it fails and says so. A live
- * process holds the lock that long only if it is stuck. */
-const RETRY = { every: "25 millis", times: 400 } as const;
-
 /**
  * Runs `use` while this process holds the file's lock: a write transaction on a SQLite
  * database beside it. The system frees the lock when its process ends, also when it is
@@ -114,21 +63,7 @@ export const withLock = <A, E, R>(file: string, use: Effect.Effect<A, E, R>) =>
     const lock = `${file}.lock`;
     // The folder the file goes in, as `.blueline/` before the first note.
     yield* fs.makeDirectory((yield* Path.Path).dirname(file), { recursive: true });
-    const once = Effect.acquireUseRelease(
-      openLock(lock),
-      (db) => (db === undefined ? Effect.succeedNone : Effect.asSome(use)),
-      closeLock,
-    );
-    return yield* queueOf(lock).withPermit(
-      Effect.gen(function* () {
-        for (let tries = 0; ; tries += 1) {
-          const done = yield* once;
-          if (Option.isSome(done)) return done.value;
-          if (tries >= RETRY.times) return yield* Effect.fail(`${lock} is held`);
-          yield* Effect.sleep(RETRY.every);
-        }
-      }),
-    );
+    return yield* holding(lock, use);
   });
 
 const ClaimsFile = Schema.fromJsonString(ClaimsSchema, { space: 1 });

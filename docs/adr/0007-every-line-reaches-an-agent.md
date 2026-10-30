@@ -158,9 +158,11 @@ token is refused, and its note tells that agent to end. Each adapter recovers wh
   else the start's outcome is recorded as not known, and the fence handles a late thread.
 - `claude -p` and `codex exec`: the process ID is kept in the start row as soon as the process
   starts. A start whose process is gone and that has not joined has failed. A start whose
-  receipt was lost is recorded as not known, and the fence handles it. The start note makes the agent's first action a command that joins
-it. `wait_for_feedback` and each `blueline` command join a session, not only a hook, so an
-agent with no hooks joins too.
+  receipt was lost is recorded as not known, and the fence handles it.
+
+The start note makes the agent's first action a command that joins it. `wait_for_feedback`
+and each `blueline` command join a session, not only a hook, so an agent with no hooks joins
+too.
 
 ## Time
 

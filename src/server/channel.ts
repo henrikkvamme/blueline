@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, readFile, writeFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { Effect, Option, Schema } from "effect";
+import { holding } from "../io/lock.ts";
 import { logPath } from "../io/log.ts";
 
 /*
@@ -43,14 +45,23 @@ export const LINE_FORMAT = 1;
 
 /**
  * A line as the feedback file keeps it: the page's JSON object with the format version and
- * the line's own ID, which readers claim it by (bin/wire.ts). The server sets both, so a page
- * cannot give two lines one ID. Undefined when the body is not a JSON object.
+ * the line's own ID, which readers claim it by (bin/wire.ts). The page's ID stays when it is a
+ * UUID, so a line that the page sends again is the same line; else the server gives it
+ * `fresh`. Undefined when the body is not a JSON object.
  */
-export function stamped(body: string, line: string): string | undefined {
+export function stamped(body: string, fresh: string): string | undefined {
+  return stampedLine(body, fresh)?.text;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function stampedLine(body: string, fresh: string) {
   try {
     const value: unknown = JSON.parse(body);
     if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-    return JSON.stringify({ ...value, v: LINE_FORMAT, line });
+    const given: unknown = Reflect.get(value, "line");
+    const id = typeof given === "string" && UUID.test(given) ? given : fresh;
+    return { id, text: JSON.stringify({ ...value, v: LINE_FORMAT, line: id }) };
   } catch {
     return undefined;
   }
@@ -162,18 +173,42 @@ function note(
   const chunks: Buffer[] = [];
   request.on("data", (chunk: Buffer) => chunks.push(chunk));
   request.on("end", () => {
-    const id = randomUUID();
-    const line = stamped(Buffer.concat(chunks).toString("utf8"), id);
+    const line = stampedLine(Buffer.concat(chunks).toString("utf8"), randomUUID());
     if (line === undefined) return end(response, 400);
     mkdir(path.dirname(files.feedback), { recursive: true })
-      .then(() => appendFile(files.feedback, `${line}\n`))
-      .then(() => logged(files.feedback, sentOf(line, id)))
+      .then(() => Effect.runPromise(appendOnce(files.feedback, line.text, line.id)))
+      .then((added) => (added ? logged(files.feedback, sentOf(line.text, line.id)) : undefined))
       .then(
         () => end(response, 204),
         () => end(response, 500),
       );
   });
 }
+
+const IdOnly = Schema.fromJsonString(Schema.Struct({ line: Schema.optional(Schema.String) }));
+const idOf = (raw: string) => Option.getOrUndefined(Schema.decodeOption(IdOnly)(raw))?.line;
+
+export const appendOnce = (feedback: string, text: string, id: string) =>
+  holding(
+    `${feedback}.lock`,
+    Effect.tryPromise(async () => {
+      const file = await open(feedback, "a+");
+      try {
+        const bytes = await file.readFile();
+        const whole = bytes.lastIndexOf(NEWLINE) + 1;
+        const lines = bytes.subarray(0, whole).toString("utf8").split("\n");
+        if (lines.some((raw) => idOf(raw) === id)) return false;
+        if (whole < bytes.length) await file.truncate(whole);
+        await file.appendFile(`${text}\n`);
+        await file.sync();
+        return true;
+      } finally {
+        await file.close();
+      }
+    }),
+  );
+
+const NEWLINE = 10;
 
 // GET /<name> shows a screenshot the page kept.
 function showImage(files: ChannelFiles, rest: string, response: ServerResponse) {
