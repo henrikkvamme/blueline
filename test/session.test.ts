@@ -1356,6 +1356,24 @@ describe("notes on a page, off a step", () => {
     expect(sent.context.notes.find((n) => n.id === stepNoteId(place))?.state).toBe("waiting");
   });
 
+  it("keeps the step's actors running when the reviewer points or pins", () => {
+    // XState 5 left the whole parallel machine on a reentry of the layer, so each point
+    // restarted the step's and the poll's actors. XState 6 enters the layer again alone.
+    const onStep = after(start(true), { type: "entered" });
+    expect(onStep.matches({ review: { on: "ready" } })).toBe(true);
+    const [pointed, pointing] = transition(sessionMachine, onStep, {
+      type: "point",
+      id: "p1",
+      pin,
+    });
+    expect(pointed.matches({ layer: "pinned" })).toBe(true);
+    const [, pinning] = transition(sessionMachine, pointed, { type: "pin", id: "p1" });
+    const restarts = (actions: readonly { readonly type: string }[]) =>
+      actions.filter((a) => a.type === "@xstate.spawn" || a.type === "@xstate.stop");
+    expect(restarts(pointing)).toEqual([]);
+    expect(restarts(pinning)).toEqual([]);
+  });
+
   it("points at nothing with no page and no step", () => {
     expect(after(start(), { type: "point", id: "p1", pin }).matches({ layer: "pinned" })).toBe(
       false,
