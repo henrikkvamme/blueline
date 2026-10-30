@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
+  ahead,
   annotate,
   annotationsOn,
   answerOf,
@@ -14,6 +15,7 @@ import {
   show,
   unsettle,
   waiting,
+  type Beat,
   type Moment,
   type Move,
   type Queue,
@@ -23,21 +25,24 @@ import { CornerDownRight, PenLine } from "lucide-react";
 import { cx } from "../../ui/cx";
 import { PANEL } from "../../ui/geometry";
 import { Panel, SHIP_SECONDS, type Composer, type Ship } from "./panel";
-import { AppNav, AppPage, Status } from "./app";
+import { AppNav, AppPage, Board } from "./app";
 import { Guide, GuideToggle } from "./guide";
 import { VOICES } from "./voice";
 import { Walker, type Preview } from "./walker";
 import { Strokes, TalkView, usePointAndTalk } from "./talk";
-import { answerTo, selectorOf, start, targetOf, type Path } from "./script";
+import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
+import { ask, elements, forget, played } from "./agent";
 import { QueueStates } from "./queue-states";
 
 /*
  * The queue prototype: a made-up app, the agent's remarks pinned on it, and one panel with
- * Next and Back. The agent is a script: it answers each annotation after a set delay, and
- * the page shows its change. The state survives a reload; Reset starts again.
+ * Next and Back. The agent's remarks and its answers to annotations come from a script, after
+ * a set delay. What he says with point and talk goes to a real agent when the dev server has
+ * one: it answers on the page with the cursor, and puts changes in the queue. The state
+ * survives a reload; Reset starts again.
  */
 
-const KEY = "blueline.workshop.queue.3";
+const KEY = "blueline.workshop.queue.4";
 const GUIDE = "blueline.workshop.queue.guide";
 
 interface State {
@@ -47,14 +52,23 @@ interface State {
   readonly stopped: boolean;
 }
 
-/** How long spoken words wait before they send themselves, in ms. */
-const SPOKEN = 3000;
-
 const fresh = (delay = 8): State => ({
   queue: next(start()).queue,
   delay,
   stopped: false,
 });
+
+/** One exchange of point and talk: what he said, and how far the agent's answer is. */
+interface Exchange {
+  readonly said: string;
+  readonly tone: "busy" | "showing" | "done" | "failed";
+  /** What the agent does now, or its last words. */
+  readonly status: string;
+  /** The walk it showed last, to show again. */
+  readonly walk: readonly Beat[] | undefined;
+  /** The annotation it put in the queue, whose answer comes later. */
+  readonly annotation: string | undefined;
+}
 
 interface GuideSettings {
   /** Whether each remark walks when it shows. */
@@ -106,7 +120,13 @@ function Live() {
   const [peek, setPeek] = useState<string | undefined>(undefined);
   // The state that the part shows, of a choice's states; none for the page's own.
   const [shown, setShown] = useState<string | undefined>(undefined);
+  // An answer's element as it was, while he holds b or hovers Was.
+  const [before, setBefore] = useState(false);
   const [guidePeek, setGuidePeek] = useState<Preview | undefined>(undefined);
+  // A page of the app that he, or the agent's cursor, went to by a click.
+  const [visit, setVisit] = useState<Path | undefined>(undefined);
+  const [exchange, setExchange] = useState<Exchange | undefined>(undefined);
+  const asking = useRef<AbortController | undefined>(undefined);
   const walker = useMemo(
     () =>
       new Walker(
@@ -128,11 +148,15 @@ function Live() {
   );
   const q = state.queue;
   const here = current(q);
-  const page: Path = (here?.page as Path | undefined) ?? "/request";
+  const page: Path = visit ?? (here?.page as Path | undefined) ?? "/request";
+  const pageNow = useRef(page);
+  pageNow.current = page;
   // Each remark walks when it shows, with walks on; its preview ends when it goes.
   useEffect(() => {
     setPeek(undefined);
     setShown(undefined);
+    setBefore(false);
+    setVisit(undefined);
     if (guide.on && here?.walk !== undefined) walker.start(here.walk, here.page);
     else walker.stop();
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new remark starts a walk, not a new setting
@@ -175,6 +199,10 @@ function Live() {
 
   const move = (to: (q: Queue) => Move) => {
     const moved = to(q);
+    // An exchange that is over goes with the remark; one whose change is still coming stays.
+    const open =
+      exchange?.annotation !== undefined && answerOf(q, exchange.annotation) === undefined;
+    if (exchange !== undefined && exchange.tone !== "busy" && !open) setExchange(undefined);
     if (moved.settled.length > 0) setToast(moved.settled);
     setState((s) => ({ ...s, queue: moved.queue, stopped: false }));
   };
@@ -199,28 +227,176 @@ function Live() {
     };
   };
   const moment = useRef<Moment>({});
-  // Point and talk: ⌥⌘ held stops the walk; the words go to the composer and send
-  // themselves in a moment, unless he touches them. A drawing with no words waits for his
-  // words.
+  /** Tells the agent how its walk went, once it ends, stops or waits. */
+  const watch = (id: string) => {
+    const run = walker.snapshot().run;
+    const off = walker.subscribe(() => {
+      const { phase, beat, note } = walker.snapshot();
+      const at = String(beat + 1);
+      const how =
+        walker.snapshot().run !== run
+          ? "Another walk took its place: a remark or an answer came."
+          : phase === "done"
+            ? "He watched it to the end."
+            : phase === "paused"
+              ? `He paused it at beat ${at}, maybe to speak.`
+              : phase === "idle"
+                ? `He stopped it at beat ${at}.`
+                : phase === "lost"
+                  ? `It lost its element at beat ${at}: ${note?.line ?? ""}`
+                  : undefined;
+      if (how === undefined) return;
+      off();
+      // The page draws what the last click changed before it is measured.
+      window.setTimeout(() => played(id, how, pageNow.current), 120);
+    });
+  };
+
+  // Point and talk: ⌥⌘ held stops the walk. His words go to the agent, with what he pointed
+  // at and what the page shows, and the agent answers on the page with its cursor. With no
+  // agent, the script puts his words in the queue and says it is on it.
   const talk = usePointAndTalk({
     onStart: () => {
       moment.current = momentNow();
-      walker.pause();
+      walker.attend();
     },
-    onWords: (target, text, pointed, drawn) =>
-      setComposer({
-        target: target ?? here?.target ?? selectorOf("title"),
-        text,
-        pointed,
-        drawn,
-        moment: moment.current,
-        sendsAt: text === "" ? undefined : Date.now() + SPOKEN,
-      }),
+    onWords: (spoken, text, pointed, drawn, at) => {
+      const target = spoken ?? here?.target ?? selectorOf("title");
+      const seenThen = moment.current;
+      const note = (on: string, words: string) => {
+        const id = `a${Date.now().toString(36)}`;
+        setState((s) => ({
+          ...s,
+          queue: annotate(s.queue, {
+            id,
+            page,
+            target: on,
+            text: words,
+            on: current(s.queue)?.id,
+            at: Date.now(),
+            pointed,
+            drawn,
+            moment: seenThen,
+          }),
+        }));
+        return id;
+      };
+      asking.current?.abort();
+      const control = new AbortController();
+      asking.current = control;
+      const update = (to: (x: Exchange) => Exchange) => {
+        if (asking.current === control) setExchange((x) => (x === undefined ? x : to(x)));
+      };
+      setExchange({
+        said: text,
+        tone: "busy",
+        status: "Thinking",
+        walk: undefined,
+        annotation: undefined,
+      });
+      walker.from({ x: at.x + 16, y: at.y + 14 });
+      const context = {
+        said: text,
+        pointedWhileSaying: pointed,
+        circled: drawn.flatMap((d) => (d.target === undefined ? [] : [d.target])),
+        mouse: [Math.round(at.x), Math.round(at.y)],
+        page,
+        pages: PAGES,
+        remark:
+          here === undefined
+            ? undefined
+            : {
+                id: here.id,
+                kind: here.kind,
+                title: here.title,
+                text: here.text,
+                variants: here.variants,
+                options: here.options,
+                states: here.states,
+                kept: q.picks[here.id],
+                walk: here.walk?.map((b) => b.say),
+              },
+        shownWhenHeSpoke: seenThen,
+        queueAhead: ahead(q).map((a) =>
+          a.kind === "remark" ? a.remark.title : "the agent's answer to an annotation",
+        ),
+        viewport: [innerWidth, innerHeight],
+        panelWidth: PANEL,
+        elements: elements(),
+      };
+      void ask(
+        context,
+        (event) => {
+          if (asking.current !== control) return;
+          switch (event.type) {
+            case "status":
+              update((x) => ({ ...x, tone: "busy", status: event.text }));
+              break;
+            case "show":
+              update((x) => ({ ...x, tone: "showing", walk: event.beats }));
+              walker.start(event.beats, pageNow.current);
+              watch(event.id);
+              break;
+            case "annotate": {
+              const id = note(event.target, event.text);
+              update((x) => ({ ...x, annotation: id }));
+              break;
+            }
+            case "done":
+              update((x) => ({
+                ...x,
+                tone: "done",
+                status: event.text === "" ? "Done" : event.text,
+              }));
+              break;
+            case "failed":
+              update((x) => ({ ...x, tone: "failed", status: event.why }));
+              break;
+          }
+        },
+        control.signal,
+      ).then((answered) => {
+        if (answered || control.signal.aborted) return;
+        const id = note(target, text);
+        walker.start([heard(target, state.delay)], page);
+        update((x) => ({ ...x, tone: "done", status: "In the queue", annotation: id }));
+      });
+    },
   });
-  useEffect(() => {
-    if (composer?.sendsAt !== undefined && clock >= composer.sendsAt) send();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- the clock decides, not send
-  }, [clock, composer?.sendsAt]);
+
+  /** What the panel's line says about the exchange: his words, and the agent's answer. */
+  const line = (() => {
+    if (talk.phase === "listening")
+      return { said: undefined, tone: "listening", status: "Listening" } as const;
+    if (talk.phase === "thinking")
+      return { said: undefined, tone: "busy", status: "Hearing you" } as const;
+    if (exchange === undefined) return undefined;
+    const annotation = exchange.annotation;
+    const answered = annotation !== undefined && answerOf(q, annotation) !== undefined;
+    const due =
+      annotation === undefined ? undefined : q.annotations.find((a) => a.id === annotation);
+    const left =
+      due === undefined || answered
+        ? undefined
+        : Math.max(0, Math.ceil((due.at + state.delay * 1000 - clock) / 1000));
+    return {
+      said: exchange.said,
+      tone: exchange.tone,
+      // While it shows him, the line says what the cursor says.
+      status: exchange.tone === "showing" ? (walk.note?.words ?? "Showing you") : exchange.status,
+      beat: exchange.tone === "showing" ? { at: walk.beat, of: walk.beats } : undefined,
+      change:
+        annotation === undefined
+          ? undefined
+          : answered
+            ? "Its answer is in the queue"
+            : `Back in ${String(left ?? 0)} s`,
+      onAgain:
+        exchange.walk === undefined || exchange.tone === "busy" || walker.active()
+          ? undefined
+          : () => exchange.walk !== undefined && walker.start(exchange.walk, page),
+    } as const;
+  })();
 
   const open = (target: string) => {
     const now = momentNow();
@@ -238,8 +414,6 @@ function Live() {
         text: composer.text.trim(),
         on: current(s.queue)?.id,
         at: Date.now(),
-        pointed: composer.pointed,
-        drawn: composer.drawn,
         moment: composer.moment,
       }),
     }));
@@ -278,7 +452,7 @@ function Live() {
       else if (e.key === "y") move(settleNow);
       else if (e.key === "u" && toast.length > 0) undo();
       else if (e.key === "a" && here !== undefined) open(here.target);
-      else if (e.key === "g") toggleWalk();
+      else if (e.key === " ") toggleWalk();
       else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
       // A number previews; Enter keeps what it previews.
       else if (n >= 1 && n <= values.length) setPeek(values[n - 1]);
@@ -292,8 +466,24 @@ function Live() {
   });
 
   const changed = new Set(
-    q.annotations.filter((a) => answerOf(q, a.id) !== undefined).map((a) => targetOf(a.target)),
+    q.annotations
+      .filter((a) => answerOf(q, a.id) !== undefined)
+      .map((a) => targetOf(a.target))
+      .filter((t) => !(before && here?.kind === "answer" && t === targetOf(here.target))),
   );
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "b" && !e.repeat && composer === undefined && here?.kind === "answer")
+        setBefore(true);
+    };
+    const up = (e: KeyboardEvent) => e.key === "b" && setBefore(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, [composer, here?.kind]);
 
   return (
     <>
@@ -305,6 +495,9 @@ function Live() {
         reset={() => {
           setState(fresh(state.delay));
           walker.stop();
+          asking.current?.abort();
+          setExchange(undefined);
+          forget();
         }}
       />
       <main
@@ -313,9 +506,10 @@ function Live() {
         className="min-h-screen bg-[#fbfbfc] px-8 py-20 text-[#16161a]"
       >
         <div className="mx-auto flex max-w-xl flex-col gap-4">
-          <AppNav path={page} />
+          <AppNav path={page} onGo={setVisit} />
           <AppPage
             path={page}
+            onGo={setVisit}
             changed={changed}
             status={
               (here?.id === "r-status" ? (peek ?? guidePeek?.variant) : undefined) ??
@@ -331,12 +525,15 @@ function Live() {
       <TalkView talk={talk} reduced={guide.reduced} />
       <Panel
         docked
-        preview={(_, v, state) => <Status look={v} text={state ?? "In review"} />}
+        preview={(r, v, state) => <Board remark={r.id} value={v} state={state} />}
         peek={peek ?? (here?.kind === "choice" ? guidePeek?.variant : undefined)}
         state={shown ?? guidePeek?.state}
         onState={setShown}
         onPeek={setPeek}
         walk={here?.walk === undefined ? undefined : walk.phase}
+        beat={{ at: walk.beat, of: walk.beats }}
+        before={before}
+        onBefore={setBefore}
         onWalk={toggleWalk}
         voice={guide.voice}
         onVoice={() => setGuide((g) => ({ ...g, voice: !g.voice }))}
@@ -344,6 +541,7 @@ function Live() {
         eta={eta}
         composer={composer}
         toast={toast}
+        exchange={line}
         ship={ship}
         onNext={() => move(next)}
         onBack={() => move(back)}
@@ -351,10 +549,7 @@ function Live() {
         seen={seen}
         onSeen={setSeen}
         onAnnotate={() => here !== undefined && open(here.target)}
-        onWrite={(text) =>
-          setComposer((c) => (c === undefined ? c : { ...c, text, sendsAt: undefined }))
-        }
-        onHold={() => setComposer((c) => (c === undefined ? c : { ...c, sendsAt: undefined }))}
+        onWrite={(text) => setComposer((c) => (c === undefined ? c : { ...c, text }))}
         onSend={send}
         onCancel={() => setComposer(undefined)}
         onPick={choose}

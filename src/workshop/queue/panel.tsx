@@ -13,7 +13,9 @@ import {
   Eye,
   GitMerge,
   History,
+  Mic,
   PenLine,
+  RotateCcw,
   Shuffle,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -28,10 +30,8 @@ import {
   order,
   seen,
   waiting,
-  type Drawn,
   type Kind,
   type Moment,
-  type Pointed,
   type Queue,
   type Remark,
 } from "../../queue/queue";
@@ -50,11 +50,7 @@ import type { Phase } from "./walker";
 export interface Composer {
   readonly target: string;
   readonly text: string;
-  /** Spoken words send themselves at this time, in ms, unless he holds them to edit. */
-  readonly sendsAt?: number | undefined;
-  /** Spoken: the elements he pointed at and what he drew, and what showed. */
-  readonly pointed?: readonly Pointed[] | undefined;
-  readonly drawn?: readonly Drawn[] | undefined;
+  /** What showed when he opened it. */
   readonly moment?: Moment | undefined;
 }
 
@@ -66,12 +62,29 @@ export interface Ship {
 /** How long the agent waits after the last settle before it ships. */
 export const SHIP_SECONDS = 10;
 
+/** The line between him and the agent, at the panel's foot. */
+export interface Line {
+  /** What the agent heard him say; none while it listens or hears. */
+  readonly said: string | undefined;
+  readonly tone: "listening" | "busy" | "showing" | "done" | "failed";
+  /** What the agent does now, or its last words. */
+  readonly status: string;
+  /** Where its walk is, while it shows him. */
+  readonly beat?: { readonly at: number; readonly of: number } | undefined;
+  /** The change it put in the queue: when it comes back, or that it came. */
+  readonly change?: string | undefined;
+  /** Shows the agent's last walk again. */
+  readonly onAgain?: (() => void) | undefined;
+}
+
 export interface PanelProps {
   readonly queue: Queue;
   /** Seconds until the agent's next answer comes. */
   readonly eta: number | undefined;
   readonly composer: Composer | undefined;
   readonly toast: readonly string[];
+  /** Point and talk: what he said last, and how far the agent's answer is. */
+  readonly exchange?: Line | undefined;
   readonly ship: Ship | undefined;
   /** Draws one variant of a choice, small, in the app's own look. */
   readonly preview?: (remark: Remark, variant: string, state: string | undefined) => ReactNode;
@@ -79,8 +92,6 @@ export interface PanelProps {
   readonly onBack: () => void;
   readonly onAnnotate: () => void;
   readonly onWrite: (text: string) => void;
-  /** He touched the spoken words: they wait for his Send. */
-  readonly onHold?: () => void;
   readonly onSend: () => void;
   readonly onCancel: () => void;
   readonly onPick: (value: string) => void;
@@ -99,6 +110,11 @@ export interface PanelProps {
   readonly onState?: (state: string | undefined) => void;
   /** Where the agent's cursor is on this remark's walk; none when it has no walk. */
   readonly walk?: Phase | undefined;
+  /** An answer: whether the page shows the element as it was, and to show it so. */
+  readonly before?: boolean;
+  readonly onBefore?: (on: boolean) => void;
+  /** The beat that the walk shows, from 0, and how many it has. */
+  readonly beat?: { readonly at: number; readonly of: number } | undefined;
   /** Pause the walk, go on with it, or walk again. */
   readonly onWalk?: () => void;
   readonly voice?: boolean;
@@ -153,6 +169,8 @@ export function Panel(props: PanelProps) {
       {props.composer === undefined &&
         (props.toast.length > 0 ? (
           <Toast count={props.toast.length} onUndo={props.onUndo} />
+        ) : props.exchange !== undefined ? (
+          <ExchangeLine line={props.exchange} />
         ) : (
           !shipping && here !== undefined && <UpNext queue={q} eta={props.eta} forward={forward} />
         ))}
@@ -361,7 +379,8 @@ const KEYS = [
   ["Enter", "Keep what the preview shows"],
   ["y", "Settle now and go on"],
   ["u", "Undo the last settle"],
-  ["g", "Show me, pause, go on"],
+  ["b held", "An answer: the page as it was"],
+  ["Space", "Show me, pause, go on"],
   ["m", "Mute the voice"],
   ["Esc", "Pause the cursor; again, stop it"],
 ] as const;
@@ -383,7 +402,6 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
   const { queue: q, remark: r } = props;
   const kind = KIND[r.kind];
   const settled = isSettled(q, r.id);
-  const mine = annotationsOn(q, r.id);
   return (
     <section className="flex animate-dt-arrive flex-col gap-4 px-4 pt-2 pb-5">
       <div className="flex flex-col gap-1.5">
@@ -409,7 +427,9 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
           <p className="text-[13px] leading-5 text-pretty text-dt-muted">{r.text}</p>
         )}
       </div>
-      {r.kind === "answer" && <AnswerView queue={q} remark={r} />}
+      {r.kind === "answer" && (
+        <AnswerView queue={q} remark={r} before={props.before === true} onBefore={props.onBefore} />
+      )}
       {r.kind === "choice" && r.variants !== undefined && (
         <Choices
           values={r.variants}
@@ -432,12 +452,11 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
           picked={q.picks[r.id]}
           peek={props.peek}
           verb="Answer"
-          draw={undefined}
+          draw={props.preview === undefined ? undefined : (v) => props.preview?.(r, v, props.state)}
           onPeek={props.onPeek}
           onPick={props.onPick}
         />
       )}
-      {mine.length > 0 && <Mine queue={q} remark={r} />}
     </section>
   );
 }
@@ -449,8 +468,24 @@ function WalkControls(props: PanelProps & { readonly phase: Phase }) {
   const stopped = props.phase === "paused" || props.phase === "lost";
   const control =
     "-my-1 flex items-center gap-1 rounded-full px-2 py-1 font-medium text-dt-muted hover:bg-dt-raised hover:text-dt-text";
+  const beat = props.beat;
   return (
     <span data-guide-ui="" className="-mr-1.5 flex items-center">
+      {beat !== undefined && beat.of > 1 && (running || stopped) && (
+        // How far the walk has come: a short line for each beat.
+        <span className="mr-1 flex animate-dt-fade items-center gap-[3px]" aria-hidden>
+          {Array.from({ length: beat.of }, (_, i) => (
+            <span
+              key={i}
+              className={cx(
+                "h-[3px] rounded-full transition-all duration-300",
+                i === beat.at ? "w-3 bg-dt-accent" : "w-1.5",
+                i < beat.at ? "bg-dt-accent/50" : i > beat.at && "bg-dt-line",
+              )}
+            />
+          ))}
+        </span>
+      )}
       <button type="button" onClick={props.onWalk} className={control}>
         {running ? (
           <>
@@ -476,8 +511,10 @@ function WalkControls(props: PanelProps & { readonly phase: Phase }) {
         onClick={props.onVoice}
         className={cx(control, "w-7 justify-center px-0")}
       >
-        {props.voice === true ? (
-          <Volume2 className={cx("size-3.5", running && "text-dt-accent")} aria-hidden />
+        {props.voice === true && props.phase === "speaking" ? (
+          <Speaking />
+        ) : props.voice === true ? (
+          <Volume2 className="size-3.5" aria-hidden />
         ) : (
           <VolumeX className="size-3.5" aria-hidden />
         )}
@@ -486,10 +523,48 @@ function WalkControls(props: PanelProps & { readonly phase: Phase }) {
   );
 }
 
+/** The agent's voice as it speaks, as Clicky's notch shows it: three bars that dance. */
+function Speaking() {
+  return (
+    <span className="flex h-3.5 items-center gap-[2px]" aria-hidden>
+      {[0, 180, 90].map((delay) => (
+        <span
+          key={delay}
+          className="h-full w-[2.5px] origin-center rounded-full bg-dt-accent"
+          style={{ animation: `dt-eq 720ms ease-in-out ${String(delay)}ms infinite alternate` }}
+        />
+      ))}
+    </span>
+  );
+}
+
 /** What he wrote, and what the agent changed for it: the words before and after. */
-function AnswerView({ queue: q, remark: r }: { readonly queue: Queue; readonly remark: Remark }) {
+/** What he said, and what the agent changed for it. Was and Now are not only words: a hover
+ * on Was, or b held, shows the element on the page as it was; letting go shows it as it is. */
+function AnswerView({
+  queue: q,
+  remark: r,
+  before,
+  onBefore,
+}: {
+  readonly queue: Queue;
+  readonly remark: Remark;
+  readonly before: boolean;
+  readonly onBefore: ((on: boolean) => void) | undefined;
+}) {
   const asked = q.annotations.filter((a) => r.answers?.includes(a.id));
   const change = changeOf(targetOf(r.target));
+  const row = (on: boolean) =>
+    cx(
+      "col-span-2 grid grid-cols-subgrid items-baseline rounded-[6px] px-2 py-1 transition-colors",
+      on ? "bg-dt-line" : "hover:bg-dt-line/60",
+    );
+  const shows = (
+    <span className="flex items-center gap-1 justify-self-end text-[11px] font-medium text-dt-faint">
+      <Eye className="size-3.5" aria-hidden />
+      On the page
+    </span>
+  );
   return (
     <div className="flex flex-col gap-3">
       {asked.map((a) => (
@@ -500,14 +575,30 @@ function AnswerView({ queue: q, remark: r }: { readonly queue: Queue; readonly r
           <blockquote className="text-[13px] leading-5 text-dt-text">{a.text}</blockquote>
         </figure>
       ))}
-      <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-2 rounded-dt-control bg-dt-raised px-3 py-2.5 text-[13px] leading-5">
-        <dt className="col-span-2 text-[11px] font-medium text-dt-faint">
+      <dl
+        className="grid grid-cols-[auto_1fr_auto] items-baseline gap-x-3 gap-y-0.5 rounded-dt-control bg-dt-raised px-1 py-1.5 text-[13px] leading-5"
+        onPointerLeave={() => onBefore?.(false)}
+      >
+        <dt className="col-span-3 px-2 pb-1 text-[11px] font-medium text-dt-faint">
           {capital(TARGETS[targetOf(r.target)] ?? "the element")}
         </dt>
-        <dt className="text-[11px] text-dt-faint">Was</dt>
-        <dd className="text-dt-faint line-through decoration-dt-bad/60">{change.before}</dd>
-        <dt className="text-[11px] text-dt-faint">Now</dt>
-        <dd className="font-medium">{change.after}</dd>
+        <div className={cx(row(before), "col-span-3")} onPointerEnter={() => onBefore?.(true)}>
+          <dt className="text-[11px] text-dt-faint">Was</dt>
+          <dd
+            className={cx(
+              "text-dt-faint decoration-dt-bad/60",
+              before ? "text-dt-muted" : "line-through",
+            )}
+          >
+            {change.before}
+          </dd>
+          {before && shows}
+        </div>
+        <div className={cx(row(!before), "col-span-3")} onPointerEnter={() => onBefore?.(false)}>
+          <dt className="text-[11px] text-dt-faint">Now</dt>
+          <dd className="font-medium">{change.after}</dd>
+          {!before && shows}
+        </div>
       </dl>
       {r.text !== undefined && <p className="text-[13px] leading-5 text-dt-muted">{r.text}</p>}
     </div>
@@ -546,14 +637,23 @@ function Choices({
   return (
     <div className="flex flex-col gap-2">
       {states}
-      <ol className="flex flex-col gap-2" onPointerLeave={() => onPeek?.(undefined)}>
+      <ol
+        data-board-list=""
+        className="flex flex-col gap-2"
+        onPointerLeave={() => onPeek?.(undefined)}
+      >
         {values.map((v, i) => {
           const kept = picked === v;
           const shows = pending === v;
           return (
-            <li key={v}>
+            // The options come in one after another, as the agent lays them out.
+            <li
+              key={v}
+              style={{ animation: `dt-arrive 260ms ease-out ${String(60 + i * 70)}ms both` }}
+            >
               <button
                 type="button"
+                data-board={String(i + 1)}
                 aria-pressed={kept}
                 onPointerEnter={() => onPeek?.(v)}
                 onFocus={() => onPeek?.(v)}
@@ -674,45 +774,6 @@ function Number({ n, on }: { readonly n: number; readonly on: boolean }) {
     >
       {n}
     </span>
-  );
-}
-
-/** His annotations on this remark, and where each one is. */
-function Mine({ queue: q, remark: r }: { readonly queue: Queue; readonly remark: Remark }) {
-  return (
-    <ul className="flex flex-col gap-2.5 border-t border-dt-line pt-4">
-      {annotationsOn(q, r.id).map((a) => {
-        const answered = answerOf(q, a.id) !== undefined;
-        return (
-          <li key={a.id} className="flex items-start gap-2.5 text-[13px] leading-5">
-            <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-dt-text text-dt-ground">
-              <PenLine className="size-2.5" aria-hidden />
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span>{a.text}</span>
-              <span
-                className={cx(
-                  "flex items-center gap-1 text-[12px]",
-                  answered ? "text-dt-good" : "text-dt-faint",
-                )}
-              >
-                {answered ? (
-                  <>
-                    <Check className="size-3" aria-hidden />
-                    Answered
-                  </>
-                ) : (
-                  <>
-                    <AgentMark className="size-3 animate-pulse" />
-                    With the agent
-                  </>
-                )}
-              </span>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
@@ -842,6 +903,87 @@ function Shipping({
   );
 }
 
+/**
+ * The line between him and the agent, in the place of the next remark's line: what it heard
+ * him say, and under it what it does about it, live. The page shows where it points; this
+ * says what it took from his words, so a wrong hearing shows at once. While the agent works,
+ * a light runs along the line's top edge and its words shimmer. Once it is done, its last
+ * words stay, with when a change it put in the queue comes back, and Again shows its walk
+ * again.
+ */
+function ExchangeLine({ line }: { readonly line: Line }) {
+  const busy = line.tone === "busy" || line.tone === "listening";
+  return (
+    <div className="relative flex shrink-0 flex-col gap-1.5 border-t border-dt-line px-4 py-2.5 text-[12px] leading-[1.4]">
+      {busy && (
+        <span aria-hidden className="absolute inset-x-0 -top-px h-px overflow-hidden">
+          <span className="block h-full w-1/3 animate-[dt-scan_1.6s_ease-in-out_infinite] bg-linear-to-r from-transparent via-dt-accent to-transparent" />
+        </span>
+      )}
+      {line.said !== undefined && (
+        <span key={line.said} className="flex animate-dt-fade items-start gap-2.5">
+          <Mic className="mt-px size-3.5 shrink-0 text-dt-faint" aria-hidden />
+          <span className="line-clamp-2 min-w-0 flex-1 text-dt-text" title={line.said}>
+            {line.said}
+          </span>
+        </span>
+      )}
+      <span className="flex min-h-5 items-center gap-2.5" role="status">
+        {line.tone === "listening" ? (
+          <Mic className="size-3.5 shrink-0 animate-pulse text-dt-accent" aria-hidden />
+        ) : (
+          <AgentMark
+            className={cx(
+              "size-3.5 shrink-0",
+              busy && "animate-pulse",
+              line.tone === "failed" && "opacity-50",
+            )}
+          />
+        )}
+        <span
+          key={line.status}
+          className={cx(
+            "line-clamp-2 min-w-0 flex-1 animate-dt-fade",
+            busy ? "dt-shimmer" : line.tone === "failed" ? "text-dt-warn" : "text-dt-muted",
+          )}
+        >
+          {line.status}
+        </span>
+        {line.beat !== undefined && line.beat.of > 1 && (
+          <span className="flex items-center gap-[3px]" aria-hidden>
+            {Array.from({ length: line.beat.of }, (_, i) => (
+              <span
+                key={i}
+                className={cx(
+                  "h-[3px] rounded-full transition-all duration-300",
+                  i === line.beat?.at ? "w-3 bg-dt-accent" : "w-1.5",
+                  i < (line.beat?.at ?? 0)
+                    ? "bg-dt-accent/50"
+                    : i > (line.beat?.at ?? 0) && "bg-dt-line",
+                )}
+              />
+            ))}
+          </span>
+        )}
+        {line.change !== undefined && (
+          <span className="shrink-0 text-dt-faint tabular-nums">{line.change}</span>
+        )}
+        {line.onAgain !== undefined && (
+          <button
+            type="button"
+            data-guide-ui=""
+            onClick={line.onAgain}
+            className="-my-1 -mr-2 flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-medium text-dt-muted hover:bg-dt-raised hover:text-dt-text"
+          >
+            <RotateCcw className="size-3" aria-hidden />
+            Again
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** The settle that just happened, in the place of the next remark's line, with undo. */
 function Toast({ count, onUndo }: { readonly count: number; readonly onUndo: () => void }) {
   return (
@@ -861,55 +1003,6 @@ function Toast({ count, onUndo }: { readonly count: number; readonly onUndo: () 
   );
 }
 
-const nameOf = (target: string | undefined) =>
-  target === undefined ? undefined : TARGETS[targetOf(target)];
-
-/**
- * What goes to the agent with the words, so he can check it: the elements he pointed at or
- * drew on while he spoke, the variant and the state that showed, and the agent's line that
- * he spoke over. Each is a quiet chip; the whole line is in its title.
- */
-function Context({ composer }: { readonly composer: Composer }) {
-  const own = nameOf(composer.target);
-  const elements = [
-    ...new Set(
-      [...(composer.pointed ?? []), ...(composer.drawn ?? [])]
-        .map((p) => nameOf(p.target))
-        .filter((n): n is string => n !== undefined && n !== own),
-    ),
-  ];
-  const drew = (composer.drawn?.length ?? 0) > 0;
-  const { variant, state, over } = composer.moment ?? {};
-  const chips = [
-    ...elements.map((e) => ({ key: `e-${e}`, text: `Also ${e}`, title: undefined })),
-    ...(drew ? [{ key: "drew", text: "Drawing", title: undefined }] : []),
-    ...(variant !== undefined || state !== undefined
-      ? [
-          {
-            key: "shown",
-            text: [variant, state].filter((x) => x !== undefined).join(" · "),
-            title: "What the part showed",
-          },
-        ]
-      : []),
-    ...(over !== undefined ? [{ key: "over", text: "Over the agent", title: over }] : []),
-  ];
-  if (chips.length === 0) return null;
-  return (
-    <span className="-mt-1 flex flex-wrap gap-1 px-0.5">
-      {chips.map((c) => (
-        <span
-          key={c.key}
-          title={c.title}
-          className="max-w-full truncate rounded-[6px] bg-dt-raised px-1.5 py-0.5 text-[11px] text-dt-muted"
-        >
-          {c.text}
-        </span>
-      ))}
-    </span>
-  );
-}
-
 function ComposerView(props: PanelProps & { readonly composer: Composer }) {
   const { composer } = props;
   return (
@@ -918,7 +1011,6 @@ function ComposerView(props: PanelProps & { readonly composer: Composer }) {
         <PenLine className="size-3" aria-hidden />
         On {TARGETS[targetOf(composer.target)] ?? "the page"}
       </span>
-      <Context composer={composer} />
       <textarea
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- the composer opens to be written in
         autoFocus
@@ -926,9 +1018,7 @@ function ComposerView(props: PanelProps & { readonly composer: Composer }) {
         value={composer.text}
         placeholder="What should change?"
         onChange={(e) => props.onWrite(e.target.value)}
-        onPointerDown={props.onHold}
         onKeyDown={(e) => {
-          if (e.key !== "Enter") props.onHold?.();
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             props.onSend();
@@ -943,25 +1033,12 @@ function ComposerView(props: PanelProps & { readonly composer: Composer }) {
         </button>
         <button
           type="button"
-          className={cx(primary, "relative overflow-hidden")}
+          className={primary}
           disabled={composer.text.trim() === ""}
           onClick={props.onSend}
         >
-          {composer.sendsAt !== undefined && (
-            // Spoken words send themselves when the light drains, unless he touches them.
-            <span
-              key={composer.sendsAt}
-              aria-hidden
-              className="absolute inset-0 origin-left bg-white/20"
-              style={{
-                animation: `dt-drain ${String(Math.max(0, composer.sendsAt - Date.now()))}ms linear both`,
-              }}
-            />
-          )}
-          <span className="relative flex items-center gap-1.5">
-            Send
-            <ArrowRight className="size-4" aria-hidden />
-          </span>
+          Send
+          <ArrowRight className="size-4" aria-hidden />
         </button>
       </div>
     </footer>

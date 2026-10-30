@@ -1,4 +1,4 @@
-import type { Beat } from "../../queue/queue";
+import type { Beat, Shape } from "../../queue/queue";
 import { MotionPlayer } from "../../vendor/cua-cursor-motion.js";
 import { fetchLine, hush, say } from "./voice";
 
@@ -6,17 +6,18 @@ import { fetchLine, hush, say } from "./voice";
  * The agent's cursor as a controller: it walks a remark's beats, and the reviewer always wins.
  *
  * - It yields on request, as Clicky does. Escape pauses it and stops its voice at once; a
- *   second Escape dismisses it; g pauses and goes on. Nothing else pauses it: he moves,
+ *   second Escape dismisses it; Space pauses and goes on. Nothing else pauses it: he moves,
  *   clicks, scrolls and types while it speaks, and it never fights him for the page.
  * - It never trusts old coordinates. While a beat shows, it watches its element through
  *   scroll, resize, layout and DOM changes. A moved element takes the cursor with it; an
  *   element that is gone, or a page that changed, stops the walk with a reason.
- * - It shows and never does. A beat can preview a variant, which ends with the beat, and a
- *   beat that is the reviewer's turn waits for his own click. The cursor clicks nothing.
+ * - It shows more than it does. A beat can preview a variant or mock up a change, which ends
+ *   with the beat. A beat that is the reviewer's turn waits for his own click; only a beat
+ *   that shows him a journey clicks, once it has said what it does.
  *
  * It draws and notes rather than writes, as Clicky does. The voice says the whole line. On the
- * page, the cursor draws on the element (a loop, a line under it, or a frame for a turn), and
- * a note beside it holds a few words. With the voice off, the note holds the whole line too.
+ * page, the cursor draws on the element (a loop, a line, a box, a frame for a turn, or shapes
+ * of its own, such as arrows), and a note beside it holds a few words. With the voice off, the note holds the whole line too.
  *
  * The React layer draws its snapshot: the mark, the note, and the cursor's canvas, which the
  * cursor library paints.
@@ -31,7 +32,8 @@ export interface Preview {
 export type Phase = "idle" | "moving" | "speaking" | "turn" | "paused" | "lost" | "done";
 
 export interface Place {
-  readonly left: number;
+  readonly left?: number;
+  readonly right?: number;
   readonly top?: number;
   readonly bottom?: number;
 }
@@ -43,13 +45,15 @@ export interface Box {
   readonly height: number;
 }
 
-/** What the cursor draws on an element: a loop round it, a line under it, or the frame of
- * the reviewer's turn. */
-export type Draw = "circle" | "underline" | "frame";
+/** What the cursor draws on an element: a loop round it, a line under it, a box round it, a
+ * line through it, the frame of the reviewer's turn, or the ring of its own click. */
+export type Draw = "circle" | "underline" | "box" | "strike" | "frame" | "press";
 
 export interface Mark {
-  readonly draw: Draw;
+  readonly draw: Draw | undefined;
   readonly box: Box;
+  /** The beat's own shapes, placed against the box. */
+  readonly shapes: readonly Shape[];
   /** A new key draws a new mark; the same key follows its element. */
   readonly key: string;
 }
@@ -57,14 +61,23 @@ export interface Mark {
 /** The agent's note beside the element, in the look of an annotation. */
 export interface Note {
   readonly tone: "say" | "turn" | "paused" | "lost";
-  /** The beat's number, from 1. */
-  readonly step: number;
+  /** What its dot says: the beat's number from 1, or the beat's own label. */
+  readonly step: string;
   /** A few words. */
   readonly words: string;
   /** The whole line, when no voice says it. */
   readonly line: string | undefined;
   readonly place: Place;
   /** A new key comes in as a new note. */
+  readonly key: string;
+}
+
+/** A mock-up in the element's place: its words or its markup, in the element's own look. */
+export interface Mock {
+  readonly box: Box;
+  readonly text: string | undefined;
+  readonly html: string | undefined;
+  readonly style: Readonly<Record<string, string>>;
   readonly key: string;
 }
 
@@ -75,6 +88,9 @@ export interface Snapshot {
   readonly beats: number;
   readonly note: Note | undefined;
   readonly mark: Mark | undefined;
+  readonly mock: Mock | undefined;
+  /** Which walk this is: each start makes a new one. */
+  readonly run: number;
   /** Whether the cursor is on the screen. */
   readonly shown: boolean;
 }
@@ -98,6 +114,13 @@ const BODY = { right: 18, down: 26 };
 export function aim(rect: Box, view: { readonly width: number; readonly height: number }) {
   const right = rect.left + rect.width;
   const bottom = rect.top + rect.height;
+  // An element in the panel, the agent's drawing board: the cursor points at its left edge
+  // from the page, and the note stands on the page beside it.
+  if (rect.left >= view.width - 4) {
+    const tip = { x: rect.left - 2, y: rect.top + Math.min(rect.height / 2, 18) };
+    const place: Place = { right: innerWidth - tip.x + NOTE.gap + 6, top: tip.y - 14 };
+    return { tip, place };
+  }
   if (right + BODY.right + NOTE.gap + NOTE.width + 12 <= view.width) {
     const tip = { x: right + 2, y: rect.top + Math.min(rect.height / 2, 18) };
     const place: Place = { left: tip.x + BODY.right + NOTE.gap, top: tip.y + 6 };
@@ -134,8 +157,41 @@ const IDLE: Snapshot = {
   beats: 0,
   note: undefined,
   mark: undefined,
+  mock: undefined,
+  run: 0,
   shown: false,
 };
+
+/** The look of the element that a mock-up copies, so it reads as the page's own. */
+const LOOK = [
+  "font-family",
+  "font-size",
+  "font-weight",
+  "line-height",
+  "letter-spacing",
+  "color",
+  "background-color",
+  "border-radius",
+  "padding",
+  "display",
+  "align-items",
+  "justify-content",
+  "gap",
+  "text-align",
+] as const;
+
+/** Markup from the agent, with no scripts, frames or handlers: it only shows. */
+function clean(html: string) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  for (const bad of doc.body.querySelectorAll("script, iframe, object, embed, link, style, meta"))
+    bad.remove();
+  for (const element of doc.body.querySelectorAll("*"))
+    // A copy of the names: removing from the live list as it is read would skip some.
+    for (const name of element.getAttributeNames())
+      if (/^on/i.test(name) || /javascript:/i.test(element.getAttribute(name) ?? ""))
+        element.removeAttribute(name);
+  return doc.body.innerHTML;
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
@@ -158,6 +214,10 @@ export class Walker {
   private unlisten: (() => void) | undefined;
   /** Resolves a turn: the reviewer clicked, or skipped it. */
   private turned: (() => void) | undefined;
+  /** Shows the element that a mock-up hid. */
+  private unhide: (() => void) | undefined;
+  /** When the cursor last clicked: a page that changes after it is the click's doing. */
+  private clicked = 0;
 
   constructor(
     private readonly view: () => { readonly width: number; readonly height: number },
@@ -194,8 +254,8 @@ export class Walker {
     this.walk = walk;
     this.at = 0;
     this.path = path;
-    if (walk.length === 0) return this.set(IDLE);
-    this.set({ ...IDLE, beats: walk.length, shown: true });
+    if (walk.length === 0) return this.set({ ...IDLE, run: this.snap.run + 1 });
+    this.set({ ...IDLE, beats: walk.length, run: this.snap.run + 1, shown: true });
     // Every line is asked for now, so each one plays without a wait.
     const voice = this.settings.voice;
     if (voice !== undefined) for (const beat of walk) void fetchLine(beat.say, voice);
@@ -227,11 +287,23 @@ export class Walker {
       });
   }
 
+  /** He speaks to the agent: the walk pauses, and the cursor and its note give way to the
+   * waveform at his own mouse, as Clicky's do. Space goes on from where it stopped. */
+  attend() {
+    this.pause();
+    this.set({ ...this.snap, shown: false, note: undefined, mark: undefined });
+  }
+
+  /** Puts the cursor at a point, for the next walk to start from there: where he spoke. */
+  from(point: { readonly x: number; readonly y: number }) {
+    this.player?.place(point);
+  }
+
   /** Go on from the beat it stopped at, after a pause or a lost element. */
   resume() {
     if (this.snap.phase !== "paused" && this.snap.phase !== "lost") return;
     this.halt();
-    this.set({ ...this.snap, phase: "moving", note: undefined, mark: undefined });
+    this.set({ ...this.snap, phase: "moving", note: undefined, mark: undefined, shown: true });
     void this.play(this.generation);
   }
 
@@ -240,7 +312,7 @@ export class Walker {
     this.halt();
     this.unlisten?.();
     this.unlisten = undefined;
-    this.set({ ...IDLE, beats: this.walk.length });
+    this.set({ ...IDLE, beats: this.walk.length, run: this.snap.run });
   }
 
   /** The reviewer skips his turn. */
@@ -252,7 +324,8 @@ export class Walker {
   navigate(path: string) {
     if (path === this.path) return;
     this.path = path;
-    if (this.active()) this.lose("The page changed, so I stopped here.");
+    const ours = Date.now() - this.clicked < 1500;
+    if (this.active() && !ours) this.lose("The page changed, so I stopped here.");
   }
 
   /** Whether the walk runs: its cursor moves, speaks or waits for a turn. */
@@ -270,7 +343,8 @@ export class Walker {
     for (const listener of this.listeners) listener();
   }
 
-  /** Ends the running loop, its voice, its watchers, and its preview unless `keep`. Escape
+  /** Ends the running loop, its voice, its watchers, and its preview and mock-up unless
+   * `keep`. Escape
    * still reaches the walker until it stops. */
   private halt(keep = false) {
     this.generation++;
@@ -278,6 +352,12 @@ export class Walker {
     this.turned = undefined;
     this.untrack?.();
     this.untrack = undefined;
+    // A mock-up stays with a pause, as a preview does: he may speak about it.
+    if (!keep) {
+      this.unhide?.();
+      this.unhide = undefined;
+      if (this.snap.mock !== undefined) this.snap = { ...this.snap, mock: undefined };
+    }
     // A move in flight stops where the cursor is.
     if (this.player !== undefined) this.player.place(this.player.pos);
     if (this.previewing && !keep) {
@@ -295,7 +375,7 @@ export class Walker {
       mark: undefined,
       note: {
         tone: "lost",
-        step: this.at + 1,
+        step: String(this.at + 1),
         words: "Lost it",
         line: why,
         key: `lost-${String(this.at)}`,
@@ -340,6 +420,8 @@ export class Walker {
       const turn = beat.turn === true;
       const key = `${String(this.at)}-${String(generation)}`;
       const draw = turn ? "frame" : beat.draw;
+      const shapes = beat.shapes ?? [];
+      const mock = beat.replace === undefined ? undefined : this.mockUp(element, beat.replace);
       const voice = this.settings.voice;
       // With no voice, the note holds the whole line, so nothing that is said is lost.
       const words = beat.note ?? beat.say;
@@ -348,10 +430,11 @@ export class Walker {
         this.set({
           ...this.snap,
           phase: turn ? "turn" : "speaking",
-          mark: draw === undefined ? undefined : { draw, box, key },
+          mark: draw === undefined && shapes.length === 0 ? undefined : { draw, box, shapes, key },
+          mock: mock === undefined ? undefined : { ...mock, box, key },
           note: {
             tone: turn ? "turn" : "say",
-            step: this.at + 1,
+            step: beat.label ?? String(this.at + 1),
             words,
             line: line(heard),
             place: aim(box, this.view()).place,
@@ -380,10 +463,28 @@ export class Walker {
             });
       if (turn) await Promise.all([this.turn(element), said]);
       else await said;
-      await sleep(350);
       if (!live()) return;
       this.untrack?.();
       this.untrack = undefined;
+      if (beat.click === true && element.isConnected) {
+        // It said what it does; now it does it, with a ring where it clicks.
+        this.unhide?.();
+        this.unhide = undefined;
+        this.set({
+          ...this.snap,
+          mock: undefined,
+          mark: { draw: "press", box: last, shapes: [], key: `${key}-press` },
+        });
+        await sleep(this.settings.reduced ? 0 : 160);
+        if (!live()) return;
+        this.clicked = Date.now();
+        if (element instanceof HTMLElement) element.click();
+        await sleep(650);
+      } else await sleep(350);
+      if (!live()) return;
+      this.unhide?.();
+      this.unhide = undefined;
+      if (this.snap.mock !== undefined) this.set({ ...this.snap, mock: undefined });
       if (this.previewing) {
         this.previewing = false;
         this.onPreview(undefined);
@@ -397,7 +498,7 @@ export class Walker {
     // Clicky's does, and fades there.
     await sleep(1800);
     if (!live()) return;
-    this.set({ ...this.snap, note: undefined, mark: undefined });
+    this.set({ ...this.snap, note: undefined, mark: undefined, mock: undefined });
     const home = this.mouse ?? { x: this.view().width - 60, y: this.view().height * 0.4 };
     await this.player?.moveTo(
       { x: Math.min(home.x + 22, this.view().width - 30), y: home.y + 18 },
@@ -405,6 +506,24 @@ export class Walker {
     );
     await sleep(400);
     if (live() && this.snap.phase === "done") this.set({ ...this.snap, shown: false });
+  }
+
+  /** Hides the element, and takes its look for the mock-up that shows in its place. */
+  private mockUp(element: Element, replace: NonNullable<Beat["replace"]>) {
+    const computed = getComputedStyle(element);
+    const style = Object.fromEntries(LOOK.map((name) => [name, computed.getPropertyValue(name)]));
+    if (element instanceof HTMLElement) {
+      const was = element.style.visibility;
+      element.style.visibility = "hidden";
+      this.unhide = () => {
+        element.style.visibility = was;
+      };
+    }
+    return {
+      text: replace.html === undefined ? replace.text : undefined,
+      html: replace.html === undefined ? undefined : clean(replace.html),
+      style,
+    };
   }
 
   private find(beat: Beat): Element | undefined {

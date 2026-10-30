@@ -247,6 +247,14 @@ moves to the element, a frame draws around it, and a caption says the words. A r
 play this as a walk of a few seconds, and any key stops it. A still screen and words stay
 the default, so nothing moves without a reason.
 
+Henrik answers in the same way. He holds ⌥⌘, points or draws a loop, and speaks. A real
+agent answers on the page: it points, draws marks and arrows, mocks a change up in the
+element's place, waits for his click, or clicks a journey itself after it says each click.
+It speaks each line. A line at the panel's foot shows what it heard and what it does now.
+In the queue workshop the agent is Claude Code through the Agent SDK, on the dev server,
+with the Claude Code subscription and no API key. Its session persists across his remarks.
+It can change the workshop's code, so he shapes Blueline through Blueline.
+
 ## Routing and threads
 
 Anthropic's Applied AI team published a guide on 2026-10-22: fold routers, planners and

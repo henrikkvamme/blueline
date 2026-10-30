@@ -6,5 +6,5 @@
     "types": ["node", "vite/client"],
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "test", "vite.config.ts", "voice.ts"]
+  "include": ["src", "test", "vite.config.ts", "voice.ts", "agent.ts"]
 }

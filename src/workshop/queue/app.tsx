@@ -7,20 +7,31 @@ import { PAGES, changeOf, type Path } from "./script";
  * that the agent changed shows its new words.
  */
 
-export function AppNav({ path }: { readonly path: Path }) {
+/** The app's tabs. A click on one goes to its page: his own, or the agent's cursor's when it
+ * shows him a journey. */
+export function AppNav({
+  path,
+  onGo,
+}: {
+  readonly path: Path;
+  readonly onGo?: ((path: Path) => void) | undefined;
+}) {
   return (
     <nav className="flex gap-1 text-[13px]">
       {PAGES.map((p) => (
-        <span
+        <button
+          type="button"
           key={p.path}
+          data-q={`tab${p.path.replace("/", "-")}`}
+          onClick={() => onGo?.(p.path)}
           className={
             p.path === path
               ? "rounded-md bg-[#e8edff] px-3 py-1.5 font-medium text-[#3550c8]"
-              : "rounded-md px-3 py-1.5 text-[#5b5b66]"
+              : "rounded-md px-3 py-1.5 text-[#5b5b66] hover:bg-[#f1f1f4]"
           }
         >
           {p.title}
-        </span>
+        </button>
       ))}
     </nav>
   );
@@ -35,14 +46,17 @@ export function AppPage({
   changed,
   status,
   statusText,
+  onGo,
 }: {
   readonly path: Path;
+  /** Goes to another page of the app, as its send button does. */
+  readonly onGo?: ((path: Path) => void) | undefined;
   readonly changed: ReadonlySet<string>;
   /** The status's look, and the state that it shows, when not its own. */
   readonly status: string;
   readonly statusText?: string | undefined;
 }) {
-  // The reviewer's own click adds an approver; the guide's cursor never clicks.
+  // A click adds an approver: his own, or the agent's cursor's when it shows him how.
   const [added, setAdded] = useState(false);
   const words = (target: string) => {
     const change = changeOf(target);
@@ -123,7 +137,7 @@ export function AppPage({
       </label>
       <div data-q="approvers" className="flex flex-col gap-1.5">
         <span className="text-[13px] font-medium">Approvers</span>
-        {APPROVERS.map((a) => (
+        {(added ? [...APPROVERS, ADDED] : APPROVERS).map((a) => (
           <div
             key={a.name}
             className="flex justify-between rounded-md bg-[#f1f1f4] px-3 py-2 text-[14px]"
@@ -136,6 +150,7 @@ export function AppPage({
       <button
         type="button"
         data-q="submit"
+        onClick={() => onGo?.("/sent")}
         className="self-end rounded-md bg-[#4a6cf7] px-4 py-2 text-[14px] font-medium text-white"
       >
         {words("submit")}
@@ -199,6 +214,48 @@ export function Status({
     <span className="flex items-center gap-1.5 text-[13px] whitespace-nowrap text-[#5b5b66]">
       <span className="size-2 rounded-full" style={{ background: tone.mark }} />
       {text}
+    </span>
+  );
+}
+
+/**
+ * What a choice or a question looks like on the agent's drawing board, in the panel: a
+ * variant of the status in its state, or what an answer to "Send only with two approvers?"
+ * does, for one approver and for two.
+ */
+export function Board({
+  remark,
+  value,
+  state,
+}: {
+  readonly remark: string;
+  readonly value: string;
+  readonly state: string | undefined;
+}): ReactNode {
+  if (remark !== "r-send") return <Status look={value} text={state ?? "In review"} />;
+  const enough = value.startsWith("No") ? 1 : 2;
+  return (
+    <span className="flex flex-col gap-1.5">
+      {[1, 2].map((count) => (
+        <span key={count} className="flex items-center gap-2 text-[11px] text-[#5b5b66]">
+          <span className="flex w-9 -space-x-1.5">
+            {Array.from({ length: count }, (_, i) => (
+              <span
+                key={i}
+                className="size-4 rounded-full border-[1.5px] border-[#fbfbfc]"
+                style={{ background: i === 0 ? "#c7d2fe" : "#bbf7d0" }}
+              />
+            ))}
+          </span>
+          <span
+            className="rounded px-2 py-0.5 text-[10px] font-medium text-white transition-colors"
+            style={{ background: count >= enough ? "#4a6cf7" : "#c9c9d1" }}
+          >
+            Send
+          </span>
+          <span className="w-16">{count >= enough ? "can send" : "waits"}</span>
+        </span>
+      ))}
     </span>
   );
 }

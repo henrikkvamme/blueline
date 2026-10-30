@@ -76,7 +76,9 @@ export async function hear(
     });
     if (!r.ok) return undefined;
     const { text, words } = (await r.json()) as { text: string; words?: readonly Word[] };
-    return text.trim() === "" ? undefined : { text: text.trim(), words: words ?? [] };
+    // A tag in brackets is a sound, not a word: with only tags, he said nothing.
+    const said = text.replace(/[[(][^\])]*[\])]/g, "").trim();
+    return said === "" ? undefined : { text: said, words: words ?? [] };
   } catch {
     return undefined;
   }

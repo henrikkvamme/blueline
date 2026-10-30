@@ -1,5 +1,5 @@
 import { annotate, arrive, back, next, pick, type Queue } from "../../queue/queue";
-import { Status } from "./app";
+import { Board } from "./app";
 import { Panel, still, type PanelProps } from "./panel";
 import { answerTo, selectorOf, start } from "./script";
 
@@ -92,7 +92,7 @@ export function QueueStates() {
             <div className="h-[560px]">
               <Panel
                 {...s.props}
-                preview={(_, v, state) => <Status look={v} text={state ?? "In review"} />}
+                preview={(r, v, state) => <Board remark={r.id} value={v} state={state} />}
               />
             </div>
           </figure>

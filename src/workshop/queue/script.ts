@@ -29,6 +29,9 @@ export const TARGETS: Readonly<Record<string, string>> = {
   add: "the add button",
   grip: "the grip",
   sent: "the sent message",
+  "tab-request": "the Request tab",
+  "tab-approvers": "the Approvers tab",
+  "tab-sent": "the Sent tab",
 };
 
 export const selectorOf = (target: string) => `[data-q="${target}"]`;
@@ -44,6 +47,23 @@ const beat = (target: string, say: string, more: Partial<Beat> = {}): Beat => ({
   ...more,
 });
 
+/** A beat on the agent's drawing board, in the panel: an option by its number, or all. */
+const board = (n: number, say: string, more: Partial<Beat> = {}): Beat => ({
+  target: `[data-board="${String(n)}"]`,
+  name: `option ${String(n)}`,
+  label: String(n),
+  say,
+  draw: "circle",
+  ...more,
+});
+const boardList = (say: string, more: Partial<Beat> = {}): Beat => ({
+  target: "[data-board-list]",
+  name: "the options",
+  say,
+  draw: "circle",
+  ...more,
+});
+
 const remark = (
   id: string,
   page: Path,
@@ -52,7 +72,8 @@ const remark = (
   more: Partial<Remark> = {},
 ): Remark => ({ id, kind: "look", page, target: selectorOf(target), title, at: 0, ...more });
 
-/** The journey's remarks: three that he settled before, and seven open. */
+/** The journey's remarks: three that he settled before, and eleven open. Four ask him to
+ * try what the agent can do. */
 const REMARKS: readonly Remark[] = [
   remark("r-title", "/request", "title", "The page's title"),
   remark("r-amount-old", "/request", "amount", "The amount field"),
@@ -70,6 +91,67 @@ const REMARKS: readonly Remark[] = [
       }),
     ],
   }),
+  // The agent asks him to try what it built: each one shows him how, then it is his turn.
+  remark("r-try-ask", "/request", "status", "Try it: ask me about the page", {
+    text: "Hold ⌥⌘, point at a part, and ask. The agent answers on the page with its cursor.",
+    walk: [
+      beat(
+        "status",
+        "Try me. Hold Option and Command, point here, and ask what the status means.",
+        {
+          note: "Hold ⌥⌘, point, ask",
+          draw: "circle",
+        },
+      ),
+      beat("amount", "Or draw a loop round a part while you speak, and I take that part.", {
+        note: "Or draw a loop",
+        draw: "box",
+      }),
+    ],
+  }),
+  remark("r-try-mock", "/request", "amount", "Try it: ask how a change would look", {
+    text: "Ask how a part would look, and the agent mocks it up in place, for you to judge by eye.",
+    walk: [
+      beat(
+        "amount",
+        "Ask me how something would look, such as this amount in euros. I'll mock it up right here.",
+        {
+          note: "Ask: how would it look?",
+          draw: "underline",
+        },
+      ),
+    ],
+  }),
+  remark("r-try-journey", "/request", "tab-approvers", "Try it: let me click a journey", {
+    text: "Ask the agent to show a journey. It says each click, then makes it.",
+    walk: [
+      beat(
+        "tab-approvers",
+        "Ask me to show you a journey, such as adding a third approver and sending. I'll say each click, then make it.",
+        {
+          note: "Ask me to click through",
+          draw: "circle",
+        },
+      ),
+      beat("submit", "Or ask how to do it, and I'll wait for your own clicks.", {
+        note: "Or I wait for you",
+        draw: "box",
+      }),
+    ],
+  }),
+  remark("r-try-build", "/request", "title", "Try it: change this workshop", {
+    text: "Ask the agent to change the workshop itself. It changes the code, and the page reloads.",
+    walk: [
+      beat(
+        "title",
+        "You can also ask me to change this workshop, say, bigger notes or another mark. I change the code, and the page reloads with it.",
+        {
+          note: "Shape Blueline by voice",
+          draw: "circle",
+        },
+      ),
+    ],
+  }),
   remark("r-status", "/request", "status", "How should the status look?", {
     kind: "choice",
     variants: ["Dot", "Pill", "Steps"],
@@ -78,17 +160,20 @@ const REMARKS: readonly Remark[] = [
     walk: [
       beat("status", "Here is the dot: quiet, with the words beside it.", {
         peek: "Dot",
-        note: "1 · Dot",
+        label: "1",
+        note: "Dot",
         draw: "circle",
       }),
       beat("status", "The pill stands out more.", {
         peek: "Pill",
-        note: "2 · Pill",
+        label: "2",
+        note: "Pill",
         draw: "circle",
       }),
       beat("status", "And steps show how far it has come.", {
         peek: "Steps",
-        note: "3 · Steps",
+        label: "3",
+        note: "Steps",
         draw: "circle",
       }),
       beat("status", "Each must also hold a long state, when it waits on a person.", {
@@ -97,7 +182,7 @@ const REMARKS: readonly Remark[] = [
         note: "A long state",
         draw: "circle",
       }),
-      beat("status", "Go through the looks and the states in the panel. A click keeps one.", {
+      boardList("Go through the looks and the states here. A click keeps one.", {
         note: "Try each look in each state",
       }),
     ],
@@ -128,6 +213,8 @@ const REMARKS: readonly Remark[] = [
         note: "Off below two?",
         draw: "circle",
       }),
+      board(1, "Keep it off until two have said yes,", { note: "Off below two" }),
+      board(2, "or let one approver be enough. Pick one.", { note: "One is enough" }),
     ],
   }),
   remark("r-add", "/approvers", "add", "Add an approver at the end", {
@@ -180,6 +267,18 @@ const CHANGES: Readonly<Record<string, { readonly before: string; readonly after
 
 export const changeOf = (target: string) =>
   CHANGES[target] ?? { before: "the old words", after: "the new words" };
+
+/** What the agent's cursor does when he speaks: it goes to the element, circles it, and says
+ * that it is on it, and when it comes back. */
+export const heard = (target: string, seconds: number): Beat => ({
+  target,
+  name: TARGETS[targetOf(target)] ?? "the element",
+  say: `Got it. I'll change ${TARGETS[targetOf(target)] ?? "that"}, back in about ${String(seconds)} seconds.`,
+  note: `On it · ${String(seconds)} s`,
+  // The agent's own mark in the dot: this is its answer to him, not a step of a walk.
+  label: "",
+  draw: "circle",
+});
 
 /** The agent's answer to an annotation. */
 export const answerTo = (annotation: Annotation, at: number): Remark => {

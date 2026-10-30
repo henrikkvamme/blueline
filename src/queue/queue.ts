@@ -23,11 +23,20 @@ export interface Beat {
   readonly say: string;
   /** The few words that the agent's note on the element shows; the voice says the rest. */
   readonly note?: string;
-  /** What the cursor draws on the element while it speaks. */
-  readonly draw?: "circle" | "underline";
-  /** The reviewer's turn: the walk waits for his own click on the element. The cursor never
-   * clicks. */
+  /** What the note's dot says, such as an option's number; the beat's number by default. */
+  readonly label?: string;
+  /** What the cursor draws on the element while it speaks: a loop round it, a line under it,
+   * a box round it, or a line through it. */
+  readonly draw?: "circle" | "underline" | "box" | "strike";
+  /** Shapes that the agent draws as it speaks, such as an arrow from one place to another. */
+  readonly shapes?: readonly Shape[];
+  /** What the element shows in its place while the beat shows: a mock-up of a change. It ends
+   * with the beat. */
+  readonly replace?: { readonly text?: string; readonly html?: string };
+  /** The reviewer's turn: the walk waits for his own click on the element. */
   readonly turn?: boolean;
+  /** The cursor clicks the element itself once it has said its line, to show him a journey. */
+  readonly click?: boolean;
   /** A variant to preview while the beat shows. It ends with the beat; only the reviewer
    * keeps a variant. */
   readonly peek?: string;
@@ -35,6 +44,15 @@ export interface Beat {
    * the beat. */
   readonly state?: string;
 }
+
+/** A point in px from the top left of the beat's element. */
+export type At = readonly [number, number];
+
+/** A shape that the agent draws by hand, placed against the beat's element. */
+export type Shape =
+  | { readonly kind: "arrow" | "line"; readonly from: At; readonly to: At }
+  | { readonly kind: "rect" | "ellipse"; readonly at: At; readonly size: At }
+  | { readonly kind: "text"; readonly at: At; readonly text: string };
 
 export interface Remark {
   readonly id: string;

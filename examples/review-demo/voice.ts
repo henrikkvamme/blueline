@@ -57,6 +57,8 @@ export function voice(): Plugin {
         req.on("end", () => {
           const form = new FormData();
           form.append("model_id", EARS);
+          // Only his words: no tags such as [music] for sounds that are not speech.
+          form.append("tag_audio_events", "false");
           form.append(
             "file",
             new Blob([Buffer.concat(chunks)], {
