@@ -12,3 +12,5 @@ packageImportMethod: copy
 peerDependencyRules:
   allowedVersions:
     vite: 1.4.0
+minimumReleaseAgeExclude:
+  - xstate@6.0.0-alpha.71

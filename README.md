@@ -6,8 +6,8 @@ annotations, answers in the page, and applies the designs you keep.
 
 **Status: early.** The package is published on npm as
 [`@henrikkvamme/blueline`](https://www.npmjs.com/package/@henrikkvamme/blueline). Its API can
-still change between minor versions. It builds, checks and tests on Effect 4.0.6, XState 5.33.3
-and TypeScript 7. Read [docs/manual.md](docs/manual.md) to use it, and
+still change between minor versions. It builds, checks and tests on Effect 4.0.6, XState
+6.0.0-alpha.71 and TypeScript 7. Read [docs/manual.md](docs/manual.md) to use it, and
 [docs/design.md](docs/design.md) for the plan.
 
 ```sh

@@ -1,13 +1,4 @@
-import {
-  assign,
-  emit,
-  enqueueActions,
-  fromCallback,
-  raise,
-  setup,
-  stopChild,
-  type ActorRefFrom,
-} from "xstate";
+import { createCallbackLogic, setup, types, type ActorRefFrom } from "xstate";
 import {
   blankNote,
   clearedNote,
@@ -232,6 +223,60 @@ export type Event =
   /** The reviewer asked for variants where the step has none. */
   | { readonly type: "unvaried" };
 
+/** The events by their type, as XState declares them: each with its payload's type. */
+const event = <T extends Event["type"]>() =>
+  types<Omit<Extract<Event, { readonly type: T }>, "type">>();
+
+const EVENTS = {
+  leave: event<"leave">(),
+  chat: event<"chat">(),
+  preview: event<"preview">(),
+  start: event<"start">(),
+  go: event<"go">(),
+  jump: event<"jump">(),
+  reset: event<"reset">(),
+  variant: event<"variant">(),
+  showVariant: event<"showVariant">(),
+  peek: event<"peek">(),
+  panel: event<"panel">(),
+  tree: event<"tree">(),
+  place: event<"place">(),
+  cursor: event<"cursor">(),
+  row: event<"row">(),
+  fold: event<"fold">(),
+  cursorOpen: event<"cursorOpen">(),
+  choose: event<"choose">(),
+  open: event<"open">(),
+  close: event<"close">(),
+  escape: event<"escape">(),
+  pin: event<"pin">(),
+  point: event<"point">(),
+  write: event<"write">(),
+  send: event<"send">(),
+  takeBack: event<"takeBack">(),
+  noteEvent: event<"noteEvent">(),
+  remove: event<"remove">(),
+  failed: event<"failed">(),
+  clear: event<"clear">(),
+  posted: event<"posted">(),
+  replies: event<"replies">(),
+  listening: event<"listening">(),
+  settle: event<"settle">(),
+  reopen: event<"reopen">(),
+  drop: event<"drop">(),
+  design: event<"design">(),
+  journeys: event<"journeys">(),
+  entered: event<"entered">(),
+  switched: event<"switched">(),
+  trouble: event<"trouble">(),
+  undo: event<"undo">(),
+  finish: event<"finish">(),
+  handoff: event<"handoff">(),
+  back: event<"back">(),
+  redo: event<"redo">(),
+  unvaried: event<"unvaried">(),
+} satisfies { readonly [T in Event["type"]]: ReturnType<typeof event<T>> };
+
 /** The agent's answer to one note, as status.json gives it. */
 export interface Reply {
   readonly state: "working" | "replied";
@@ -267,6 +312,19 @@ export type Emitted =
    * page. */
   | { readonly type: "done"; readonly journey: string };
 
+const emitted = <T extends Emitted["type"]>() =>
+  types<Omit<Extract<Emitted, { readonly type: T }>, "type">>();
+
+const EMITTED = {
+  replied: emitted<"replied">(),
+  failed: emitted<"failed">(),
+  undone: emitted<"undone">(),
+  previewing: emitted<"previewing">(),
+  nothing: emitted<"nothing">(),
+  unvaried: emitted<"unvaried">(),
+  done: emitted<"done">(),
+} satisfies { readonly [T in Emitted["type"]]: ReturnType<typeof emitted<T>> };
+
 /**
  * What the post actor sends the agent, at once: a chat's message with the pointed notes in
  * it, a step settled or opened again, or a variant kept.
@@ -283,6 +341,11 @@ export interface Post {
   /** For the settle that Finish sends: the hand-off's ID, which the agent answers. */
   readonly handoff?: string | undefined;
 }
+
+/** A post's own ID, for its `posted`: XState 6 types an actor's ref without it, but the actor
+ * has it. */
+export const postId = (self: object): string =>
+  "id" in self && typeof self.id === "string" ? self.id : "";
 
 export interface EnterInput {
   readonly journey: string;
@@ -606,153 +669,170 @@ function restore(c: Context, change: Change) {
   return { notes, feedback };
 }
 
+/** The context once `u` remembers what the event changes: the first thing an undoable event
+ * does, so what it does next sees it. */
+function remembering(c: Context, event: Event): Context {
+  const change = changeOf(c, event);
+  return change === undefined ? c : { ...c, past: [...c.past, change].slice(-HISTORY), future: [] };
+}
+
+/** What `remembering` changed, for the patch. */
+const memory = (c: Context) => ({ past: c.past, future: c.future });
+
+/** A step opens with its own chat, and the tree's selection on it. */
+const activated = (at: number) => ({
+  active: true,
+  chat: "step" as const,
+  preview: false,
+  cursor: at,
+  row: undefined,
+  handoff: null,
+});
+
+/** The page view: the panel shows the page's chat. The step it leaves is left once off: its
+ * reset and exit run (`leaveStep`). */
+const deactivated = (c: Context) => ({
+  active: false,
+  row: undefined,
+  tree: false,
+  leaving: c.opening,
+  entered: undefined,
+  opening: undefined,
+  peek: undefined,
+  preview: false,
+});
+
+/** A step opens with the tree folded, so the panel shows the step. A settled step opens with
+ * the variants its settle kept. */
+function opening(c: Context) {
+  const variants = keptVariants(c);
+  const { [stepOf(c)?.id ?? ""]: _, ...trouble } = c.trouble;
+  return {
+    tree: false,
+    trouble,
+    variants,
+    peek: undefined,
+    leaving: c.opening,
+    opening: {
+      journey: c.journey,
+      at: c.at,
+      variant: variantOf({ ...c, variants, peek: undefined }),
+      run: c.run,
+    },
+  };
+}
+
+/** The effects the helpers below queue, as the machine's transitions give them. */
+interface Queue {
+  readonly raise: (event: Event) => void;
+  readonly emit: (event: Emitted) => void;
+  readonly spawn: (src: "post", options: { readonly id: string; readonly input: Post }) => unknown;
+}
+
+/**
+ * A journey started again once every step is settled opens its steps for another pass. Each
+ * step opened writes its line, so the agent knows that the review goes on.
+ */
+function anotherPass(c: Context, event: Extract<Event, { readonly type: "start" }>, enq: Queue) {
+  const steps = passOf(c, event);
+  if (steps.length === 0) return {};
+  const next = reopened(c, steps);
+  // The lines name the journey that starts again, not the one the start leaves.
+  const lines = turnedLines({ ...c, journey: event.journey }, { ...next, finish: c.finish }, steps);
+  if (lines === undefined) return next;
+  enq.spawn("post", { id: `post-${c.posts}`, input: lines });
+  return { ...next, posts: c.posts + 1 };
+}
+
+/**
+ * u takes the newest change back, and Ctrl+R does it again. A step whose settled state turns
+ * writes its settle line, so the agent never keeps a settle that the page took back. A settle
+ * done again on the last open step waits for Finish, as a settle does.
+ */
+function turn(context: Context, redo: boolean, enq: Queue): Partial<Context> {
+  const change = (redo ? context.future : context.past).at(-1);
+  if (change === undefined) {
+    enq.emit({ type: "nothing", redo });
+    return {};
+  }
+  const restored = restore(context, change);
+  const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
+  const step = change.at === undefined ? undefined : change.feedback[0]?.[0];
+  // Back from the finish: the last step is open again, and its settle does not go.
+  const kept =
+    context.finish !== null && restored.feedback[context.finish.step]?.settled !== true
+      ? null
+      : context.finish;
+  // A settle done again on the last open step waits for Finish. A step that stays
+  // settled, and keeps another variant, does not: its line goes.
+  const finish =
+    kept === null &&
+    step !== undefined &&
+    context.feedback[step]?.settled !== true &&
+    restored.feedback[step]?.settled === true &&
+    openPlace(ids, restored.feedback, 0).open === 0
+      ? { step, ids: [] }
+      : kept;
+  const inverse = inverseOf(context, change);
+  const lines = turnedLines(
+    context,
+    { ...restored, finish },
+    change.feedback.map(([id]) => id),
+  );
+  if (lines !== undefined) enq.spawn("post", { id: `post-${context.posts}`, input: lines });
+  if (finish !== null && finish !== context.finish) {
+    if (context.preview) enq.raise({ type: "preview" });
+    enq.raise({ type: "panel", shown: true });
+  }
+  // A settle taken back goes back to its step: also from the page, where the review's
+  // last settle ended the walk.
+  // A step that keeps another variant again opens again too, so the page shows it.
+  const shows =
+    step !== undefined &&
+    change.at !== undefined &&
+    stepOf(context, change.at)?.id === step &&
+    restored.feedback[step]?.settled === true &&
+    !keepsSame(context.feedback[step], restored.feedback[step]);
+  if (!redo && change.at !== undefined && !context.active)
+    enq.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
+  else if (change.at !== undefined && (change.at !== context.at || shows))
+    enq.raise({ type: "jump", at: change.at });
+  enq.emit({
+    type: "undone",
+    label: change.label,
+    redo,
+    turned: turnedBy(context, change),
+  });
+  return {
+    ...restored,
+    finish,
+    past: redo ? [...context.past, inverse] : context.past.slice(0, -1),
+    future: redo ? context.future.slice(0, -1) : [...context.future, inverse],
+    ...(lines === undefined ? {} : { posts: context.posts + 1 }),
+  };
+}
+
 export const sessionMachine = setup({
-  types: {
-    context: {} as Context,
-    events: {} as Event,
-    input: {} as {
+  schemas: {
+    context: types<Context>(),
+    events: EVENTS,
+    input: types<{
       readonly kept: Kept;
       readonly journeys: readonly Shape[];
       readonly now: number;
       /** The page's place; none in a test that has no page. */
       readonly place?: string | undefined;
-    },
-    emitted: {} as Emitted,
+    }>(),
+    emitted: EMITTED,
   },
   actors: {
     // The dev tools give the real actors; these stand in for tests and do nothing.
-    enterStep: fromCallback<Event, EnterInput>(() => undefined),
-    leaveStep: fromCallback<Event, Entered | undefined>(() => undefined),
-    switchVariant: fromCallback<Event, SwitchInput>(() => undefined),
-    post: fromCallback<Event, Post>(() => undefined),
-    keep: fromCallback<Event, KeepInput>(() => undefined),
-    poll: fromCallback<Event>(() => undefined),
-  },
-  guards: {
-    wasActive: ({ context }) => context.active,
-    hasVariants: ({ context }) => (stepOf(context)?.variants.length ?? 0) > 1,
-    variantStale: ({ context }) =>
-      context.entered !== undefined && context.entered.variant !== variantOf(context),
-    readsReplies: ({ context }) => readsReplies(context),
-    readsNoReplies: ({ context }) => !readsReplies(context),
-  },
-  actions: {
-    remember: assign(({ context, event }) => {
-      const change = changeOf(context, event);
-      return change === undefined
-        ? {}
-        : { past: [...context.past, change].slice(-HISTORY), future: [] };
-    }),
-    // A step opens with its own chat, and the tree's selection on it.
-    activate: assign({
-      active: true,
-      chat: "step" as const,
-      preview: false,
-      cursor: ({ context }) => context.at,
-      row: undefined,
-      handoff: null,
-    }),
-    // The page view: the panel shows the page's chat.
-    // The step it leaves is left once off: its reset and exit run (`leaveStep`).
-    deactivate: assign({
-      active: false,
-      row: undefined,
-      tree: false,
-      leaving: ({ context }) => context.opening,
-      entered: undefined,
-      opening: undefined,
-      peek: undefined,
-      preview: false,
-    }),
-    // A journey started again once every step is settled opens its steps for another pass.
-    // Each step opened writes its line, so the agent knows that the review goes on.
-    anotherPass: enqueueActions(({ context, event, enqueue }) => {
-      if (event.type !== "start") return;
-      const steps = passOf(context, event);
-      if (steps.length === 0) return;
-      const next = reopened(context, steps);
-      enqueue.assign(next);
-      // The lines name the journey that starts again, not the one the start leaves.
-      const lines = turnedLines(
-        { ...context, journey: event.journey },
-        { ...next, finish: context.finish },
-        steps,
-      );
-      if (lines === undefined) return;
-      enqueue.assign({ posts: context.posts + 1 });
-      enqueue.spawnChild("post", { id: `post-${context.posts}`, input: lines });
-    }),
-    nextRun: assign({ run: ({ context }) => context.run + 1 }),
-    /**
-     * u takes the newest change back, and Ctrl+R does it again. A step whose settled state
-     * turns writes its settle line, so the agent never keeps a settle that the page took
-     * back. A settle done again on the last open step waits for Finish, as a settle does.
-     */
-    turn: enqueueActions(({ context, event, enqueue }) => {
-      const redo = event.type === "redo";
-      const change = (redo ? context.future : context.past).at(-1);
-      if (change === undefined) {
-        enqueue.emit({ type: "nothing", redo });
-        return;
-      }
-      const restored = restore(context, change);
-      const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
-      const step = change.at === undefined ? undefined : change.feedback[0]?.[0];
-      // Back from the finish: the last step is open again, and its settle does not go.
-      const kept =
-        context.finish !== null && restored.feedback[context.finish.step]?.settled !== true
-          ? null
-          : context.finish;
-      // A settle done again on the last open step waits for Finish. A step that stays
-      // settled, and keeps another variant, does not: its line goes.
-      const finish =
-        kept === null &&
-        step !== undefined &&
-        context.feedback[step]?.settled !== true &&
-        restored.feedback[step]?.settled === true &&
-        openPlace(ids, restored.feedback, 0).open === 0
-          ? { step, ids: [] }
-          : kept;
-      const inverse = inverseOf(context, change);
-      enqueue.assign({
-        ...restored,
-        finish,
-        past: redo ? [...context.past, inverse] : context.past.slice(0, -1),
-        future: redo ? context.future.slice(0, -1) : [...context.future, inverse],
-      });
-      const lines = turnedLines(
-        context,
-        { ...restored, finish },
-        change.feedback.map(([id]) => id),
-      );
-      if (lines !== undefined) {
-        enqueue.assign({ posts: context.posts + 1 });
-        enqueue.spawnChild("post", { id: `post-${context.posts}`, input: lines });
-      }
-      if (finish !== null && finish !== context.finish) {
-        if (context.preview) enqueue.raise({ type: "preview" });
-        enqueue.raise({ type: "panel", shown: true });
-      }
-      // A settle taken back goes back to its step: also from the page, where the review's
-      // last settle ended the walk.
-      // A step that keeps another variant again opens again too, so the page shows it.
-      const shows =
-        step !== undefined &&
-        change.at !== undefined &&
-        stepOf(context, change.at)?.id === step &&
-        restored.feedback[step]?.settled === true &&
-        !keepsSame(context.feedback[step], restored.feedback[step]);
-      if (!redo && change.at !== undefined && !context.active)
-        enqueue.raise({ type: "start", journey: context.journey, at: change.at, fresh: false });
-      else if (change.at !== undefined && (change.at !== context.at || shows))
-        enqueue.raise({ type: "jump", at: change.at });
-      enqueue.emit({
-        type: "undone",
-        label: change.label,
-        redo,
-        turned: turnedBy(context, change),
-      });
-    }),
+    enterStep: createCallbackLogic<Event, EnterInput>(() => undefined),
+    leaveStep: createCallbackLogic<Event, Entered | undefined>(() => undefined),
+    switchVariant: createCallbackLogic<Event, SwitchInput>(() => undefined),
+    post: createCallbackLogic<Event, Post>(() => undefined),
+    keep: createCallbackLogic<Event, KeepInput>(() => undefined),
+    poll: createCallbackLogic<Event>(() => undefined),
   },
 }).createMachine({
   id: "session",
@@ -782,624 +862,568 @@ export const sessionMachine = setup({
     future: [],
   }),
   on: {
-    trouble: {
-      actions: assign({
-        trouble: ({ context, event }) => ({ ...context.trouble, [event.step]: event.reason }),
-      }),
+    trouble: ({ context, event }) => ({
+      context: { trouble: { ...context.trouble, [event.step]: event.reason } },
+    }),
+    listening: ({ event }) => ({ context: { listened: event.listened } }),
+    journeys: ({ event }) => ({ context: { journeys: event.journeys } }),
+    place: ({ event }) => ({ context: { place: event.place } }),
+    chat: ({ context, event }) => ({
+      context: { chat: event.to ?? (context.chat === "step" ? "page" : "step") },
+    }),
+    unvaried: (_, enq) => {
+      enq.emit({ type: "unvaried" });
     },
-    listening: { actions: assign({ listened: ({ event }) => event.listened }) },
-    journeys: { actions: assign({ journeys: ({ event }) => event.journeys }) },
-    place: { actions: assign({ place: ({ event }) => event.place }) },
-    chat: {
-      actions: assign({
-        chat: ({ context, event }) => event.to ?? (context.chat === "step" ? "page" : "step"),
-      }),
+    // The preview hides the tools in both modes, Notes and Review.
+    preview: ({ context }, enq) => {
+      if (!context.preview) enq.emit({ type: "previewing" });
+      return { context: { preview: !context.preview } };
     },
-    unvaried: { actions: emit({ type: "unvaried" }) },
-    preview: {
-      // The preview hides the tools in both modes, Notes and Review.
-      actions: enqueueActions(({ context, enqueue }) => {
-        enqueue.assign({ preview: !context.preview });
-        if (!context.preview) enqueue.emit({ type: "previewing" });
-      }),
+    write: ({ context, event }) => ({
+      context: {
+        notes: withNote(context, event.id, (n) =>
+          noteAfter(n ?? blankNote(event.id, event.step, event.pin), {
+            type: "write",
+            draft: event.draft,
+            images: event.images,
+          }),
+        ),
+      },
+    }),
+    noteEvent: ({ context, event }) => {
+      const c = remembering(context, event);
+      return {
+        context: {
+          ...memory(c),
+          notes: withNote(c, event.id, (n) => (n === undefined ? n : noteAfter(n, event.event))),
+        },
+      };
     },
-    write: {
-      actions: assign({
-        notes: ({ context, event }) =>
-          withNote(context, event.id, (n) =>
-            noteAfter(n ?? blankNote(event.id, event.step, event.pin), {
-              type: "write",
-              draft: event.draft,
-              images: event.images,
-            }),
-          ),
-      }),
+    remove: ({ context, event }) => {
+      const c = remembering(context, event);
+      return {
+        context: {
+          ...memory(c),
+          notes: withNote(c, event.id, () => undefined),
+          opened: c.opened === event.id ? undefined : c.opened,
+        },
+      };
     },
-    noteEvent: {
-      actions: [
-        "remember",
-        assign({
-          notes: ({ context, event }) =>
-            withNote(context, event.id, (n) => (n === undefined ? n : noteAfter(n, event.event))),
-        }),
-      ],
+    undo: ({ context }, enq) => ({ context: turn(context, false, enq) }),
+    redo: ({ context }, enq) => ({ context: turn(context, true, enq) }),
+    posted: ({ children, event }, enq) => {
+      const child = children[event.child];
+      if (child !== undefined) enq.stop(child);
+      return {};
     },
-    remove: {
-      actions: [
-        "remember",
-        assign({
-          notes: ({ context, event }) => withNote(context, event.id, () => undefined),
-          opened: ({ context, event }) =>
-            context.opened === event.id ? undefined : context.opened,
-        }),
-      ],
+    clear: ({ context, event }) => {
+      const c = remembering(context, event);
+      return {
+        context: {
+          ...memory(c),
+          notes: c.notes.map((n) => (n.id === stepNoteId(event.step) ? clearedNote(n) : n)),
+        },
+      };
     },
-    undo: { actions: "turn" },
-    redo: { actions: "turn" },
-    posted: { actions: stopChild(({ event }) => event.child) },
-    clear: {
-      actions: [
-        "remember",
-        assign({
-          notes: ({ context, event }) =>
-            context.notes.map((n) => (n.id === stepNoteId(event.step) ? clearedNote(n) : n)),
-        }),
-      ],
-    },
-    failed: {
-      actions: [
-        assign({
+    failed: ({ context, event }, enq) => {
+      enq.emit({ type: "failed" });
+      return {
+        context: {
           // The words go back to the draft, and the pointed notes wait again.
-          notes: ({ context, event }) =>
-            context.notes.flatMap((n) =>
-              event.ids.includes(n.id)
-                ? [
-                    noteAfter(n, { type: "failed" }),
-                    ...(n.thread.at(-1)?.pins ?? []).map((p) => unsentPin(n.step, p)),
-                  ]
-                : [n],
-            ),
-        }),
-        emit({ type: "failed" }),
-      ],
+          notes: context.notes.flatMap((n) =>
+            event.ids.includes(n.id)
+              ? [
+                  noteAfter(n, { type: "failed" }),
+                  ...(n.thread.at(-1)?.pins ?? []).map((p) => unsentPin(n.step, p)),
+                ]
+              : [n],
+          ),
+        },
+      };
     },
-    replies: {
-      actions: enqueueActions(({ context, event, enqueue }) => {
-        let variants = context.variants;
-        const notes = context.notes.map((n) => {
-          const reply = event.replies[n.id];
-          if (reply === undefined) return n;
-          const all = (reply.replies ?? []).slice(
-            n.thread.filter((m) => m.by === "agent").length + (n.skip ?? 0),
-          );
-          // A settle stays in the status file: once the reviewer wrote again, it is an old one.
-          const wrote = Math.max(0, ...n.thread.filter((m) => m.by === "you").map((m) => m.at));
-          const settled =
-            reply.settled === true && (reply.settledAt === undefined || reply.settledAt >= wrote);
-          // A reply from before the newest message answers an earlier one, as one the page
-          // did not have when the reviewer wrote again: it is no answer to the newest.
-          const earlier = all.filter((r) => r.at !== undefined && r.at < wrote);
-          const fresh = all.filter((r) => !earlier.includes(r));
-          const was =
-            earlier.length === 0 ? n : noteAfter(n, { type: "earlier", replies: earlier });
-          // A working state from before the newest message was for an earlier one: the newest
-          // waits until the agent says it works on it. A file from before 0.1.14 has no time.
-          const working =
-            reply.state === "working" &&
-            (reply.workingAt === undefined || reply.workingAt >= wrote);
-          if (fresh.length === 0 && !settled)
-            return working
-              ? noteAfter(was, {
-                  type: "working",
-                  progress: reply.progress,
-                  since: reply.workingAt,
-                })
-              : was;
-          const next = noteAfter(was, {
-            type: "reply",
-            at: was.thread.at(-1)?.at ?? 0,
-            replies: fresh,
-            settled,
-          });
-          if (next.state === was.state && next.thread.length === was.thread.length) return was;
-          enqueue.emit({ type: "replied", note: next, settled: next.state === "settled" });
-          // The agent's variant shows at once.
-          const label = fresh.at(-1)?.variant;
-          const index =
-            label === undefined
-              ? -1
-              : (shapeOf(context)
-                  ?.steps.find((s) => s.id === n.step)
-                  ?.variants.indexOf(label) ?? -1);
-          if (index >= 0) variants = { ...variants, [n.step]: index };
-          return next;
+    replies: ({ context, event }, enq) => {
+      let variants = context.variants;
+      const notes = context.notes.map((n) => {
+        const reply = event.replies[n.id];
+        if (reply === undefined) return n;
+        const all = (reply.replies ?? []).slice(
+          n.thread.filter((m) => m.by === "agent").length + (n.skip ?? 0),
+        );
+        // A settle stays in the status file: once the reviewer wrote again, it is an old one.
+        const wrote = Math.max(0, ...n.thread.filter((m) => m.by === "you").map((m) => m.at));
+        const settled =
+          reply.settled === true && (reply.settledAt === undefined || reply.settledAt >= wrote);
+        // A reply from before the newest message answers an earlier one, as one the page
+        // did not have when the reviewer wrote again: it is no answer to the newest.
+        const earlier = all.filter((r) => r.at !== undefined && r.at < wrote);
+        const fresh = all.filter((r) => !earlier.includes(r));
+        const was = earlier.length === 0 ? n : noteAfter(n, { type: "earlier", replies: earlier });
+        // A working state from before the newest message was for an earlier one: the newest
+        // waits until the agent says it works on it. A file from before 0.1.14 has no time.
+        const working =
+          reply.state === "working" && (reply.workingAt === undefined || reply.workingAt >= wrote);
+        if (fresh.length === 0 && !settled)
+          return working
+            ? noteAfter(was, {
+                type: "working",
+                progress: reply.progress,
+                since: reply.workingAt,
+              })
+            : was;
+        const next = noteAfter(was, {
+          type: "reply",
+          at: was.thread.at(-1)?.at ?? 0,
+          replies: fresh,
+          settled,
         });
-        // The agent settled a step's note, as the reviewer told it: the step is settled.
-        let feedback = context.feedback;
-        for (const n of notes)
-          if (
-            n.id === stepNoteId(n.step) &&
-            n.state === "settled" &&
-            context.notes.find((o) => o.id === n.id)?.state !== "settled"
-          )
-            feedback = { ...feedback, [n.step]: { ...feedback[n.step], settled: true } };
-        enqueue.assign({ notes, variants, feedback });
-      }),
+        if (next.state === was.state && next.thread.length === was.thread.length) return was;
+        enq.emit({ type: "replied", note: next, settled: next.state === "settled" });
+        // The agent's variant shows at once.
+        const label = fresh.at(-1)?.variant;
+        const index =
+          label === undefined
+            ? -1
+            : (shapeOf(context)
+                ?.steps.find((s) => s.id === n.step)
+                ?.variants.indexOf(label) ?? -1);
+        if (index >= 0) variants = { ...variants, [n.step]: index };
+        return next;
+      });
+      // The agent settled a step's note, as the reviewer told it: the step is settled.
+      let feedback = context.feedback;
+      for (const n of notes)
+        if (
+          n.id === stepNoteId(n.step) &&
+          n.state === "settled" &&
+          context.notes.find((o) => o.id === n.id)?.state !== "settled"
+        )
+          feedback = { ...feedback, [n.step]: { ...feedback[n.step], settled: true } };
+      return { context: { notes, variants, feedback } };
     },
-    send: {
-      actions: enqueueActions(({ context, event, enqueue }) => {
-        const message = sentOf(context, event);
-        if (message === undefined) return;
-        const { notes, ids } = message;
-        // The open pointed note went with the message: its card closes.
-        if (context.opened !== undefined && !notes.some((n) => n.id === context.opened))
-          enqueue.raise({ type: "close" });
-        // A message on a settled step opens it again.
-        const step = context.feedback[event.step];
-        const feedback =
-          step?.settled === true
-            ? { ...context.feedback, [event.step]: { ...step, settled: false } }
-            : context.feedback;
-        enqueue.assign({ notes, feedback });
-        enqueue.assign({ posts: context.posts + 1 });
-        const session = { ...context, notes, feedback };
-        const note: Post = { kind: "note", ids, session };
-        // The step opened again goes first, so the agent reads the message on an open step.
-        // The last settle, which waits for Finish, never went: it has no line to take back.
-        enqueue.spawnChild("post", {
-          id: `post-${context.posts}`,
-          input:
-            step?.settled === true && context.finish?.step !== event.step
-              ? { kind: "settle", ids: [], step: event.step, session, next: note }
-              : note,
-        });
-      }),
+    send: ({ context, event }, enq) => {
+      const message = sentOf(context, event);
+      if (message === undefined) return {};
+      const { notes, ids } = message;
+      // The open pointed note went with the message: its card closes.
+      if (context.opened !== undefined && !notes.some((n) => n.id === context.opened))
+        enq.raise({ type: "close" });
+      // A message on a settled step opens it again.
+      const step = context.feedback[event.step];
+      const feedback =
+        step?.settled === true
+          ? { ...context.feedback, [event.step]: { ...step, settled: false } }
+          : context.feedback;
+      const session = { ...context, notes, feedback };
+      const note: Post = { kind: "note", ids, session };
+      // The step opened again goes first, so the agent reads the message on an open step.
+      // The last settle, which waits for Finish, never went: it has no line to take back.
+      enq.spawn("post", {
+        id: `post-${context.posts}`,
+        input:
+          step?.settled === true && context.finish?.step !== event.step
+            ? { kind: "settle", ids: [], step: event.step, session, next: note }
+            : note,
+      });
+      return { context: { notes, feedback, posts: context.posts + 1 } };
     },
     // A take-back is a message as any other to the agent, so the listener wakes for it. It
     // changes no settle, and u does not take it back: what went to the agent stays sent.
-    takeBack: {
-      actions: enqueueActions(({ context, event, enqueue }) => {
-        const chat = context.notes.find((n) => n.id === event.id);
-        const text = chat === undefined ? undefined : followUpWords(context, chat, event.message);
-        if (chat === undefined || text === undefined) return;
-        const withdraws = {
-          id: chat.id,
-          ...(event.message === undefined ? {} : { at: event.message }),
-        };
-        const next = noteAfter(chat, { type: "send", at: event.at, text, withdraws });
-        const notes = context.notes.map((n) => (n.id === chat.id ? next : n));
-        enqueue.assign({ notes, posts: context.posts + 1 });
-        enqueue.spawnChild("post", {
-          id: `post-${context.posts}`,
-          input: { kind: "note", ids: [chat.id], session: { ...context, notes } },
-        });
-      }),
+    takeBack: ({ context, event }, enq) => {
+      const chat = context.notes.find((n) => n.id === event.id);
+      const text = chat === undefined ? undefined : followUpWords(context, chat, event.message);
+      if (chat === undefined || text === undefined) return {};
+      const withdraws = {
+        id: chat.id,
+        ...(event.message === undefined ? {} : { at: event.message }),
+      };
+      const next = noteAfter(chat, { type: "send", at: event.at, text, withdraws });
+      const notes = context.notes.map((n) => (n.id === chat.id ? next : n));
+      enq.spawn("post", {
+        id: `post-${context.posts}`,
+        input: { kind: "note", ids: [chat.id], session: { ...context, notes } },
+      });
+      return { context: { notes, posts: context.posts + 1 } };
     },
-    settle: {
-      actions: [
-        "remember",
-        enqueueActions(({ context, event, enqueue }) => {
-          const at = event.step ?? context.at;
-          const step = stepOf(context, at);
-          if (step === undefined) return;
-          const was: Feedback = context.feedback[step.id] ?? {};
-          const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
-          /** The walk goes on to the next open step, or back to the first open one when none
-           * is after, as a reader goes on from the top: from the page and from the tree alike,
-           * the walk and the selection go there. With no step open, it stays. */
-          const goOn = (feedback: Readonly<Record<string, Feedback>>) => {
-            const after = stepBy(ids, feedback, at, 1);
-            const first = ids.findIndex((id) => feedback[id]?.settled !== true);
-            const next = after !== at ? after : first === -1 ? at : first;
-            enqueue.assign({ cursor: next, row: undefined });
-            if (next !== context.at) enqueue.raise({ type: "go", by: next - context.at });
-          };
-          // A settle on a settled step that shows the variant it kept takes it back: the step
-          // opens again and the walk stays, so y and the green button toggle (Henrik
-          // 2026-10-27).
-          const again = was.settled === true;
-          if (again && !changesKept(context, step, event.keep)) {
-            enqueue.raise({ type: "reopen", step: at });
-            return;
-          }
-          // The notes not sent yet go with the settle, so none is lost: the agent works on
-          // them while the step stays settled.
-          const message = sentOf(context, {
-            id: stepNoteId(step.id),
-            step: step.id,
-            at: event.at ?? 0,
-          });
-          // Settling settles the step's other notes, also one the agent works on.
-          const notes = (message?.notes ?? context.notes).map((n) =>
-            n.step !== step.id || message?.ids.includes(n.id) === true
-              ? n
-              : noteAfter(n, { type: "settle" }),
-          );
-          // The settle keeps the variant shown: of the step's part, and of the step's own. On
-          // a settled step, the variant kept before is kept no more, as if it never was.
-          const parts =
-            event.keep !== undefined
-              ? {
-                  ...was.parts,
-                  [event.keep.part]: keptOn(
-                    verdictsOf(context, event.keep.part),
-                    event.keep.variant,
-                  ),
-                }
-              : was.parts;
-          const own = ownOf(context, step);
-          const feedback = {
-            ...context.feedback,
-            [step.id]: {
-              ...was,
-              settled: true,
-              ...(parts === undefined ? {} : { parts }),
-              ...(own === undefined ? {} : { variant: own }),
-            },
-          };
-          enqueue.assign({ notes, feedback });
-          if (context.opened !== undefined && !notes.some((n) => n.id === context.opened))
-            enqueue.raise({ type: "close" });
-          const held = context.finish;
-          const sent = message?.ids ?? [];
-          // The step whose settle waits for Finish keeps the new variant: Finish sends it.
-          if (held !== null && held.step === step.id) {
-            enqueue.assign({ finish: { step: held.step, ids: [...held.ids, ...sent] } });
-            return;
-          }
-          // The last open step settled: the panel asks the reviewer to finish, and the settle
-          // waits for that, so the agent wakes once, at the end. The walk stays on its step.
-          if (!again && openPlace(ids, feedback, context.at).open === 0) {
-            enqueue.assign({ finish: { step: step.id, ids: sent } });
-            if (context.preview) enqueue.raise({ type: "preview" });
-            enqueue.raise({ type: "panel", shown: true });
-            return;
-          }
-          // A line goes at once: while a finish waits, its step counts as open in it.
-          const session = { ...context, notes, feedback };
-          enqueue.assign({ posts: context.posts + 1 });
-          // The notes go after the settle, so the listener reads them with it.
-          enqueue.spawnChild("post", {
-            id: `post-${context.posts}`,
-            input: {
-              kind: "settle",
-              ids: [],
-              step: step.id,
-              session,
-              next: message === undefined ? undefined : { kind: "note", ids: message.ids, session },
-            },
-          });
-          goOn(feedback);
-        }),
-      ],
+    settle: ({ context: before, event }, enq) => {
+      const context = remembering(before, event);
+      const at = event.step ?? context.at;
+      const step = stepOf(context, at);
+      if (step === undefined) return { context: memory(context) };
+      const was: Feedback = context.feedback[step.id] ?? {};
+      const ids = shapeOf(context)?.steps.map((s) => s.id) ?? [];
+      /** The walk goes on to the next open step, or back to the first open one when none
+       * is after, as a reader goes on from the top: from the page and from the tree alike,
+       * the walk and the selection go there. With no step open, it stays. */
+      const goOn = (feedback: Readonly<Record<string, Feedback>>) => {
+        const after = stepBy(ids, feedback, at, 1);
+        const first = ids.findIndex((id) => feedback[id]?.settled !== true);
+        const next = after !== at ? after : first === -1 ? at : first;
+        if (next !== context.at) enq.raise({ type: "go", by: next - context.at });
+        return { cursor: next, row: undefined };
+      };
+      // A settle on a settled step that shows the variant it kept takes it back: the step
+      // opens again and the walk stays, so y and the green button toggle (Henrik
+      // 2026-10-27).
+      const again = was.settled === true;
+      if (again && !changesKept(context, step, event.keep)) {
+        enq.raise({ type: "reopen", step: at });
+        return { context: memory(context) };
+      }
+      // The notes not sent yet go with the settle, so none is lost: the agent works on
+      // them while the step stays settled.
+      const message = sentOf(context, {
+        id: stepNoteId(step.id),
+        step: step.id,
+        at: event.at ?? 0,
+      });
+      // Settling settles the step's other notes, also one the agent works on.
+      const notes = (message?.notes ?? context.notes).map((n) =>
+        n.step !== step.id || message?.ids.includes(n.id) === true
+          ? n
+          : noteAfter(n, { type: "settle" }),
+      );
+      // The settle keeps the variant shown: of the step's part, and of the step's own. On
+      // a settled step, the variant kept before is kept no more, as if it never was.
+      const parts =
+        event.keep !== undefined
+          ? {
+              ...was.parts,
+              [event.keep.part]: keptOn(verdictsOf(context, event.keep.part), event.keep.variant),
+            }
+          : was.parts;
+      const own = ownOf(context, step);
+      const feedback = {
+        ...context.feedback,
+        [step.id]: {
+          ...was,
+          settled: true,
+          ...(parts === undefined ? {} : { parts }),
+          ...(own === undefined ? {} : { variant: own }),
+        },
+      };
+      const settled = { ...memory(context), notes, feedback };
+      if (context.opened !== undefined && !notes.some((n) => n.id === context.opened))
+        enq.raise({ type: "close" });
+      const held = context.finish;
+      const sent = message?.ids ?? [];
+      // The step whose settle waits for Finish keeps the new variant: Finish sends it.
+      if (held !== null && held.step === step.id)
+        return {
+          context: { ...settled, finish: { step: held.step, ids: [...held.ids, ...sent] } },
+        };
+      // The last open step settled: the panel asks the reviewer to finish, and the settle
+      // waits for that, so the agent wakes once, at the end. The walk stays on its step.
+      if (!again && openPlace(ids, feedback, context.at).open === 0) {
+        if (context.preview) enq.raise({ type: "preview" });
+        enq.raise({ type: "panel", shown: true });
+        return { context: { ...settled, finish: { step: step.id, ids: sent } } };
+      }
+      // A line goes at once: while a finish waits, its step counts as open in it.
+      const session = { ...context, notes, feedback };
+      // The notes go after the settle, so the listener reads them with it.
+      enq.spawn("post", {
+        id: `post-${context.posts}`,
+        input: {
+          kind: "settle",
+          ids: [],
+          step: step.id,
+          session,
+          next: message === undefined ? undefined : { kind: "note", ids: message.ids, session },
+        },
+      });
+      return { context: { ...settled, posts: context.posts + 1, ...goOn(feedback) } };
     },
     // Opening the step again keeps no variant and opens the notes the reviewer settled, as
     // the reviewer may settle on another. The settle that waits for Finish never went: opening
     // its step takes it back with no line, as Back does. Opening another step while it waits
     // sends it, as that step is the last open one no more.
-    reopen: {
-      actions: [
-        "remember",
-        enqueueActions(({ context, event, enqueue }) => {
-          const step = stepOf(context, event.step ?? context.at);
-          if (step === undefined || context.feedback[step.id]?.settled !== true) return;
-          const { notes, feedback } = reopened(context, [step.id]);
-          const held = context.finish;
-          enqueue.assign({ notes, feedback, finish: null, posts: context.posts + 1 });
-          const session = { ...context, notes, feedback, finish: null };
-          const heldNotes = (ids: readonly string[]): Post | undefined =>
-            ids.length === 0 ? undefined : { kind: "note", ids, session };
-          if (held?.step === step.id) {
-            const notesHeld = heldNotes(held.ids);
-            if (notesHeld !== undefined)
-              enqueue.spawnChild("post", { id: `post-${context.posts}`, input: notesHeld });
-            return;
-          }
-          enqueue.spawnChild("post", {
-            id: `post-${context.posts}`,
-            input: {
-              kind: "settle",
-              ids: [],
-              step: step.id,
-              // The held settle has not gone yet, as this line goes.
-              session: { ...session, finish: held },
-              next:
-                held === null
-                  ? undefined
-                  : {
-                      kind: "settle",
-                      ids: [],
-                      step: held.step,
-                      session,
-                      next: heldNotes(held.ids),
-                    },
-            },
-          });
-        }),
-      ],
+    reopen: ({ context: before, event }, enq) => {
+      const context = remembering(before, event);
+      const step = stepOf(context, event.step ?? context.at);
+      if (step === undefined || context.feedback[step.id]?.settled !== true)
+        return { context: memory(context) };
+      const { notes, feedback } = reopened(context, [step.id]);
+      const held = context.finish;
+      const patch = { ...memory(context), notes, feedback, finish: null, posts: context.posts + 1 };
+      const session = { ...context, notes, feedback, finish: null };
+      const heldNotes = (ids: readonly string[]): Post | undefined =>
+        ids.length === 0 ? undefined : { kind: "note", ids, session };
+      if (held?.step === step.id) {
+        const notesHeld = heldNotes(held.ids);
+        if (notesHeld !== undefined)
+          enq.spawn("post", { id: `post-${context.posts}`, input: notesHeld });
+        return { context: patch };
+      }
+      enq.spawn("post", {
+        id: `post-${context.posts}`,
+        input: {
+          kind: "settle",
+          ids: [],
+          step: step.id,
+          // The held settle has not gone yet, as this line goes.
+          session: { ...session, finish: held },
+          next:
+            held === null
+              ? undefined
+              : {
+                  kind: "settle",
+                  ids: [],
+                  step: held.step,
+                  session,
+                  next: heldNotes(held.ids),
+                },
+        },
+      });
+      return { context: patch };
     },
     // Finish ends the review: the last settle goes, with the notes held with it, and the
     // panel goes back to the page and the tree. The hand-off, where the agent's answer comes
     // in, opens from the journey's row. The settle line names the
     // hand-off, so the agent answers the review there. The walk stays on its step, so the
     // journey opened again goes on there.
-    finish: {
-      guard: ({ context }) => context.finish !== null,
-      actions: enqueueActions(({ context, event, enqueue }) => {
-        const held = context.finish;
-        if (held === null) return;
-        const handoff = newHandoff(context.journey, event.at ?? 0);
-        const notes = [...context.notes.filter((n) => n.id !== handoff.id), handoff];
-        enqueue.assign({ finish: null, posts: context.posts + 1, notes });
-        const session = { ...context, finish: null, notes };
-        enqueue.spawnChild("post", {
-          id: `post-${context.posts}`,
-          input: {
-            kind: "settle",
-            ids: [],
-            step: held.step,
-            session,
-            handoff: handoff.id,
-            next: held.ids.length === 0 ? undefined : { kind: "note", ids: held.ids, session },
-          },
-        });
-        // The walk is over: the panel goes back to the page and the tree, where the journey's
-        // row, selected, says what the agent does with the review, and opens the hand-off.
-        enqueue.raise({ type: "leave" });
-        enqueue.raise({ type: "tree", open: true });
-        enqueue.raise({ type: "row", id: `journey:${context.journey}` });
-        enqueue.emit({ type: "done", journey: context.journey });
-      }),
+    finish: ({ context, event }, enq) => {
+      const held = context.finish;
+      if (held === null) return;
+      const handoff = newHandoff(context.journey, event.at ?? 0);
+      const notes = [...context.notes.filter((n) => n.id !== handoff.id), handoff];
+      const session = { ...context, finish: null, notes };
+      enq.spawn("post", {
+        id: `post-${context.posts}`,
+        input: {
+          kind: "settle",
+          ids: [],
+          step: held.step,
+          session,
+          handoff: handoff.id,
+          next: held.ids.length === 0 ? undefined : { kind: "note", ids: held.ids, session },
+        },
+      });
+      // The walk is over: the panel goes back to the page and the tree, where the journey's
+      // row, selected, says what the agent does with the review, and opens the hand-off.
+      enq.raise({ type: "leave" });
+      enq.raise({ type: "tree", open: true });
+      enq.raise({ type: "row", id: `journey:${context.journey}` });
+      enq.emit({ type: "done", journey: context.journey });
+      return { context: { finish: null, posts: context.posts + 1, notes } };
     },
     // The hand-off shows, or leaves for the tree. An answer read there is done with: its note
     // settles, so it counts as news no more.
-    handoff: {
-      actions: assign(({ context, event }) => {
-        const was = context.notes.find((n) => n.id === context.handoff);
-        const read =
-          event.id === null && was?.state === "replied"
-            ? withNote(context, was.id, (n) =>
-                n === undefined ? n : noteAfter(n, { type: "settle" }),
-              )
-            : context.notes;
-        return { handoff: event.id, notes: read };
-      }),
+    handoff: ({ context, event }) => {
+      const was = context.notes.find((n) => n.id === context.handoff);
+      const read =
+        event.id === null && was?.state === "replied"
+          ? withNote(context, was.id, (n) =>
+              n === undefined ? n : noteAfter(n, { type: "settle" }),
+            )
+          : context.notes;
+      return { context: { handoff: event.id, notes: read } };
     },
     // Back from the finish takes the last settle back, as u does. With no undo to take, as
     // after a reload, the step opens again by itself; the agent never heard of its settle,
     // and the notes the chat shows as sent go now.
-    back: {
-      guard: ({ context }) => context.finish !== null,
-      actions: enqueueActions(({ context, enqueue }) => {
-        const held = context.finish;
-        if (held === null) return;
-        const last = context.past.at(-1);
-        // The settle that settled it, not a change of the variant it kept.
-        if (
-          last?.at !== undefined &&
-          last.feedback[0]?.[0] === held.step &&
-          last.feedback[0][1]?.settled !== true
-        ) {
-          enqueue.raise({ type: "undo" });
-          return;
-        }
-        const feedback = {
-          ...context.feedback,
-          [held.step]: { ...context.feedback[held.step], settled: false },
-        };
-        enqueue.assign({ feedback, finish: null });
-        if (held.ids.length === 0) return;
-        enqueue.assign({ posts: context.posts + 1 });
-        enqueue.spawnChild("post", {
-          id: `post-${context.posts}`,
-          input: { kind: "note", ids: held.ids, session: { ...context, feedback, finish: null } },
-        });
-      }),
+    back: ({ context }, enq) => {
+      const held = context.finish;
+      if (held === null) return;
+      const last = context.past.at(-1);
+      // The settle that settled it, not a change of the variant it kept.
+      if (
+        last?.at !== undefined &&
+        last.feedback[0]?.[0] === held.step &&
+        last.feedback[0][1]?.settled !== true
+      ) {
+        enq.raise({ type: "undo" });
+        return {};
+      }
+      const feedback = {
+        ...context.feedback,
+        [held.step]: { ...context.feedback[held.step], settled: false },
+      };
+      if (held.ids.length === 0) return { context: { feedback, finish: null } };
+      enq.spawn("post", {
+        id: `post-${context.posts}`,
+        input: { kind: "note", ids: held.ids, session: { ...context, feedback, finish: null } },
+      });
+      return { context: { feedback, finish: null, posts: context.posts + 1 } };
     },
-    drop: {
-      actions: [
-        "remember",
-        enqueueActions(({ context, enqueue, event }) => {
-          const step = stepOf(context);
-          if (step === undefined) return;
-          const was: Feedback = context.feedback[step.id] ?? {};
-          const parts = {
-            ...was.parts,
-            [event.part]: dropped(verdictsOf(context, event.part), event.variant),
-          };
-          // The agent reads the verdicts with the reviewer's next note, and the reasons in it.
-          enqueue.assign({ feedback: { ...context.feedback, [step.id]: { ...was, parts } } });
-        }),
-      ],
-    },
-    design: { actions: assign({ design: ({ event }) => event.design }) },
-    showVariant: {
-      actions: assign({
-        variants: ({ context, event }) => {
-          const shape = shapeOf(context)?.steps.find((s) => s.id === event.step);
-          const index = shape?.variants.indexOf(event.label) ?? -1;
-          return index < 0 ? context.variants : { ...context.variants, [event.step]: index };
+    drop: ({ context: before, event }) => {
+      const context = remembering(before, event);
+      const step = stepOf(context);
+      if (step === undefined) return { context: memory(context) };
+      const was: Feedback = context.feedback[step.id] ?? {};
+      const parts = {
+        ...was.parts,
+        [event.part]: dropped(verdictsOf(context, event.part), event.variant),
+      };
+      // The agent reads the verdicts with the reviewer's next note, and the reasons in it.
+      return {
+        context: {
+          ...memory(context),
+          feedback: { ...context.feedback, [step.id]: { ...was, parts } },
         },
-      }),
+      };
+    },
+    design: ({ event }) => ({ context: { design: event.design } }),
+    showVariant: ({ context, event }) => {
+      const shape = shapeOf(context)?.steps.find((s) => s.id === event.step);
+      const index = shape?.variants.indexOf(event.label) ?? -1;
+      return {
+        context: {
+          variants: index < 0 ? context.variants : { ...context.variants, [event.step]: index },
+        },
+      };
     },
   },
   states: {
     review: {
       initial: "starting",
       states: {
-        starting: { always: [{ guard: "wasActive", target: "on" }, { target: "off" }] },
+        starting: { always: ({ context }) => ({ target: context.active ? "on" : "off" }) },
         off: {
           invoke: { src: "leaveStep", input: ({ context }) => context.leaving },
           on: {
-            start: {
-              target: "on",
-              actions: [
-                "remember",
-                "anotherPass",
-                assign({
-                  journey: ({ event }) => event.journey,
-                  at: ({ event }) => event.at,
-                  cursor: ({ event }) => event.at,
-                  row: undefined,
-                  fresh: ({ event }) => event.fresh,
-                }),
-                "activate",
-                "nextRun",
-              ],
+            start: ({ context: before, event }, enq) => {
+              const context = remembering(before, event);
+              return {
+                target: "on",
+                context: {
+                  ...memory(context),
+                  ...anotherPass(context, event, enq),
+                  journey: event.journey,
+                  at: event.at,
+                  fresh: event.fresh,
+                  ...activated(event.at),
+                  run: context.run + 1,
+                },
+              };
             },
-            choose: {
+            choose: ({ context }) => ({
               target: "on",
-              actions: [assign({ at: ({ context }) => context.cursor }), "activate", "nextRun"],
-            },
+              context: { at: context.cursor, ...activated(context.cursor), run: context.run + 1 },
+            }),
           },
         },
         on: {
           initial: "entering",
           on: {
-            leave: {
-              target: "off",
-              actions: ["deactivate", raise({ type: "panel", shown: true })],
+            leave: ({ context }, enq) => {
+              enq.raise({ type: "panel", shown: true });
+              return { target: "off", context: deactivated(context) };
             },
-            start: {
-              target: ".entering",
-              reenter: true,
-              actions: [
-                "remember",
-                "anotherPass",
-                assign({
-                  journey: ({ event }) => event.journey,
-                  at: ({ event }) => event.at,
-                  cursor: ({ event }) => event.at,
+            start: ({ context: before, event }, enq) => {
+              const context = remembering(before, event);
+              return {
+                target: ".entering",
+                reenter: true,
+                context: {
+                  ...memory(context),
+                  ...anotherPass(context, event, enq),
+                  journey: event.journey,
+                  at: event.at,
+                  cursor: event.at,
                   row: undefined,
-                  fresh: ({ event }) => event.fresh,
+                  fresh: event.fresh,
                   preview: false,
                   chat: "step" as const,
                   handoff: null,
-                }),
-                "nextRun",
-              ],
+                  run: context.run + 1,
+                },
+              };
             },
-            go: {
-              // h and l go to every step, settled too, so the reviewer can go back to one
-              // just settled; H and L pass over the settled ones.
-              guard: ({ context, event }) => goTo(context, event) !== context.at,
-              target: ".entering",
-              reenter: true,
-              actions: assign({
-                at: ({ context, event }) => goTo(context, event),
-                cursor: ({ context, event }) => goTo(context, event),
-                row: undefined,
-              }),
+            // h and l go to every step, settled too, so the reviewer can go back to one
+            // just settled; H and L pass over the settled ones.
+            go: ({ context, event }) => {
+              const at = goTo(context, event);
+              if (at === context.at) return;
+              return {
+                target: ".entering",
+                reenter: true,
+                context: { at, cursor: at, row: undefined },
+              };
             },
             // A step chosen by its name opens on its own chat.
-            jump: {
+            jump: ({ context, event }) => ({
               target: ".entering",
               reenter: true,
-              actions: assign({
-                at: ({ context, event }) => clamp(context, event.at),
-                cursor: ({ context, event }) => clamp(context, event.at),
+              context: {
+                at: clamp(context, event.at),
+                cursor: clamp(context, event.at),
                 row: undefined,
                 chat: "step" as const,
-              }),
-            },
-            choose: {
+              },
+            }),
+            choose: ({ context }) => ({
               target: ".entering",
               reenter: true,
-              actions: assign({ at: ({ context }) => context.cursor, chat: "step" as const }),
-            },
+              context: { at: context.cursor, chat: "step" as const },
+            }),
             // The step again, its world built from the start.
-            reset: {
+            reset: ({ context }) => ({
               target: ".entering",
               reenter: true,
-              actions: [assign({ fresh: true }), "nextRun"],
+              context: { fresh: true, run: context.run + 1 },
+            }),
+            peek: ({ context, event }) => {
+              const step = stepOf(context);
+              if (step?.id !== event.step) return {};
+              if (event.label === undefined) return { context: { peek: undefined } };
+              const index = step.variants.indexOf(event.label);
+              return index < 0 ? {} : { context: { peek: { step: step.id, index } } };
             },
-            peek: {
-              actions: assign({
-                peek: ({ context, event }) => {
-                  const step = stepOf(context);
-                  if (step?.id !== event.step) return context.peek;
-                  if (event.label === undefined) return undefined;
-                  const index = step.variants.indexOf(event.label);
-                  return index < 0 ? context.peek : { step: step.id, index };
-                },
-              }),
-            },
-            variant: {
-              guard: "hasVariants",
-              actions: assign({
-                variants: ({ context, event }) => {
-                  const step = stepOf(context);
-                  const count = step?.variants.length ?? 0;
-                  if (step === undefined || count < 2) return context.variants;
-                  const next =
-                    ((((context.variants[step.id] ?? 0) + event.by) % count) + count) % count;
-                  return { ...context.variants, [step.id]: next };
-                },
-              }),
+            variant: ({ context, event }) => {
+              const step = stepOf(context);
+              const count = step?.variants.length ?? 0;
+              if (step === undefined || count < 2) return;
+              const next =
+                ((((context.variants[step.id] ?? 0) + event.by) % count) + count) % count;
+              return { context: { variants: { ...context.variants, [step.id]: next } } };
             },
           },
           states: {
-            // A step opens with the tree folded, so the panel shows the step.
-            // A settled step opens with the variants its settle kept.
             entering: {
-              entry: assign(({ context }) => {
-                const variants = keptVariants(context);
-                const { [stepOf(context)?.id ?? ""]: _, ...trouble } = context.trouble;
-                return {
-                  tree: false,
-                  trouble,
-                  variants,
-                  peek: undefined,
-                  leaving: context.opening,
-                  opening: {
-                    journey: context.journey,
-                    at: context.at,
-                    variant: variantOf({ ...context, variants, peek: undefined }),
-                    run: context.run,
-                  },
-                };
-              }),
+              entry: ({ context }) => ({ context: opening(context) }),
+              // XState starts a state's actors before its entry runs: the input reads the
+              // context as the entry leaves it.
               invoke: {
                 src: "enterStep",
-                input: ({ context }) => ({
-                  journey: context.journey,
-                  at: context.at,
-                  variant: variantOf(context),
-                  fresh: context.fresh,
-                  run: context.run,
-                  leaving: context.leaving,
-                  kept: keptParts(context.feedback[stepOf(context)?.id ?? ""]),
-                }),
+                input: ({ context: before }) => {
+                  const context = { ...before, ...opening(before) };
+                  return {
+                    journey: context.journey,
+                    at: context.at,
+                    variant: variantOf(context),
+                    fresh: context.fresh,
+                    run: context.run,
+                    leaving: context.leaving,
+                    kept: keptParts(context.feedback[stepOf(context)?.id ?? ""]),
+                  };
+                },
               },
               on: {
-                entered: {
+                entered: ({ context }) => ({
                   target: "ready",
-                  actions: assign({
-                    fresh: false,
-                    entered: ({ context }) => context.opening,
-                  }),
-                },
+                  context: { fresh: false, entered: context.opening },
+                }),
               },
             },
             // A switch starts again when the variant asked for changes while it runs: the
             // running one's signal aborts. A failure is the new variant's.
             switching: {
-              entry: assign(({ context }) => {
+              entry: ({ context }) => {
                 const { [stepOf(context)?.id ?? ""]: _, ...trouble } = context.trouble;
                 return {
-                  trouble,
-                  opening:
-                    context.entered === undefined
-                      ? undefined
-                      : { ...context.entered, variant: variantOf(context) },
+                  context: {
+                    trouble,
+                    opening:
+                      context.entered === undefined
+                        ? undefined
+                        : { ...context.entered, variant: variantOf(context) },
+                  },
                 };
-              }),
-              always: {
-                guard: ({ context }) =>
-                  context.opening !== undefined && context.opening.variant !== variantOf(context),
-                target: "switching",
-                reenter: true,
               },
+              always: ({ context }) =>
+                context.opening !== undefined && context.opening.variant !== variantOf(context)
+                  ? { target: "switching", reenter: true }
+                  : undefined,
               invoke: {
                 src: "switchVariant",
                 input: ({ context }) => ({
@@ -1409,14 +1433,17 @@ export const sessionMachine = setup({
                 }),
               },
               on: {
-                switched: {
+                switched: ({ context }) => ({
                   target: "ready",
-                  actions: assign({ entered: ({ context }) => context.opening }),
-                },
+                  context: { entered: context.opening },
+                }),
               },
             },
             ready: {
-              always: { guard: "variantStale", target: "switching" },
+              always: ({ context }) =>
+                context.entered !== undefined && context.entered.variant !== variantOf(context)
+                  ? { target: "switching" }
+                  : undefined,
               invoke: {
                 src: "keep",
                 input: ({ context }) => ({
@@ -1433,60 +1460,41 @@ export const sessionMachine = setup({
     panel: {
       initial: "starting",
       states: {
+        // The panel comes back on a reload only inside a review: off one, the tools start
+        // idle, out of the app's way.
         starting: {
-          always: [
-            // The panel comes back on a reload only inside a review: off one, the tools
-            // start idle, out of the app's way.
-            {
-              guard: ({ context }) => context.panel && (context.active || context.finish !== null),
-              target: "shown",
-            },
-            { target: "hidden", actions: assign({ panel: false }) },
-          ],
+          always: ({ context }) =>
+            context.panel && (context.active || context.finish !== null)
+              ? { target: "shown" }
+              : { target: "hidden", context: { panel: false } },
         },
         hidden: {
           on: {
-            panel: {
-              guard: ({ event }) => event.shown !== false,
-              target: "shown",
-              actions: assign({
-                panel: true,
-                cursor: ({ context }) => context.at,
-                row: undefined,
-              }),
-            },
+            panel: ({ context, event }) =>
+              event.shown === false
+                ? undefined
+                : { target: "shown", context: { panel: true, cursor: context.at, row: undefined } },
           },
         },
         shown: {
           on: {
             // The panel comes back with the tree folded, so it shows the step as it was.
-            panel: {
-              guard: ({ event }) => event.shown !== true,
-              target: "hidden",
-              actions: assign({ panel: false, tree: false }),
-            },
-            tree: {
-              actions: assign({ tree: ({ context, event }) => event.open ?? !context.tree }),
-            },
-            row: { actions: assign({ row: ({ event }) => event.id }) },
-            fold: {
-              actions: assign({
-                folds: ({ context, event }) => ({ ...context.folds, [event.id]: event.open }),
-              }),
-            },
-            cursor: {
-              actions: assign({
-                cursor: ({ context, event }) => clamp(context, context.cursor + event.by),
-                row: undefined,
-              }),
-            },
+            panel: ({ event }) =>
+              event.shown === true
+                ? undefined
+                : { target: "hidden", context: { panel: false, tree: false } },
+            tree: ({ context, event }) => ({ context: { tree: event.open ?? !context.tree } }),
+            row: ({ event }) => ({ context: { row: event.id } }),
+            fold: ({ context, event }) => ({
+              context: { folds: { ...context.folds, [event.id]: event.open } },
+            }),
+            cursor: ({ context, event }) => ({
+              context: { cursor: clamp(context, context.cursor + event.by), row: undefined },
+            }),
             // As H and L on the page, past the settled steps.
-            cursorOpen: {
-              actions: assign({
-                cursor: ({ context, event }) => openStepBy(context, event.by, context.cursor),
-                row: undefined,
-              }),
-            },
+            cursorOpen: ({ context, event }) => ({
+              context: { cursor: openStepBy(context, event.by, context.cursor), row: undefined },
+            }),
           },
         },
       },
@@ -1502,56 +1510,51 @@ export const sessionMachine = setup({
         journeys: {},
         here: {},
         pinned: {
-          exit: assign({
-            notes: ({ context }) => dropEmpty(context),
-            opened: undefined,
-          }),
+          exit: ({ context }) => ({ context: { notes: dropEmpty(context), opened: undefined } }),
         },
       },
       on: {
-        open: [
-          { target: ".notes", guard: ({ event }) => event.layer === "notes" },
-          { target: ".people", guard: ({ event }) => event.layer === "people" },
-          { target: ".help", guard: ({ event }) => event.layer === "help" },
-          { target: ".go", guard: ({ event }) => event.layer === "go" },
-          { target: ".journeys", guard: ({ event }) => event.layer === "journeys" },
-          { target: ".here", guard: ({ event }) => event.layer === "here" },
-        ],
-        close: ".none",
-        escape: ".none",
-        pin: {
+        open: ({ event }) => ({ target: `.${event.layer}` as const }),
+        close: { target: ".none" },
+        escape: { target: ".none" },
+        pin: ({ event }) => ({
           target: ".pinned",
           reenter: true,
           // A pointed note shows with the tools, as it is the reviewer's own words.
-          actions: assign({ opened: ({ event }) => event.id, preview: false }),
-        },
-        point: {
+          context: { opened: event.id, preview: false },
+        }),
+        point: ({ context, event }) => {
           // With no step and no page, a note has no place to go.
-          guard: ({ context }) => (noteStepOf(context) ?? "") !== "",
-          target: ".pinned",
-          reenter: true,
-          actions: assign({
-            notes: ({ context, event }) =>
-              withNote(context, event.id, () =>
-                blankNote(event.id, noteStepOf(context) ?? "", event.pin),
-              ),
-            opened: ({ event }) => event.id,
-            preview: false,
-          }),
+          const step = noteStepOf(context) ?? "";
+          if (step === "") return;
+          // The open pointed note's exit drops it when empty. The patch replaces the notes
+          // after that exit, so it drops it too.
+          const left = { ...context, notes: dropEmpty(context) };
+          return {
+            target: ".pinned",
+            reenter: true,
+            context: {
+              notes: withNote(left, event.id, () => blankNote(event.id, step, event.pin)),
+              opened: event.id,
+              preview: false,
+            },
+          };
         },
-        go: ".none",
-        jump: ".none",
-        choose: ".none",
-        leave: ".none",
+        go: { target: ".none" },
+        jump: { target: ".none" },
+        choose: { target: ".none" },
+        leave: { target: ".none" },
       },
     },
     agent: {
       initial: "idle",
       states: {
-        idle: { always: { guard: "readsReplies", target: "polling" } },
+        idle: {
+          always: ({ context }) => (readsReplies(context) ? { target: "polling" } : undefined),
+        },
         polling: {
           invoke: { src: "poll" },
-          always: { guard: "readsNoReplies", target: "idle" },
+          always: ({ context }) => (readsReplies(context) ? undefined : { target: "idle" }),
         },
       },
     },

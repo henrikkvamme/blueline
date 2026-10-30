@@ -57,8 +57,8 @@ const after = (snapshot: Snapshot, ...events: readonly Event[]) =>
 /** The posts that the event starts, in their order. */
 const postsOf = (snapshot: Snapshot, event: Event): Post[] =>
   transition(sessionMachine, snapshot, event)[1].flatMap((a) => {
-    if (a.type !== "xstate.spawnChild") return [];
-    const input: unknown = "input" in a.params ? a.params.input : undefined;
+    if (a.type !== "@xstate.spawn") return [];
+    const input: unknown = "input" in a ? a.input : undefined;
     return isPost(input) ? [input] : [];
   });
 

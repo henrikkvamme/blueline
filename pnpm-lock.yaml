@@ -170,8 +170,8 @@ importers:
         specifier: 2.4.0
         version: 2.4.0
       '@xstate/react':
-        specifier: 6.1.0
-        version: 6.1.0(@types/react@19.3.0)(react@19.3.1)(xstate@5.33.3)
+        specifier: 7.0.0-alpha.6
+        version: 7.0.0-alpha.6(@types/react@19.3.0)(react@19.3.1)(xstate@6.0.0-alpha.71)
       effect:
         specifier: 4.0.6
         version: 4.0.6
@@ -182,8 +182,8 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
       xstate:
-        specifier: 5.33.3
-        version: 5.33.3
+        specifier: 6.0.0-alpha.71
+        version: 6.0.0-alpha.71
     devDependencies:
       '@effect/platform-node':
         specifier: 4.0.6
@@ -1358,14 +1358,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@xstate/react@6.1.0':
-    resolution: {integrity: sha512-ep9F0jGTI63B/jE8GHdMpUqtuz7yRebNaKv8EMUaiSi29NOglywc2X2YSOV/ygbIK+LtmgZ0q9anoEA2iBSEOw==}
+  '@xstate/react@7.0.0-alpha.6':
+    resolution: {integrity: sha512-y37nGhcgEPEB6DzLr9/Z70oQ5cjZ5ZKc+TJgSHvf0WYeFdo2sk+PGk45Pi7hwZ9p37vxN7eFgLqy5yhksd89AQ==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      xstate: ^5.28.0
-    peerDependenciesMeta:
-      xstate:
-        optional: true
+      xstate: ^6.0.0-alpha.70
 
   '@yuku-core/binding-android-arm64@0.19.0':
     resolution: {integrity: sha512-wdL2XmTiZixAOaHk9Z0JJZ8u9Qm8d333Zjpc6gaxXFX+UR5BlsfxZ7a2+2Rm71pamppsPYGUGFq2oVLbh6DISw==}
@@ -2035,8 +2032,9 @@ packages:
       utf-8-validate:
         optional: true
 
-  xstate@5.33.3:
-    resolution: {integrity: sha512-AnDRjS/GyKHmbA1PyhVCYBqYsA7EGe3KGgeD0ht3NFsXzoz7leX/HQDFX9QlHFJ/ltLHPsgChJYwPzRvB/0b4g==}
+  xstate@6.0.0-alpha.71:
+    resolution: {integrity: sha512-ABNE8jHjqzpQd/gX8huQYvSlbrOEaJcvzBtt6qWMooQuvxKoarkEKT0JFr3ymhI5Jza72YmfsWnFEophersmhQ==}
+    hasBin: true
 
   yuku-core@0.19.0:
     resolution: {integrity: sha512-kYK9e1XdfirNhkipzW0wmMcSWcVF/CWnuugodfVYRCUwvoBefweL9HzB96OiKEhsx78V5WbUxbJqlizMX869Qg==}
@@ -2754,13 +2752,12 @@ snapshots:
   '@voidzero-dev/vite-plus-win32-x64-msvc@1.4.0':
     optional: true
 
-  '@xstate/react@6.1.0(@types/react@19.3.0)(react@19.3.1)(xstate@5.33.3)':
+  '@xstate/react@7.0.0-alpha.6(@types/react@19.3.0)(react@19.3.1)(xstate@6.0.0-alpha.71)':
     dependencies:
       react: 19.3.1
       use-isomorphic-layout-effect: 1.2.1(@types/react@19.3.0)(react@19.3.1)
       use-sync-external-store: 1.7.0(react@19.3.1)
-    optionalDependencies:
-      xstate: 5.33.3
+      xstate: 6.0.0-alpha.71
     transitivePeerDependencies:
       - '@types/react'
 
@@ -3352,7 +3349,7 @@ snapshots:
 
   ws@8.22.0: {}
 
-  xstate@5.33.3: {}
+  xstate@6.0.0-alpha.71: {}
 
   yuku-core@0.19.0:
     dependencies:

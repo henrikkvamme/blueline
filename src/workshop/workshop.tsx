@@ -1,6 +1,6 @@
 import { useActorRef } from "@xstate/react";
 import { useEffect, useMemo, useState } from "react";
-import { fromCallback } from "xstate";
+import { createCallbackLogic } from "xstate";
 import { sessionMachine, type EnterInput, type Event, type SwitchInput } from "../session/machine";
 import type { Shape } from "../session/state";
 import type { DevInfo } from "../types";
@@ -34,8 +34,10 @@ const SHAPES: readonly Shape[] = [
 /** The session with no page to open and no agent: a step and a variant show at once. */
 const machine = sessionMachine.provide({
   actors: {
-    enterStep: fromCallback<Event, EnterInput>(({ sendBack }) => sendBack({ type: "entered" })),
-    switchVariant: fromCallback<Event, SwitchInput>(({ sendBack }) =>
+    enterStep: createCallbackLogic<Event, EnterInput>(({ sendBack }) =>
+      sendBack({ type: "entered" }),
+    ),
+    switchVariant: createCallbackLogic<Event, SwitchInput>(({ sendBack }) =>
       sendBack({ type: "switched" }),
     ),
   },
