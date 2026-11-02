@@ -1,7 +1,7 @@
 import type { Beat, Shape } from "../../queue/queue";
 import { MotionPlayer } from "../../vendor/cua-cursor-motion.js";
 import { clean } from "./markup";
-import { fetchLine, hush, rateNow, say } from "./voice";
+import { ahead, hush, rateNow, say } from "./voice";
 
 /*
  * The agent's cursor as a controller: it walks a remark's beats, and the reviewer always wins.
@@ -317,7 +317,7 @@ export class Walker {
     this.set({ ...IDLE, beats: walk.length, run: this.snap.run + 1, shown: true });
     // Every line is asked for now, so each one plays without a wait.
     const voice = this.settings.voice;
-    if (voice !== undefined) for (const beat of walk) void fetchLine(beat.say, voice);
+    if (voice !== undefined) for (const beat of walk) ahead(beat.say, voice);
     void this.play(this.generation);
   }
 

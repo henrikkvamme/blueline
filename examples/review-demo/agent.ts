@@ -13,6 +13,7 @@ import type { Plugin } from "vite";
 import { z } from "zod";
 import { type Exchange, keepFeedback } from "./feedback.ts";
 import { ears as makeEars, envOf, words } from "./hearing.ts";
+import { speakAhead } from "./voice.ts";
 
 /*
  * The agent behind the workshop's point and talk, on the dev server only. `POST /__agent`
@@ -183,7 +184,8 @@ type Event =
     }
   | { readonly type: "act"; readonly id: string; readonly acts: unknown }
   | { readonly type: "done"; readonly text: string }
-  | { readonly type: "failed"; readonly why: string };
+  | { readonly type: "failed"; readonly why: string }
+  | { readonly type: "timing"; readonly marks: Record<string, number>; readonly blocks: string[] };
 
 /** What a tool call does, in a few words for his status line. */
 function doing(name: string, input: Record<string, unknown>) {
@@ -195,6 +197,17 @@ function doing(name: string, input: Record<string, unknown>) {
   if (name.endsWith("__act")) return undefined;
   if (name.endsWith("__show")) return undefined;
   return "Working";
+}
+
+/** The first `say` of a show call that is still being written, once its words are whole. */
+function firstLine(written: string) {
+  const found = /"say"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(written);
+  if (found?.[1] === undefined) return undefined;
+  try {
+    return JSON.parse(`"${found[1]}"`) as string;
+  } catch {
+    return undefined;
+  }
 }
 
 const inside = (path: unknown) => {
@@ -210,6 +223,8 @@ interface Out {
   before: Exchange | undefined;
   /** What the page sent with this request. */
   request: unknown;
+  /** Marks a moment of the request, once. */
+  mark: (name: string) => void;
 }
 
 const ALLOWED = ["Read", "Grep", "Glob", "Edit", "Write"];
@@ -236,7 +251,12 @@ export function agent(): Plugin {
       });
       ears.ready();
       /** The request that the page's tools send to. */
-      const out: Out = { send: () => undefined, before: undefined, request: undefined };
+      const out: Out = {
+        send: () => undefined,
+        before: undefined,
+        request: undefined,
+        mark: () => undefined,
+      };
       /** A new id, and what the page answers on it. */
       const await_ = () => {
         const id = `w${String(++shown)}`;
@@ -258,6 +278,7 @@ export function agent(): Plugin {
               { beats: z.array(beat).min(1) },
               async ({ beats }) => {
                 const { id, how } = await_();
+                out.mark("sent");
                 out.send({ type: "show", id, beats });
                 return { content: [{ type: "text", text: await how }] };
               },
@@ -268,6 +289,7 @@ export function agent(): Plugin {
               { acts: z.array(act).min(1) },
               async ({ acts }) => {
                 const { id, how } = await_();
+                out.mark("sent");
                 out.send({ type: "act", id, acts });
                 return { content: [{ type: "text", text: await how }] };
               },
@@ -304,6 +326,7 @@ export function agent(): Plugin {
                   ),
               },
               async ({ target, text, revises }) => {
+                out.mark("sent");
                 out.send({ type: "annotate", target, text, revises: revises === true });
                 return {
                   content: [
@@ -327,6 +350,8 @@ export function agent(): Plugin {
         systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM },
         tools: ALLOWED,
         mcpServers: { page: tools() },
+        // Each token as it comes, for the timing of each step.
+        includePartialMessages: true,
         canUseTool: async (name, input) =>
           name.startsWith("mcp__page__") ||
           (ALLOWED.includes(name) && inside(input["file_path"] ?? input["path"]))
@@ -465,6 +490,8 @@ export function agent(): Plugin {
             });
             // The fast model hears him at once, and does not wait for the old work to stop.
             const asked = Date.now();
+            const header = req.headers["x-blueline-voice"];
+            const voice = typeof header === "string" && header !== "" ? header : undefined;
             let first = true;
             const heard = ears
               .hear(text, gone.signal, (line, ear) => {
@@ -487,17 +514,77 @@ export function agent(): Plugin {
               await was.query.interrupt().catch(() => undefined);
               await was.ended;
             }
+            /*
+             * Where the agent's time goes, in ms since the request came: taken (the run is
+             * ready), init (Claude Code began), api (the model's answer began), block (its
+             * first block), tool (the first call of a page tool began), input (that call is
+             * written), sent (the page got it). The stream ends with them.
+             */
+            const marks: Record<string, number> = {};
+            const blocks: string[] = [];
+            let told = false;
+            const tell = () => {
+              if (!told) send({ type: "timing", marks: { ...marks }, blocks: [...blocks] });
+              told = true;
+            };
+            const mark = (name: string) => {
+              marks[name] ??= Date.now() - asked;
+              // At the first page tool, before the page acts, so its trace has them.
+              if (name === "sent") tell();
+            };
             out.send = send;
             out.before = before_;
             out.request = record.request;
+            out.mark = mark;
             const run = await take(words(text));
+            mark("taken");
             let finish = () => undefined as void;
             const ofEra = era;
             running = { query: run, ended: new Promise<void>((done) => (finish = done)) };
             mine();
             send({ type: "status", text: "Thinking" });
             try {
+              let toolBlock: number | undefined;
+              let showBlock: number | undefined;
+              let written = "";
               for await (const message of run) {
+                mark("init");
+                if (message.type === "stream_event") {
+                  const { event } = message;
+                  if (event.type === "message_start") mark("api");
+                  if (event.type === "content_block_start") {
+                    mark("block");
+                    const block = event.content_block;
+                    blocks.push(block.type === "tool_use" ? block.name : block.type);
+                    if (block.type === "tool_use" && block.name.startsWith("mcp__page__")) {
+                      if (marks["tool"] === undefined) toolBlock = event.index;
+                      mark("tool");
+                    }
+                    if (block.type === "tool_use" && block.name === "mcp__page__show") {
+                      showBlock = event.index;
+                      written = "";
+                    }
+                  }
+                  // The first line of a walk starts to speak as soon as it is written.
+                  if (
+                    event.type === "content_block_delta" &&
+                    event.index === showBlock &&
+                    event.delta.type === "input_json_delta" &&
+                    voice !== undefined
+                  ) {
+                    written += event.delta.partial_json;
+                    const line = firstLine(written);
+                    if (line !== undefined) {
+                      mark("line");
+                      speakAhead(line, voice, (why) => log.warn(`workshop agent: ${why}`));
+                      showBlock = undefined;
+                    }
+                  }
+                  if (event.type === "content_block_stop" && event.index === toolBlock) {
+                    mark("input");
+                    toolBlock = undefined;
+                  }
+                }
                 if (era === ofEra && session !== message.session_id) {
                   session = message.session_id;
                   log.info(`workshop agent: session ${session} (claude --resume ${session})`);
@@ -523,6 +610,7 @@ export function agent(): Plugin {
                 done("Stopped.");
                 watching.delete(id);
               }
+              tell();
               running = undefined;
               // The next run starts now, so his next words do not wait for it.
               ahead();

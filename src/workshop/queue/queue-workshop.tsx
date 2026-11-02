@@ -511,6 +511,7 @@ function Live() {
         context,
         (event) => {
           if (asking.current !== control) return;
+          if (event.type === "timing") return timing.note({ server: event });
           if (event.type !== "status" && event.type !== "heard") timing.mark("agent");
           switch (event.type) {
             case "status":
@@ -569,6 +570,7 @@ function Live() {
           }
         },
         control.signal,
+        guide.voice ? guide.speaker : undefined,
       ).then((answered) => {
         if (answered || control.signal.aborted) return;
         const id = note(target, text);

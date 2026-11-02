@@ -1,7 +1,7 @@
 /*
  * The agent cursor's voice: each line comes from the dev server's `/__voice` route, as
- * ElevenLabs speech. A walk asks for all of its lines when it starts, so each one plays at
- * once. With no route, or no key behind it, the walk shows its words alone.
+ * ElevenLabs speech, and plays from its first bytes. A walk asks for all of its lines when it
+ * starts, so each one is ready or on its way when the walk comes to it. With no route, or no key behind it, the walk shows its words alone.
  */
 
 /** The voices to choose from, ElevenLabs' own. */
@@ -11,24 +11,28 @@ export const VOICES = [
   { id: "cjVigY5qzO86Huf0OWal", name: "Eric" },
 ] as const;
 
-const kept = new Map<string, Promise<string | undefined>>();
+import * as timing from "./timing";
 
-/** The line as an audio URL, once; undefined when the server has no voice. */
-export function fetchLine(text: string, voice: string): Promise<string | undefined> {
+const asked = new Set<string>();
+
+/** Where the line plays from: the dev server streams it as ElevenLabs makes it. */
+const urlOf = (text: string, voice: string) =>
+  `/__voice?${new URLSearchParams({ voice, text }).toString()}`;
+
+/** Asks the dev server for the line now, so it plays at once when the walk comes to it. */
+export function ahead(text: string, voice: string) {
   const id = `${voice}\n${text}`;
-  let line = kept.get(id);
-  if (line === undefined) {
-    line = fetch("/__voice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice }),
+  if (asked.has(id)) return;
+  asked.add(id);
+  void fetch("/__voice/ahead", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice }),
+  })
+    .then((r) => {
+      if (!r.ok) asked.delete(id);
     })
-      .then(async (r) => (r.ok ? URL.createObjectURL(await r.blob()) : undefined))
-      .catch(() => undefined);
-    kept.set(id, line);
-    void line.then((url) => url === undefined && kept.delete(id));
-  }
-  return line;
+    .catch(() => asked.delete(id));
 }
 
 let playing: HTMLAudioElement | undefined;
@@ -56,14 +60,19 @@ export function hush() {
  * was no voice to play. */
 export async function say(text: string, voice: string): Promise<boolean> {
   hush();
-  const url = await fetchLine(text, voice);
-  if (url === undefined) return false;
-  const audio = new Audio(url);
+  timing.mark("say");
+  const audio = new Audio(urlOf(text, voice));
   audio.playbackRate = rate;
   playing = audio;
   return new Promise((resolve) => {
-    const end = () => resolve(true);
+    let played = false;
+    const end = () => resolve(played);
+    audio.onplaying = () => {
+      played = true;
+      timing.mark("voice");
+    };
     audio.onended = end;
+    // With no voice, or one that fails before it plays, the walk shows the line.
     audio.onerror = end;
     audio.onpause = end;
     audio.play().catch(end);

@@ -231,6 +231,12 @@ or a variant by its number.
     it. The browser eval also checks the agent's work, with Opus as the judge. Over its 16
     cases the agent was right in 16 both before and after, and its first act came 2.1 s
     after release typical and 4.0 s at worst, against 3.0 s and 6.5 s.
+  - The voice streams. The dev server sends ElevenLabs' speech on as it comes, and it starts
+    a walk's first line as soon as Opus has written that line, while it still writes the
+    rest of the call. Measured over the 16 cases, two rounds each: the voice played 1.9 s
+    after the walk asked for it with whole lines, 1.3 s streamed, and 0.7 s streamed from
+    Opus's own stream. The agent stayed right in 15 and 16 of 16; the one miss was its own
+    choice on "not sure about this colour", which the voice does not touch.
   - The journey's agent, its variants and the orchestrator use Claude Opus 5.5. It leads
     Arena WebDev (1810, against Terra's 1673), and design is where the quality shows.
     Henrik does not wait on it, because the first answer covers the first seconds.

@@ -25,7 +25,13 @@ export type AgentEvent =
   /** What he can do in the workshop, done for him; the page answers on the id. */
   | { readonly type: "act"; readonly id: string; readonly acts: readonly Act[] }
   | { readonly type: "done"; readonly text: string }
-  | { readonly type: "failed"; readonly why: string };
+  | { readonly type: "failed"; readonly why: string }
+  /** Where the agent's time went, at the end: see the dev server's agent. */
+  | {
+      readonly type: "timing";
+      readonly marks: Readonly<Record<string, number>>;
+      readonly blocks: readonly string[];
+    };
 
 /**
  * Draws the page as he sees it, onto a canvas in px of the viewport: the app gives it, so the
@@ -169,12 +175,17 @@ export async function ask(
   context: unknown,
   on: (event: AgentEvent) => void,
   signal: AbortSignal,
+  /** The voice that speaks the agent's walks, so the dev server can start a line ahead. */
+  voice?: string,
 ): Promise<boolean> {
   let response: Response;
   try {
     response = await fetch("/__agent", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(voice === undefined ? {} : { "X-Blueline-Voice": voice }),
+      },
       body: JSON.stringify(context, null, 1),
       signal,
     });
