@@ -168,8 +168,18 @@ function swapInPlace(
   element: Element,
   swap: readonly { readonly from: string; readonly to: string }[],
 ) {
+  // All at once, so a swap of two names swaps them, and does not turn the first one back.
+  const pairs = swap
+    .filter(({ from }) => from !== "")
+    .sort((a, b) => b.from.length - a.from.length);
+  const pattern = new RegExp(
+    pairs.map(({ from }) => from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"),
+    "g",
+  );
   const change = (words: string) =>
-    swap.reduce((text, { from, to }) => (from === "" ? text : text.split(from).join(to)), words);
+    pairs.length === 0
+      ? words
+      : words.replace(pattern, (found) => pairs.find(({ from }) => from === found)?.to ?? found);
   const undo: (() => void)[] = [];
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
