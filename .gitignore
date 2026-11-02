@@ -6,3 +6,4 @@ test/.apps
 evals/*/runs/*/
 evals/answers/inbox/
 evals/answers/audio/
+evals/answers/runs-mockups/
