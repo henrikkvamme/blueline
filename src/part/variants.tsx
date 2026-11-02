@@ -1,4 +1,11 @@
-import { useId, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import {
+  createElement,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { merge, type Patch } from "./merge";
 import { NO_VERDICTS, parts, variantOf } from "./store";
@@ -38,8 +45,13 @@ export function variants<P extends object>(
   const labels = Object.keys(options);
   parts.declare(name, labels);
   const names = Object.keys(states);
+  // Each variant is a component of its own, keyed by its label: its hooks are its own, and
+  // a switch to another variant mounts that one afresh, so their hooks never mix.
   const draw = (props: P, variant: string, state: string | undefined) =>
-    (options[variant] ?? first)(state === undefined ? props : merge(props, states[state]));
+    createElement(options[variant] ?? first, {
+      ...(state === undefined ? props : merge(props, states[state])),
+      key: variant,
+    });
 
   function Part(props: P) {
     const id = useId();

@@ -431,6 +431,8 @@ export const SuggestionView = variants<SuggestionProps>(
 ```
 
 - The first variant is the one a build ships.
+- Each variant is a component of its own. It can call hooks, and a switch to another variant
+  mounts that one afresh, so its state starts again.
 - A state is a patch over the props: only what differs. A plain object merges into the
   prop's object; anything else takes the prop's place.
 - Give each part one name. Two parts with the same name are one design choice.
