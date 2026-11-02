@@ -69,8 +69,6 @@ interface Exchange {
   readonly said: string;
   /** What the fast model heard him ask for, before the agent answers. */
   readonly heard: string | undefined;
-  /** Whether he saved it as an eval case. */
-  readonly saved?: "saving" | "saved" | "failed" | undefined;
   /** Whether he says the answer was wrong, and whether that was kept as a case. */
   readonly wrong?: "asking" | "saving" | "saved" | "failed" | undefined;
   readonly tone: "busy" | "showing" | "done" | "failed";
@@ -361,6 +359,7 @@ function Live() {
         annotation: undefined,
       });
       walker.from({ x: at.x + 16, y: at.y + 14 });
+      walker.hold(target, `“${text}”`);
       const context = {
         said: text,
         pointedWhileSaying: pointed,
@@ -402,6 +401,7 @@ function Live() {
               update((x) => ({ ...x, tone: "busy", status: event.text }));
               break;
             case "heard":
+              walker.hearing(event.text);
               timing.mark("heard");
               timing.note({ line: event.text, ear: event.ear });
               update((x) => ({ ...x, heard: event.text }));
@@ -417,6 +417,7 @@ function Live() {
               break;
             }
             case "done":
+              walker.unhold();
               update((x) => ({
                 ...x,
                 tone: "done",
@@ -424,6 +425,7 @@ function Live() {
               }));
               break;
             case "failed":
+              walker.unhold();
               update((x) => ({ ...x, tone: "failed", status: event.why }));
               break;
           }
@@ -437,16 +439,6 @@ function Live() {
       });
     },
   });
-
-  /** Saves the last exchange as a case for the hearing evals. */
-  function saveTake() {
-    setExchange((x) => (x === undefined ? x : { ...x, saved: "saving" }));
-    void timing
-      .saveTake()
-      .then((ok) =>
-        setExchange((x) => (x === undefined ? x : { ...x, saved: ok ? "saved" : "failed" })),
-      );
-  }
 
   /** He says why the answer was wrong; the dev server keeps it for a new eval case. */
   function sendWrong(reason: string) {
@@ -480,8 +472,6 @@ function Live() {
     return {
       said: exchange.said,
       heard: exchange.heard,
-      saved: exchange.saved,
-      onSave: exchange.heard === undefined || exchange.saved !== undefined ? undefined : saveTake,
       wrong: answered_
         ? {
             state: exchange.wrong ?? ("idle" as const),
@@ -582,8 +572,6 @@ function Live() {
       else if (e.key === " ") toggleWalk();
       else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);
       else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
-      else if (e.key === "s" && exchange?.heard !== undefined && exchange.saved === undefined)
-        saveTake();
       else if (e.key === "w" && answered_ && exchange.wrong === undefined) {
         e.preventDefault();
         askWrong(true);

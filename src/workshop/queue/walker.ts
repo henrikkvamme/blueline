@@ -265,6 +265,8 @@ export class Walker {
   private unhide: (() => void) | undefined;
   /** When the cursor last clicked: a page that changes after it is the click's doing. */
   private clicked = 0;
+  /** What the cursor holds on, from his release until the agent's first walk. */
+  private holding: { readonly words: string; readonly key: string } | undefined;
 
   constructor(
     private readonly view: () => { readonly width: number; readonly height: number },
@@ -346,6 +348,71 @@ export class Walker {
     this.player?.place(point);
   }
 
+  /**
+   * He let go of the keys: at once, the cursor flies from his mouse to what he meant and
+   * circles it, with his words in its note, as Clicky's does. It holds there, with no voice,
+   * until the agent's first walk takes over (`start`), the fast line comes (`hearing`), or the
+   * agent ends with nothing to show (`unhold`). The agent's answer takes seconds; this shows
+   * in the first frame that it heard him.
+   */
+  hold(target: string, words: string) {
+    this.halt();
+    this.walk = [];
+    this.at = 0;
+    const generation = this.generation;
+    const beat: Beat = { target, say: words };
+    const element = this.find(beat);
+    if (element === undefined) return;
+    const key = `hold-${String(generation)}`;
+    this.holding = { words, key };
+    this.set({ ...IDLE, run: this.snap.run, phase: "moving", shown: true });
+    const rect = boxOf(element.getBoundingClientRect());
+    void this.player
+      ?.moveTo(aim(rect, this.view()).tip, {
+        params: { style: "signature_arc", timing: "fitts" },
+        target: [rect.left, rect.top, rect.width, rect.height],
+        reducedMotion: this.settings.reduced,
+      })
+      .then(() => {
+        if (generation !== this.generation) return;
+        this.element = element;
+        this.showHold(boxOf(element.getBoundingClientRect()));
+        this.track(beat, element, generation, (box) => this.showHold(box));
+      });
+  }
+
+  /** The fast line came: the held note says it. */
+  hearing(words: string) {
+    if (this.holding === undefined) return;
+    this.holding = { ...this.holding, words };
+    const box = this.snap.mark?.box;
+    if (box !== undefined) this.showHold(box);
+  }
+
+  /** The agent ended with no walk of its own: the held cursor goes. */
+  unhold() {
+    if (this.holding === undefined) return;
+    this.stop();
+  }
+
+  private showHold(box: Box) {
+    const held = this.holding;
+    if (held === undefined) return;
+    this.set({
+      ...this.snap,
+      phase: "speaking",
+      mark: { draw: "circle", box, shapes: [], key: held.key },
+      note: {
+        tone: "say",
+        step: "",
+        words: held.words,
+        line: undefined,
+        place: aim(box, this.view()).place,
+        key: held.key,
+      },
+    });
+  }
+
   /** Go on from the beat it stopped at, after a pause or a lost element. */
   resume() {
     if (this.snap.phase !== "paused" && this.snap.phase !== "lost") return;
@@ -403,6 +470,7 @@ export class Walker {
    * still reaches the walker until it stops. */
   private halt(keep = false) {
     this.generation++;
+    this.holding = undefined;
     hush();
     this.turned = undefined;
     this.untrack?.();
