@@ -31,6 +31,7 @@ interface Sdk {
 }
 
 const TARGETS = [
+  "page",
   "title",
   "asker",
   "status",

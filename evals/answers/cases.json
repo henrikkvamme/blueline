@@ -651,7 +651,7 @@
     "set": "dev",
     "source": "real 37772f71",
     "page": "/request",
-    "remark": "The page's title",
+    "remark": "Who asked, under the title",
     "turns": [
       {
         "said": "Okay, okay. Settle this.",
@@ -667,11 +667,11 @@
       "mockup": "none",
       "checks": [
         {
-          "says": "the title remark is settled",
-          "js": "q.settled.includes('r-title')"
+          "says": "the remark is settled",
+          "js": "q.settled.includes('r-who') && !start.settled.includes('r-who')"
         }
       ],
-      "guide": "He settles the remark that shows (the page's title). The agent settles it in the queue, with at most a short word. No mock-up."
+      "guide": "He settles the remark that shows (who asked, under the title). The agent settles it in the queue, with at most a short word. No mock-up."
     }
   },
   {
@@ -733,7 +733,7 @@
     "set": "dev",
     "source": "variation",
     "page": "/request",
-    "remark": "The page's title",
+    "remark": "Who asked, under the title",
     "turns": [
       {
         "said": "Settle this.",
@@ -753,11 +753,11 @@
       "mockup": "none",
       "checks": [
         {
-          "says": "the title remark is open again",
-          "js": "!q.settled.includes('r-title')"
+          "says": "the remark is not settled",
+          "js": "!q.settled.includes('r-who')"
         }
       ],
-      "guide": "First he settles the title remark, then takes it back: at the end the remark is not settled."
+      "guide": "First he settles the remark that shows (who asked, under the title), then takes it back: at the end the remark is not settled."
     }
   },
   {

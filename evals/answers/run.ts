@@ -582,6 +582,8 @@ function evidenceOf(c: Case, run: Run, code: Record<string, number>) {
           pointedWhileSaying: run.answers[i]?.body["pointedWhileSaying"],
           circled: run.answers[i]?.body["circled"],
           page: run.answers[i]?.body["page"],
+          remarkThatShowed: run.answers[i]?.body["remark"],
+          queueAhead: run.answers[i]?.body["queueAhead"],
         },
       })),
       agent: stepsOf(run.answers),
