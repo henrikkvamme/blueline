@@ -708,6 +708,9 @@ export class Walker {
       if (generation !== this.generation) return;
       const now = document.querySelector(beat.target);
       if (now === null || now !== element || !element.isConnected || !framed.isConnected) {
+        // A click of the walk's own, or his on a turn, may take the element away: the walk
+        // goes on to the next beat.
+        if (Date.now() - this.clicked < 1500) return;
         // A new page takes the element first; the page's own news then ends the walk quietly.
         window.setTimeout(() => {
           if (generation === this.generation) this.lose(this.goneWords(beat));
