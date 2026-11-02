@@ -414,13 +414,17 @@ async function runCase(browser: Browser, c: Case, rep: number, url: string, tree
         const state = await page.evaluate(() => ({
           walk: document.documentElement.dataset["walk"] ?? "idle",
           turn: document.documentElement.dataset["walkTurn"] ?? "",
-          mocks: [...document.querySelectorAll<HTMLElement>("[data-mock]")].map((m) => ({
-            key: m.dataset["mock"] ?? "",
-            text: (Reflect.get(window, "__textOf") as (e: Element) => string)(
-              document.querySelector("[data-mock-shows]") ?? m,
-            ),
-            box: m.getBoundingClientRect().toJSON() as Clip,
-          })),
+          mocks: [...document.querySelectorAll<HTMLElement>("[data-mock], [data-design]")].map(
+            (m) => ({
+              key: m.dataset["mock"] ?? `design ${m.dataset["design"] ?? ""} ${m.innerHTML}`,
+              text: (Reflect.get(window, "__textOf") as (e: Element) => string)(
+                m.dataset["design"] === undefined
+                  ? (document.querySelector("[data-mock-shows]") ?? m)
+                  : m,
+              ),
+              box: m.getBoundingClientRect().toJSON() as Clip,
+            }),
+          ),
         }));
         for (const m of state.mocks) {
           if (seen.has(m.key) || shots.length >= 4) continue;
@@ -557,6 +561,8 @@ function stepsOf(answers: readonly Answer[]) {
                 : replace.swap !== undefined
                   ? { swap: replace.swap }
                   : { html: (replace.html ?? replace.text ?? "").slice(0, 600) },
+            peek: b["peek"],
+            state: b["state"],
             waitsForHisClick: b["turn"] === true || undefined,
             clicksItself: b["click"] === true || undefined,
           };
