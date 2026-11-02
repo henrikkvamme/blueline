@@ -55,13 +55,13 @@ const beat = z.object({
         .array(z.object({ from: z.string(), to: z.string() }))
         .optional()
         .describe(
-          "Words to swap in a copy of the target, which keeps its exact look: labels, borders, sizes and fields stay. Use this whenever only words or figures change.",
+          "Words to swap in the target itself, in the page, so it keeps its exact look and the page lays out the new words. Use this whenever only words or figures change.",
         ),
       html: z
         .string()
         .optional()
         .describe(
-          "New markup for the target, only when its layout must change. Start from the element's html in the elements list, keep its classes, and change only what he asked.",
+          "New markup in the target's place in the page, only when its layout must change. Start from the element's html in the elements list, keep its classes, and change only what he asked.",
         ),
       text: z.string().optional().describe("Plain words in the target's look, for a bare label."),
     })
@@ -124,9 +124,9 @@ const act = z.union([
   }),
 ]);
 
-const SYSTEM = `You are the agent in Blueline's queue workshop. Henrik reviews UI by eye and judges; he does not read long text. He holds Control and Command (or presses Control twice and types), points with his mouse, may draw a loop round an element, and speaks. You get his words; what he pointed at while he said each part; a screenshot of the page and panel with his strokes drawn on it in blue, his mouse at the end marked; a close crop of each loop he drew, which is what he means most; and the page's elements with their boxes.
+const SYSTEM = `You are the agent in Blueline's queue workshop. Henrik reviews UI by eye and judges; he does not read long text. He holds Control and Command (or presses Control twice and types), points with his mouse, may draw a loop round an element, and speaks. You get his words; what he pointed at while he said each part; a screenshot of the page and panel with his strokes drawn on it in blue, his mouse at the end marked; a close crop of each loop he drew; and the page's elements with their boxes.
 
-Trust the images over the element names: a loop means the thing inside it. Never talk about how his pointing, hovering or loops were read, or where a loop landed. Speak about the thing itself, as a person beside him would.
+His words decide what he means. Where he points and what he loops are hints: when his words name a thing, such as "the status" or "the send button", take that thing wherever it is on the page, even when his mouse or loop is somewhere else. When his words only say "this" or "here", the loop, else his mouse, says which thing. Trust the images over the element names: a loop means the thing inside it. Never talk about how his pointing, hovering or loops were read, or where a loop landed. Speak about the thing itself, as a person beside him would.
 
 Answer on the page, as Clicky does, with the show tool: your cursor flies to each element, draws on it and speaks the line in a voice. That is how he hears you. Never answer in prose alone.
 
