@@ -12,13 +12,13 @@ import {
   CornerDownRight,
   Eye,
   GitMerge,
-  History,
+  ChevronDown,
   Mic,
   PenLine,
   RotateCcw,
   Shuffle,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ahead,
   annotationsOn,
@@ -29,7 +29,7 @@ import {
   remarkOf,
   left,
   order,
-  seen,
+  isTried,
   waiting,
   type Kind,
   type Moment,
@@ -102,9 +102,8 @@ export interface PanelProps {
   readonly onStop: () => void;
   /** Show one remark: from the bar, or from Seen. */
   readonly onShow?: (id: string) => void;
-  /** Whether Seen, the list of the remarks seen before, is open. */
-  readonly seen?: boolean;
-  readonly onSeen?: (open: boolean) => void;
+  readonly tree?: boolean;
+  readonly onTree?: (open: boolean) => void;
   /** The choice that shows on the page and is not kept. */
   readonly peek?: string | undefined;
   readonly onPeek?: (value: string | undefined) => void;
@@ -180,6 +179,15 @@ export function Panel(props: PanelProps) {
       <div className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
         {shipping ? (
           <Shipping ship={props.ship} onStop={props.onStop} />
+        ) : props.tree === true ? (
+          <Tree
+            queue={q}
+            onShow={(id) => {
+              props.onShow?.(id);
+              props.onTree?.(false);
+            }}
+            onClose={() => props.onTree?.(false)}
+          />
         ) : here === undefined ? (
           <Idle queue={q} eta={props.eta} />
         ) : (
@@ -194,7 +202,7 @@ export function Panel(props: PanelProps) {
             <RemarkView {...props} remark={here} />
           </div>
         )}
-        {gone !== undefined && here !== undefined && !shipping && (
+        {gone !== undefined && here !== undefined && !shipping && props.tree !== true && (
           <div
             key={`${gone.remark.id}-gone`}
             aria-hidden
@@ -285,29 +293,31 @@ function Header(props: PanelProps) {
   const [help, setHelp] = useState(false);
   const here = current(q);
   const queue = ahead(q);
-  const before = seen(q);
   const wait = waiting(q).length;
   const tab =
     "grid h-6 place-items-center rounded-full text-[12px] text-dt-faint hover:bg-dt-raised hover:text-dt-text aria-expanded:bg-dt-raised aria-expanded:text-dt-text";
   return (
     <header className="relative flex shrink-0 flex-col gap-2.5 px-4 pt-3.5 pb-3">
       <div className="flex items-center gap-2">
-        <span className="flex-1 truncate text-[13px] font-medium">{JOURNEY}</span>
+        <button
+          type="button"
+          aria-expanded={props.tree === true}
+          onClick={() => props.onTree?.(props.tree !== true)}
+          className="-ml-1.5 flex min-w-0 flex-1 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-left text-[13px] font-medium hover:bg-dt-raised"
+        >
+          <span className="truncate">{JOURNEY}</span>
+          <ChevronDown
+            aria-hidden
+            className={cx(
+              "size-3.5 shrink-0 text-dt-faint transition-transform duration-200",
+              props.tree === true && "rotate-180",
+            )}
+          />
+        </button>
         <span className="text-[12px] text-dt-faint tabular-nums">
           {count === 0 ? "Nothing left" : `${String(count)} left`}
         </span>
         <span className="-mr-1.5 flex items-center">
-          <button
-            type="button"
-            aria-label="Seen"
-            title="Seen"
-            aria-expanded={props.seen === true}
-            disabled={before.length === 0}
-            onClick={() => props.onSeen?.(props.seen !== true)}
-            className={cx(tab, "size-6 disabled:opacity-35")}
-          >
-            <History className="size-3.5" aria-hidden />
-          </button>
           <button
             type="button"
             aria-label="Keys"
@@ -362,55 +372,155 @@ function Header(props: PanelProps) {
       </div>
       {wait > 0 && <Agent count={wait} eta={eta} />}
       {help && <Keys />}
-      {props.seen === true && (
-        <Seen
-          remarks={before}
-          queue={q}
-          onShow={(id) => {
-            props.onShow?.(id);
-            props.onSeen?.(false);
-          }}
-        />
-      )}
     </header>
   );
 }
 
-/** The remarks seen before, the last first: a click shows one again. */
-function Seen({
-  remarks,
+type RowMark = "here" | "settled" | "agent" | "untried" | "open";
+
+const markOf = (q: Queue, r: Remark): RowMark =>
+  current(q)?.id === r.id
+    ? "here"
+    : isSettled(q, r.id)
+      ? "settled"
+      : annotationsOn(q, r.id).some((a) => answerOf(q, a.id) === undefined)
+        ? "agent"
+        : q.trail.includes(r.id) && !isTried(q, r)
+          ? "untried"
+          : "open";
+
+function RowMarkView({ mark }: { readonly mark: RowMark }) {
+  switch (mark) {
+    case "here":
+      return <span className="size-2 rounded-full bg-dt-accent ring-4 ring-dt-accent/20" />;
+    case "settled":
+      return (
+        <span className="grid size-4 place-items-center rounded-full bg-dt-good/15 text-dt-good">
+          <Check className="size-2.5" strokeWidth={3} aria-label="Settled" />
+        </span>
+      );
+    case "agent":
+      return <AgentMark className="size-3.5 animate-pulse" />;
+    case "untried":
+      return (
+        <span
+          title="Passed, still open"
+          className="size-3 rounded-full border-[1.5px] border-dashed border-dt-warn"
+        />
+      );
+    case "open":
+      return <span className="size-3 rounded-full border-[1.5px] border-dt-faint/70" />;
+  }
+}
+
+function Tree({
   queue: q,
   onShow,
+  onClose,
 }: {
-  readonly remarks: readonly Remark[];
   readonly queue: Queue;
   readonly onShow: (id: string) => void;
+  readonly onClose: () => void;
 }) {
+  const ids = [
+    ...q.settled,
+    ...q.trail,
+    ...order(q).map((r) => r.id),
+    ...q.remarks.map((r) => r.id),
+  ];
+  const ranked = [...new Set(ids)]
+    .map((id) => remarkOf(q, id))
+    .filter((r): r is Remark => r !== undefined);
+  const groups = PAGES.map((page) => ({
+    page,
+    remarks: ranked.filter((r) => r.page === page.path),
+  })).filter((g) => g.remarks.length > 0);
+  const [folded, setFolded] = useState<readonly string[]>([]);
+  const rows = groups.flatMap((g) => (folded.includes(g.page.path) ? [] : g.remarks));
+  const [picked, setPicked] = useState(() => current(q)?.id ?? rows[0]?.id);
+  const at = Math.max(
+    0,
+    rows.findIndex((r) => r.id === picked),
+  );
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const go = (d: number) => setPicked(rows[Math.min(rows.length - 1, Math.max(0, at + d))]?.id);
+      if (e.key === "j" || e.key === "ArrowDown") go(1);
+      else if (e.key === "k" || e.key === "ArrowUp") go(-1);
+      else if ((e.key === "Enter" || e.key === "l") && rows[at] !== undefined) onShow(rows[at].id);
+      else if (e.key === "Escape" || e.key === "t") onClose();
+      else return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  });
   return (
-    <ul className="absolute top-11 right-3 left-3 z-10 flex max-h-80 animate-dt-arrive flex-col overflow-y-auto rounded-dt-control bg-dt-raised p-1 text-[12px] shadow-dt-float">
-      {remarks.map((r) => {
-        const kind = KIND[r.kind];
+    <nav aria-label="Remarks" className="flex animate-dt-arrive flex-col gap-1 px-2.5 pt-1 pb-5">
+      {groups.map(({ page, remarks }) => {
+        const open = !folded.includes(page.path);
+        const done = remarks.filter((r) => isSettled(q, r.id)).length;
         return (
-          <li key={r.id}>
+          <section key={page.path} className="flex flex-col">
             <button
               type="button"
-              onClick={() => onShow(r.id)}
-              className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-left text-dt-muted hover:bg-dt-line hover:text-dt-text"
+              aria-expanded={open}
+              onClick={() =>
+                setFolded((f) =>
+                  open ? [...f, page.path] : f.filter((path) => path !== page.path),
+                )
+              }
+              className="flex h-8 items-center gap-1.5 rounded-[8px] px-1.5 text-[12px] font-medium text-dt-faint hover:text-dt-text"
             >
-              <kind.Icon className="size-3.5 shrink-0 text-dt-faint" aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{r.title}</span>
-              {isSettled(q, r.id) ? (
-                <Check className="size-3.5 shrink-0 text-dt-good" aria-label="Settled" />
-              ) : annotationsOn(q, r.id).some((a) => answerOf(q, a.id) === undefined) ? (
-                <AgentMark className="size-3.5 shrink-0 animate-pulse" />
-              ) : (
-                <span className="shrink-0 text-dt-faint">{pageTitle(r.page)}</span>
-              )}
+              <ChevronRight
+                aria-hidden
+                className={cx("size-3.5 transition-transform duration-200", open && "rotate-90")}
+              />
+              <span className="flex-1 text-left">{page.title}</span>
+              <span className="tabular-nums">
+                {done}/{remarks.length}
+              </span>
             </button>
-          </li>
+            {open && (
+              <ul className="relative ml-[13px] flex flex-col border-l border-dt-line pl-1.5">
+                {remarks.map((r) => {
+                  const mark = markOf(q, r);
+                  const kind = KIND[r.kind];
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => onShow(r.id)}
+                        onPointerEnter={() => setPicked(r.id)}
+                        className={cx(
+                          "flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2 text-left text-[13px] transition-colors",
+                          r.id === rows[at]?.id ? "bg-dt-raised" : "",
+                          mark === "here"
+                            ? "font-medium text-dt-text"
+                            : mark === "settled"
+                              ? "text-dt-faint"
+                              : "text-dt-muted",
+                        )}
+                      >
+                        <span className="grid size-4 shrink-0 place-items-center">
+                          <RowMarkView mark={mark} />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                        {r.kind !== "look" && (
+                          <kind.Icon className="size-3.5 shrink-0 text-dt-faint" aria-hidden />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         );
       })}
-    </ul>
+    </nav>
   );
 }
 
@@ -433,7 +543,7 @@ function Agent({ count, eta }: { readonly count: number; readonly eta: number | 
 const KEYS = [
   ["j", "Next"],
   ["k", "Back"],
-  ["s", "Seen: the remarks before"],
+  ["t", "The tree of remarks"],
   ["←  →", "The variant before, after"],
   ["↑  ↓", "The state before, after"],
   ["a", "Annotate what shows"],

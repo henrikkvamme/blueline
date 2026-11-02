@@ -117,7 +117,7 @@ function Live() {
   const [leftOpen, setLeftOpen] = useState<string | undefined>(undefined);
   const [shipAt, setShipAt] = useState<number | undefined>(undefined);
   const [clock, setClock] = useState(Date.now());
-  const [seen, setSeen] = useState(false);
+  const [tree, setTree] = useState(false);
   const [guide, setGuide] = useState<GuideSettings>(loadGuide);
   // A variant that shows on the page and is not kept: the reviewer's own preview, and the
   // guide's while a beat shows it.
@@ -483,8 +483,7 @@ function Live() {
       else if (states.length > 0 && e.key === "ArrowUp") down(-1);
       else if (e.key === "j" || e.key === "ArrowRight") move(next);
       else if (e.key === "k" || e.key === "ArrowLeft") move(back);
-      else if (e.key === "s") setSeen((o) => !o);
-      else if (e.key === "Escape" && seen) setSeen(false);
+      else if (e.key === "t") setTree((o) => !o);
       else if (e.key === "y") move(settleNow);
       else if (e.key === "u" && toast.length > 0) undo();
       else if (e.key === "a" && here !== undefined) open(here.target);
@@ -585,8 +584,8 @@ function Live() {
         onNext={() => move(next)}
         onBack={() => move(back)}
         onShow={(id) => move((s) => show(s, id))}
-        seen={seen}
-        onSeen={setSeen}
+        tree={tree}
+        onTree={setTree}
         onAnnotate={() => here !== undefined && open(here.target)}
         onWrite={(text) => setComposer((c) => (c === undefined ? c : { ...c, text }))}
         onSend={send}
