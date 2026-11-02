@@ -106,6 +106,8 @@ interface Answer {
   readonly events: readonly { readonly at: number; readonly e: Record<string, unknown> }[];
   readonly done: boolean;
   readonly ended?: number;
+  /** What the page told the agent after each walk it showed. */
+  readonly played?: readonly string[];
 }
 
 interface Shot {
@@ -147,10 +149,13 @@ window.__textOf = (el) => [el.innerText, ...[...el.querySelectorAll("input, text
 const plain = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input.url;
+  if (/\\/__agent\\/played$/.test(url)) {
+    try { window.__answers.at(-1)?.played.push(JSON.parse(String(init?.body ?? "{}")).how); } catch {}
+  }
   if (!/\\/__agent$/.test(url)) return plain(input, init);
   let body = {};
   try { body = JSON.parse(String(init?.body ?? "{}")); } catch {}
-  const answer = { body, sent: performance.now(), events: [], done: false };
+  const answer = { body, sent: performance.now(), events: [], played: [], done: false };
   window.__answers.push(answer);
   const res = await plain(input, init);
   if (res.body === null) { answer.done = true; return res; }
@@ -571,6 +576,7 @@ function stepsOf(answers: readonly Answer[]) {
       if (e["type"] === "annotate") return [{ queued: { on: e["target"], change: e["text"] } }];
       return [];
     }),
+    pageToldItHowEachShowWent: a.played,
     lastWords: a.events.find((x) => x.e["type"] === "done")?.e["text"],
     failed: a.events.find((x) => x.e["type"] === "failed")?.e["why"],
   }));
