@@ -10,6 +10,8 @@ import { TARGETS } from "./script";
 
 export type AgentEvent =
   | { readonly type: "status"; readonly text: string }
+  /** What a fast model heard him ask for, in one line, before the agent answers. */
+  | { readonly type: "heard"; readonly text: string }
   | { readonly type: "show"; readonly id: string; readonly beats: readonly Beat[] }
   | { readonly type: "annotate"; readonly target: string; readonly text: string }
   | { readonly type: "done"; readonly text: string }

@@ -207,6 +207,21 @@ or a variant by its number.
   what it understood, and it can show a preview on the page, a change of CSS or words only.
   The journey's agent then does the real change. Henrik corrects a wrong understanding at
   once, not a minute later.
+
+  **Which model does what** (measured on fry on 2026-11-02, through the subscriptions, with
+  no API key; the queue workshop has the first answer):
+  - The first answer is Claude Haiku 5.5 with no thinking, in a Claude Code process that
+    is started before he speaks. Its first word comes in 0.7 to 2.4 s. Sonnet 5.5 took 1.8
+    to 3.2 s. GPT-6.1 Terra is about 1 s on the OpenAI API, but through a warm Codex
+    app-server it took 3.3 to 4.7 s. Use Terra here only if Blueline gets an API key.
+  - The journey's agent, its variants and the orchestrator use Claude Opus 5.5. It leads
+    Arena WebDev (1810, against Terra's 1673), and design is where the quality shows.
+    Henrik does not wait on it, because the first answer covers the first seconds.
+  - The agent that drives the browser to check a journey can use Terra (74.2% on OSWorld
+    2.1, at a low cost per task).
+  - No model router, such as Jev. Every note gets the fast answer and goes to the agent too,
+    so there is nothing to choose between.
+
 - **Ready before he arrives.** While he looks at one remark, Blueline makes the next remark's
   stills and variants, so Next is instant.
 - **The size of the session.** The queue shows how much is left: "6 items, about 4 min".

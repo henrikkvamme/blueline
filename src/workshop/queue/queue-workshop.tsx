@@ -64,6 +64,8 @@ const fresh = (delay = 8): State => ({
 /** One exchange of point and talk: what he said, and how far the agent's answer is. */
 interface Exchange {
   readonly said: string;
+  /** What the fast model heard him ask for, before the agent answers. */
+  readonly heard: string | undefined;
   readonly tone: "busy" | "showing" | "done" | "failed";
   /** What the agent does now, or its last words. */
   readonly status: string;
@@ -324,6 +326,7 @@ function Live() {
       };
       setExchange({
         said: text,
+        heard: undefined,
         tone: "busy",
         status: "Thinking",
         walk: undefined,
@@ -366,6 +369,9 @@ function Live() {
           switch (event.type) {
             case "status":
               update((x) => ({ ...x, tone: "busy", status: event.text }));
+              break;
+            case "heard":
+              update((x) => ({ ...x, heard: event.text }));
               break;
             case "show":
               update((x) => ({ ...x, tone: "showing", walk: event.beats }));
@@ -416,6 +422,7 @@ function Live() {
         : Math.max(0, Math.ceil((due.at + state.delay * 1000 - clock) / 1000));
     return {
       said: exchange.said,
+      heard: exchange.heard,
       tone: exchange.tone,
       // While it shows him, the line says what the cursor says.
       status: exchange.tone === "showing" ? (walk.note?.words ?? "Showing you") : exchange.status,

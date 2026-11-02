@@ -67,6 +67,9 @@ export const SHIP_SECONDS = 10;
 export interface Line {
   /** What the agent heard him say; none while it listens or hears. */
   readonly said: string | undefined;
+  /** What a fast model heard him ask for, a second after he spoke, before the agent answers.
+   * It grows as its words come. */
+  readonly heard?: string | undefined;
   readonly tone: "listening" | "busy" | "showing" | "done" | "failed";
   /** What the agent does now, or its last words. */
   readonly status: string;
@@ -1081,7 +1084,8 @@ function Shipping({
 /**
  * The line between him and the agent, in the place of the next remark's line: what it heard
  * him say, and under it what it does about it, live. The page shows where it points; this
- * says what it took from his words, so a wrong hearing shows at once. While the agent works,
+ * says what it took from his words, so a wrong hearing shows at once: first his words, then
+ * in one line what a fast model heard him ask for, a second later. While the agent works,
  * a light runs along the line's top edge and its words shimmer. Once it is done, its last
  * words stay, with when a change it put in the queue comes back, and Again shows its walk
  * again.
@@ -1100,6 +1104,14 @@ function ExchangeLine({ line }: { readonly line: Line }) {
           <Mic className="mt-px size-3.5 shrink-0 text-dt-faint" aria-hidden />
           <span className="line-clamp-2 min-w-0 flex-1 text-dt-text" title={line.said}>
             {line.said}
+          </span>
+        </span>
+      )}
+      {line.heard !== undefined && (
+        <span className="flex animate-dt-fade items-start gap-2.5">
+          <CornerDownRight className="mt-px size-3.5 shrink-0 text-dt-faint" aria-hidden />
+          <span className="line-clamp-2 min-w-0 flex-1 text-dt-text" title={line.heard}>
+            {line.heard}
           </span>
         </span>
       )}
