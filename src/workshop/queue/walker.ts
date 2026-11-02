@@ -189,12 +189,29 @@ function swapInPlace(
     const was = field.value;
     const now = change(was);
     if (now === was) continue;
-    field.value = now;
-    undo.push(() => {
-      if (field.value === now) field.value = was;
-    });
+    undo.push(holdValue(field, was, now));
   }
   return () => undo.forEach((step) => step());
+}
+
+/** Holds a field at the mock-up's value while the app renders: React writes its own value back
+ * to a controlled field, and the hold turns that write into the mock-up's. */
+function holdValue(field: HTMLInputElement | HTMLTextAreaElement, was: string, now: string) {
+  const own = Object.getOwnPropertyDescriptor(field, "value");
+  const proto: object = Object.getPrototypeOf(field);
+  Object.defineProperty(field, "value", {
+    configurable: true,
+    get: () => String(Reflect.get(proto, "value", field)),
+    set: (value: string) => {
+      Reflect.set(proto, "value", value === was ? now : value, field);
+    },
+  });
+  field.value = now;
+  return () => {
+    if (own === undefined) Reflect.deleteProperty(field, "value");
+    else Object.defineProperty(field, "value", own);
+    if (field.value === now) field.value = was;
+  };
 }
 
 /** Puts the agent's markup in the element's place, in the page itself, so the page's own
