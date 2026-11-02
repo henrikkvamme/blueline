@@ -1,4 +1,4 @@
-import { Mic } from "lucide-react";
+import { ArrowUp, Mic } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cx } from "../../ui/cx";
 import { selectorOf } from "./script";
@@ -6,10 +6,10 @@ import type { Drawn, Pointed } from "../../queue/queue";
 import { hear, type Word } from "./voice";
 
 /*
- * Point and talk, as Clicky's: press Control twice, point and say what should change. Hold
- * the second press to talk while it is held, or let go of it at once to talk hands free until
- * the next Control; Escape drops what he said. Option stays free for the Mac's own dictation.
- * The press stops the agent's walk and its voice at once. While he talks the cursor
+ * Point and talk, as Clicky's push-to-talk: hold ⌃⌘, point and say what should change. Escape
+ * drops what he said. Option stays free for his dictation app. Press ⌃ twice to type
+ * instead: a box opens at the pointer, about what it points at.
+ * The press stops the agent's walk and its voice at once. While the keys are held the cursor
  * leaves ink, which fades behind it; a loop that closes stays, and snaps to the element it
  * surrounds. The agent's waveform by the cursor shows that it listens, and its spinner that it
  * thinks, in the agent's colour: it stands where its cursor would. Let
@@ -50,13 +50,20 @@ export type Talk =
     }
   /** The keys are let go: the words become text. */
   | { readonly phase: "thinking"; readonly strokes: readonly string[]; readonly at: Point }
+  | {
+      readonly phase: "typing";
+      readonly at: Point;
+      readonly box: Box | undefined;
+      readonly send: (text: string) => void;
+      readonly close: () => void;
+    }
   /** It could not listen or hear, and says why for a moment. */
   | { readonly phase: "failed"; readonly why: string; readonly at: Point };
 
 /** A hold shorter than this is a slip, not words. */
 const SHORTEST = 300;
 
-const TAPS = { tap: 250, between: 400, hold: 300 } as const;
+const TAPS = { tap: 250, between: 400 } as const;
 
 /** How long the ink stays behind the cursor, in ms. */
 const INK = 900;
@@ -237,7 +244,7 @@ export function usePointAndTalk({
     let level = 0;
     let frame = 0;
     let end: (() => void) | undefined;
-    let free = false;
+    let typing = false;
     let dropped = false;
     let clean = false;
     let downAt = 0;
@@ -359,25 +366,49 @@ export function usePointAndTalk({
       end = undefined;
     };
 
+    const closeTyping = () => {
+      typing = false;
+      setTalk(IDLE);
+    };
+    const openTyping = () => {
+      const at = mouse;
+      const here = pointed(at.x, at.y);
+      typing = true;
+      calls.current.onStart();
+      setTalk({
+        phase: "typing",
+        at,
+        box: here.box,
+        close: closeTyping,
+        send: (text) => {
+          closeTyping();
+          const words = text.trim();
+          if (words === "") return;
+          const on = here.target === undefined ? [] : [{ target: here.target, words }];
+          calls.current.onWords(here.target, words, on, [], at);
+        },
+      });
+    };
+
     const onDown = (e: KeyboardEvent) => {
-      if (e.key === "Control") {
+      if (e.key === "Control" || e.key === "Meta") {
         if (e.repeat) return;
-        if (held) {
+        if (e.ctrlKey && e.metaKey && !held && !typing) {
+          e.preventDefault();
+          tapAt = 0;
           clean = false;
-          if (free) {
-            e.preventDefault();
-            stop();
-          }
+          void start();
           return;
         }
-        clean = !e.altKey && !e.metaKey && !e.shiftKey;
+        if (e.key !== "Control") return;
+        clean = !held && !e.altKey && !e.metaKey && !e.shiftKey;
         downAt = Date.now();
         if (clean && downAt - tapAt < TAPS.between) {
           e.preventDefault();
           tapAt = 0;
           clean = false;
-          free = false;
-          void start();
+          if (typing) closeTyping();
+          else openTyping();
         }
         return;
       }
@@ -386,19 +417,12 @@ export function usePointAndTalk({
       if (!held) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === "Escape") {
-        dropped = true;
-        stop();
-      } else if (!free) stop();
+      if (e.key === "Escape") dropped = true;
+      stop();
     };
     const onUp = (e: KeyboardEvent) => {
-      if (e.key !== "Control") return;
-      if (held) {
-        if (!free && Date.now() - since < TAPS.hold) free = true;
-        else if (!free) stop();
-        return;
-      }
-      tapAt = clean && Date.now() - downAt < TAPS.tap ? Date.now() : 0;
+      if (held && (e.key === "Control" || e.key === "Meta")) return stop();
+      if (e.key === "Control") tapAt = clean && Date.now() - downAt < TAPS.tap ? Date.now() : 0;
     };
     const onMove = (e: PointerEvent) => {
       mouse = { x: e.clientX, y: e.clientY };
@@ -458,6 +482,7 @@ export function usePointAndTalk({
  */
 export function TalkView({ talk, reduced }: { readonly talk: Talk; readonly reduced: boolean }) {
   if (talk.phase === "idle") return null;
+  if (talk.phase === "typing") return <TypingBox talk={talk} />;
   const by = { left: talk.at.x + 14, top: talk.at.y + 12 };
   return (
     <div className="blueline pointer-events-none fixed inset-0 z-[2147483004]">
@@ -502,6 +527,59 @@ export function TalkView({ talk, reduced }: { readonly talk: Talk; readonly redu
           {talk.why}
         </span>
       )}
+    </div>
+  );
+}
+
+const TYPING = { width: 340, gap: 14 } as const;
+
+function TypingBox({ talk }: { readonly talk: Extract<Talk, { readonly phase: "typing" }> }) {
+  const [text, setText] = useState("");
+  const left = Math.max(12, Math.min(talk.at.x + TYPING.gap, innerWidth - TYPING.width - 12));
+  const below = talk.at.y + TYPING.gap + 56 <= innerHeight;
+  const place = below
+    ? { left, top: talk.at.y + TYPING.gap }
+    : { left, bottom: innerHeight - talk.at.y + TYPING.gap };
+  return (
+    <div className="blueline fixed inset-0 z-[2147483004]" onPointerDown={talk.close}>
+      {talk.box !== undefined && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute animate-dt-fade rounded-[6px] ring-2 ring-dt-accent ring-offset-2 ring-offset-transparent"
+          style={talk.box}
+        />
+      )}
+      <form
+        className="absolute flex animate-dt-arrive items-center gap-2 rounded-full bg-dt-panel/95 py-1.5 pr-1.5 pl-4 shadow-dt-float ring-1 ring-dt-accent/50 backdrop-blur"
+        style={{ ...place, width: TYPING.width }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          talk.send(text);
+        }}
+      >
+        <input
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- the box opens for typing, from the keys
+          autoFocus
+          aria-label="Ask the agent"
+          placeholder={talk.box === undefined ? "Ask the agent" : "Ask about this"}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Escape") talk.close();
+          }}
+          className="h-8 min-w-0 flex-1 bg-transparent text-[14px] text-dt-text outline-none placeholder:text-dt-faint"
+        />
+        <button
+          type="submit"
+          aria-label="Send"
+          disabled={text.trim() === ""}
+          className="grid size-8 shrink-0 place-items-center rounded-full bg-dt-accent text-white transition-opacity disabled:opacity-30"
+        >
+          <ArrowUp className="size-4" strokeWidth={2.5} aria-hidden />
+        </button>
+      </form>
     </div>
   );
 }

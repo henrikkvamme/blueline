@@ -287,7 +287,7 @@ function Live() {
     });
   };
 
-  // Point and talk: ⌃⌃ stops the walk. His words go to the agent, with what he pointed
+  // Point and talk: ⌃⌘ held, or ⌃⌃ to type, stops the walk. His words go to the agent, with what he pointed
   // at and what the page shows, and the agent answers on the page with its cursor. With no
   // agent, the script puts his words in the queue and says it is on it.
   const talk = usePointAndTalk({
@@ -462,7 +462,8 @@ function Live() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (composer !== undefined || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (composer !== undefined || talk.phase === "typing" || e.metaKey || e.ctrlKey || e.altKey)
+        return;
       const values = here?.variants ?? here?.options ?? [];
       const n = Number(e.key);
       // The arrows go through a choice's variants, in a row, and its states, in a column, as

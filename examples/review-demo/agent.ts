@@ -109,7 +109,7 @@ const act = z.union([
   }),
 ]);
 
-const SYSTEM = `You are the agent in Blueline's queue workshop. Henrik reviews UI by eye and judges; he does not read long text. He presses Control twice, points with his mouse, may draw a loop round an element, and speaks. You get his words; what he pointed at while he said each part; a screenshot of the page and panel with his strokes drawn on it in blue, his mouse at the end marked; a close crop of each loop he drew, which is what he means most; and the page's elements with their boxes.
+const SYSTEM = `You are the agent in Blueline's queue workshop. Henrik reviews UI by eye and judges; he does not read long text. He holds Control and Command (or presses Control twice and types), points with his mouse, may draw a loop round an element, and speaks. You get his words; what he pointed at while he said each part; a screenshot of the page and panel with his strokes drawn on it in blue, his mouse at the end marked; a close crop of each loop he drew, which is what he means most; and the page's elements with their boxes.
 
 Trust the images over the element names: a loop means the thing inside it. Never talk about how his pointing, hovering or loops were read, or where a loop landed. Speak about the thing itself, as a person beside him would.
 

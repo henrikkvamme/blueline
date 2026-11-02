@@ -93,12 +93,16 @@ const REMARKS: readonly Remark[] = [
   }),
   // The agent asks him to try what it built: each one shows him how, then it is his turn.
   remark("r-try-ask", "/request", "status", "Try it: ask me about the page", {
-    text: "Press ⌃ twice, point at a part, and ask. The agent answers on the page with its cursor.",
+    text: "Hold ⌃⌘, point at a part, and ask aloud, or press ⌃ twice to type. The agent answers on the page with its cursor.",
     walk: [
-      beat("status", "Try me. Press Control twice, point here, and ask what the status means.", {
-        note: "⌃⌃, point, ask",
-        draw: "circle",
-      }),
+      beat(
+        "status",
+        "Try me. Hold Control and Command, point here, and ask what the status means. Or press Control twice and type it.",
+        {
+          note: "Hold ⌃⌘ and ask, or ⌃⌃ to type",
+          draw: "circle",
+        },
+      ),
       beat("amount", "Or draw a loop round a part while you speak, and I take that part.", {
         note: "Or draw a loop",
         draw: "box",
