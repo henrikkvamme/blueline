@@ -1,3 +1,4 @@
+import { find } from "../core/find";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { registry } from "../core/registry";
@@ -81,7 +82,7 @@ const settling = settleGate();
 /** On a phone, puts the lit part above the sheet or the bar, once, so the settle shows. */
 function keepLit(target: string | undefined) {
   const lit = own("[data-dt-light]")?.getBoundingClientRect();
-  const element = target === undefined ? null : document.querySelector(target);
+  const element = target === undefined ? null : find(target);
   if (!isPhone() || lit === undefined || !(element instanceof HTMLElement)) return;
   const tops = ownAll("[data-dt-dock]").map((e) => e.getBoundingClientRect().top);
   const floor = Math.min(window.innerHeight, ...tops);

@@ -1,3 +1,4 @@
+import { find } from "../core/find";
 import { markSent } from "../keys/sent";
 import type { Action, PressAction } from "./index";
 
@@ -20,12 +21,12 @@ const aborted = (signal: AbortSignal) =>
 
 /** The first element that matches the selector, once there is one. */
 export function waitFor(selector: string, signal: AbortSignal, doing: Doing): Promise<Element> {
-  const found = document.querySelector(selector);
+  const found = find(selector);
   if (found !== null) return Promise.resolve(found);
   doing(`no element matches ${selector}`);
   return new Promise<Element>((done, fail) => {
     const look = () => {
-      const el = document.querySelector(selector);
+      const el = find(selector);
       if (el === null) return;
       watch.disconnect();
       done(el);

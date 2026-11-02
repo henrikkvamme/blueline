@@ -1,3 +1,4 @@
+import { find } from "../core/find";
 import { Clock, DateTime, Effect, Fiber, Option, Schedule } from "effect";
 import { createCallbackLogic } from "xstate";
 import { registry } from "../core/registry";
@@ -349,7 +350,7 @@ export function liveMachine<C>(live: Live<C>) {
             if (step === undefined || target === undefined || step.setup === undefined) return;
             for (let tries = 0; tries < 8; tries += 1) {
               yield* Effect.sleep("700 millis");
-              if (target.some((t) => document.querySelector(t) !== null)) continue;
+              if (target.some((t) => find(t) !== null)) continue;
               yield* troubled(step, sendBack, showVariant(step, input.variant, adapter.context()));
             }
           }),

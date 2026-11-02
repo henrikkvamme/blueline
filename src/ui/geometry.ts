@@ -1,3 +1,4 @@
+import { find } from "../core/find";
 import { isOwn } from "../core/root";
 /*
  * Where things are on the page: the box of the part a step is about, where a card goes
@@ -52,7 +53,7 @@ function rectOf(element: Element): DOMRect {
 
 export function boxOf(selectors: readonly string[]): Box | undefined {
   const rects = selectors
-    .map((s) => document.querySelector(s))
+    .map((s) => find(s))
     .map((e) => (e === null ? undefined : rectOf(e)))
     .filter((r): r is DOMRect => r !== undefined && (r.width > 0 || r.height > 0));
   if (rects.length === 0) return undefined;

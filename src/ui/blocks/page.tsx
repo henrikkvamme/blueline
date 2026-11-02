@@ -1,3 +1,4 @@
+import { find } from "../../core/find";
 import { ChevronsLeftRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cx } from "../cx";
@@ -99,9 +100,7 @@ export function Changes({ block }: Of<"changes">) {
               onBlur={() => setOver(undefined)}
               onClick={() =>
                 item.target !== undefined &&
-                document
-                  .querySelector(item.target)
-                  ?.scrollIntoView({ block: "center", behavior: "smooth" })
+                find(item.target)?.scrollIntoView({ block: "center", behavior: "smooth" })
               }
               className="flex w-full items-start gap-2 rounded-dt-control px-1.5 py-1 text-left text-[13px] leading-5 enabled:hover:bg-dt-raised"
             >

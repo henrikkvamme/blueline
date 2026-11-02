@@ -1,3 +1,4 @@
+import { find } from "../core/find";
 import { GripHorizontal, LoaderCircle, X } from "lucide-react";
 import {
   useEffect,
@@ -80,7 +81,7 @@ export function useBox(selectors: readonly string[], key: string): Box | undefin
     const next = boxOf(list);
     if (next !== undefined && scrolled.current !== `${key}|${joined}`) {
       scrolled.current = `${key}|${joined}`;
-      const first = list.map((s) => document.querySelector(s)).find((e) => e !== null);
+      const first = list.map((s) => find(s)).find((e) => e !== null);
       const tall = next.height > window.innerHeight - BAR - 24;
       const phone = isPhone();
       if (first instanceof HTMLElement && phone) {
@@ -587,7 +588,7 @@ export function Pins({
         const rect =
           selector === undefined || pin.pin?.variant !== undefined || (sent && open !== pin.id)
             ? undefined
-            : document.querySelector(selector)?.getBoundingClientRect();
+            : find(selector)?.getBoundingClientRect();
         if (rect === undefined) return null;
         return (
           <button
