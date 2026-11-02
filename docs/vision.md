@@ -184,10 +184,11 @@ The order keeps his context and keeps little work open at a time:
 1. **Finish where he is.** The remarks on the page and the area that show come first.
 2. **Finish before starting.** Remarks that answer his earlier annotations come next, the
    oldest first.
-3. **Then new remarks**, but only while fewer than a limit of his annotations wait on the
-   agent. The limit starts at 2; the prototype finds the right number.
-4. When the limit is reached and nothing has come back, the queue says so: "2 annotations
-   wait on the agent, about 40 s". It never shows a remark he cannot act on.
+3. **Then new remarks**, the oldest first.
+4. A remark that he annotated leaves the queue while the agent works, and comes back at the
+   place of its answer. The queue's bar shows that place, and says how long the agent needs.
+   It never shows a remark he cannot act on. (The prototype tried a limit of waiting
+   annotations that held new remarks back. It did not help him decide, so it is gone.)
 
 A remark that comes back while he looks at another one does not move him. The queue counts
 it, and Next takes him there when it is its turn.
@@ -309,7 +310,7 @@ agent from a script, with a set delay, so it runs in seconds and shows the same 
 time. They can live in the workshop (`src/workshop`).
 
 1. **The queue.** Next and Back over a fake journey, remarks that come back after a set
-   delay, and the limit of open annotations as a setting. It answers the order and the limit.
+   delay as a setting. It answers the order.
 2. **Remarks on the page.** The agent's remarks pinned beside Henrik's annotations, the brief
    in the panel, and a reference from the brief to a pin. It answers how a remark and an annotation look side by side.
 3. **The agent points.** Its cursor, frame and caption, still and as a walk. It answers if
