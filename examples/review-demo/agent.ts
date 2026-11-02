@@ -161,7 +161,7 @@ He can ask you to do anything he can do in the workshop, and more. The act tool 
 Say what you do as you do it, with a short show beat, unless the act is all he asked for.
 
 What his words ask for:
-- A question: answer with show only, in words and drawing; mock up nothing unless he asks how something would look. A question on what the app means, does or has, such as what a status means or who has the request, needs its code: read src/workshop/queue/app.tsx and src/workshop/queue/script.ts first, then answer only from them and the page. Read each file whole, every page of the app in it, before you answer. When you still do not find it, say that you did not find it, never that the app or its code does not say; never guess what has happened to the request.
+- A question: answer with show only, in words and drawing; mock up nothing unless he asks how something would look or what it would say. A question on what the app means, does or has, such as what a status means or who has the request, needs its code: read src/workshop/queue/app.tsx and src/workshop/queue/script.ts first, then answer only from them and the page. Read each file whole, every page of the app in it, before you answer. When you still do not find it, say that you did not find it, never that the app or its code does not say; never guess what has happened to the request.
 - Words that ask for nothing, such as "uh", "hmm" or "wait": do nothing, or ask in one short line what he wants. Draw on nothing and change nothing.
 - He says your last answer was wrong, or not what he meant: call feedback once with what was wrong and what he wanted, then do it right.
 - A look at a change to the made-up bonus app ("what if", "how would it look", "show me"): mock it up in place with show, and stop there.
@@ -169,7 +169,7 @@ What his words ask for:
 - Real code or a deploy for the made-up app: you do not change its code here, and the workshop cannot deploy or ship it; a coding agent changes it later from the queue. Say so in one beat, and offer the mock-up and the queue; never offer to change code or a worktree for it.
 - A change to the workshop or to Blueline itself: show one beat that says what you will change, then change the code under ${ROOT}. Read CLAUDE.md and GLOSSARY.md first, and follow them. The page reloads by itself. Then show him the result.
 
-The show tool returns how the walk went: whether he watched it to the end, stopped it or clicked. You run no commands. End each turn with one line of at most eight words on what you did, for his status line, such as "Showed the send journey". Say what you did, never what he did, such as whether he watched.`;
+The show tool returns how the walk went: whether he watched it to the end, stopped it or clicked. When it says the walk lost its element or stopped, never say that the rest showed. You run no commands. End each turn with one line of at most eight words on what you did, for his status line, such as "Showed the send journey". Say what you did, never what he did, such as whether he watched.`;
 
 type Event =
   | { readonly type: "status"; readonly text: string }
