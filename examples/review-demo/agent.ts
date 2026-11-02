@@ -1,6 +1,14 @@
 import { basename, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createSdkMcpServer, type Query, query, tool } from "@anthropic-ai/claude-agent-sdk";
+import {
+  createSdkMcpServer,
+  type Options,
+  type Query,
+  query,
+  startup,
+  tool,
+  type WarmQuery,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { Plugin } from "vite";
 import { z } from "zod";
 import { type Exchange, keepFeedback } from "./feedback.ts";
@@ -25,6 +33,10 @@ import { ears as makeEars, envOf, words } from "./hearing.ts";
  * word came in 1.4 to 2.0 s on fry, with a screenshot, close to Haiku 5.5's 1.2 to 1.9 s, and
  * Terra reads the page better. Haiku hears when Codex cannot. Opus does the work, where the
  * design matters. See terra.ts.
+ *
+ * The next run starts ahead: after each run, and when the dev server starts, a Claude Code
+ * process starts and resumes the session, so his next words do not wait for it to start. It
+ * gets the same prompt, tools and session as a run started then, so it knows as much.
  */
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -191,6 +203,17 @@ const inside = (path: unknown) => {
   return !rel.startsWith("..") && !/(^|\/)(node_modules|\.git)(\/|$)/.test(rel);
 };
 
+/** What the page's tools send to: the request that runs now. */
+interface Out {
+  send: (event: Event) => void;
+  /** The exchange before this request, for feedback on it. */
+  before: Exchange | undefined;
+  /** What the page sent with this request. */
+  request: unknown;
+}
+
+const ALLOWED = ["Read", "Grep", "Glob", "Edit", "Write"];
+
 export function agent(): Plugin {
   let session: string | undefined;
   let running: { readonly query: Query; readonly ended: Promise<void> } | undefined;
@@ -212,7 +235,135 @@ export function agent(): Plugin {
         warn: (why) => log.warn(`workshop agent: ${why}`),
       });
       ears.ready();
-      server.httpServer?.once("close", ears.close);
+      /** The request that the page's tools send to. */
+      const out: Out = { send: () => undefined, before: undefined, request: undefined };
+      /** A new id, and what the page answers on it. */
+      const await_ = () => {
+        const id = `w${String(++shown)}`;
+        const how = new Promise<string>((done) => {
+          watching.set(id, done);
+          setTimeout(() => done("No word from the page; it may still play."), WATCH);
+        });
+        return { id, how };
+      };
+      /** The page's tools, for one run. */
+      const tools = () =>
+        createSdkMcpServer({
+          name: "page",
+          alwaysLoad: true,
+          tools: [
+            tool(
+              "show",
+              "Show Henrik on the page: the cursor walks the beats, draws and speaks each line. Returns how the walk went.",
+              { beats: z.array(beat).min(1) },
+              async ({ beats }) => {
+                const { id, how } = await_();
+                out.send({ type: "show", id, beats });
+                return { content: [{ type: "text", text: await how }] };
+              },
+            ),
+            tool(
+              "act",
+              "Do what he can do in the workshop, and more, in order: go through the queue, settle, undo, keep, preview, change the settings, design variants, add states, write remarks. Returns what each act did and where the review is now.",
+              { acts: z.array(act).min(1) },
+              async ({ acts }) => {
+                const { id, how } = await_();
+                out.send({ type: "act", id, acts });
+                return { content: [{ type: "text", text: await how }] };
+              },
+            ),
+            tool(
+              "feedback",
+              "Keep his feedback when he says your last answer was wrong, so it becomes a test of you. Call it once, then do it right.",
+              {
+                wrong: z.string().describe("What was wrong with the last answer, in his words."),
+                wanted: z.string().describe("What he wanted instead, in his words."),
+              },
+              async ({ wrong, wanted }) => {
+                const id = await keepFeedback(ROOT, {
+                  reason: `${wrong} He wanted: ${wanted}`,
+                  by: "voice",
+                  exchange: out.before,
+                  page: { said: out.request },
+                });
+                log.info(`workshop agent: kept feedback ${id}`);
+                return { content: [{ type: "text", text: "Kept. Now do it right." }] };
+              },
+            ),
+            tool(
+              "annotate",
+              "Put a change to the made-up app in the review queue, on one element. The workshop answers it later.",
+              {
+                target: z.string().describe("A selector from the elements list."),
+                text: z.string().describe("What should change, in one clear sentence."),
+                revises: z
+                  .boolean()
+                  .optional()
+                  .describe(
+                    'True when this refines the request you queued before on the same element, such as "even shorter": it takes that request\'s place.',
+                  ),
+              },
+              async ({ target, text, revises }) => {
+                out.send({ type: "annotate", target, text, revises: revises === true });
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: revises === true ? "Changed in the queue." : "In the queue.",
+                    },
+                  ],
+                };
+              },
+            ),
+          ],
+        });
+      /** The options of a run that goes on with `resume`, or starts a new session. */
+      const options = (resume: string | undefined): Options => ({
+        model: MODEL,
+        effort: "low",
+        cwd: ROOT,
+        env: envOf(),
+        settingSources: [],
+        systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM },
+        tools: ALLOWED,
+        mcpServers: { page: tools() },
+        canUseTool: async (name, input) =>
+          name.startsWith("mcp__page__") ||
+          (ALLOWED.includes(name) && inside(input["file_path"] ?? input["path"]))
+            ? { behavior: "allow", updatedInput: input }
+            : { behavior: "deny", message: "Only files in this repository, and no commands." },
+        ...(resume === undefined ? {} : { resume }),
+      });
+      /** The next run, started ahead on the session as it is now. */
+      let next:
+        | { readonly session: string | undefined; readonly warm: Promise<WarmQuery> }
+        | undefined;
+      const ahead = () => {
+        void next?.warm.then((w) => w.close()).catch(() => undefined);
+        const warm = startup({ options: options(session) });
+        // A run that fails to start fails the request that takes it, not the dev server.
+        warm.catch(() => undefined);
+        next = { session, warm };
+      };
+      /** A run on the session: the one started ahead, if it is on the same session. */
+      const take = async (prompt: ReturnType<typeof words>): Promise<Query> => {
+        const ready = next;
+        next = undefined;
+        if (ready !== undefined && ready.session === session) {
+          try {
+            return (await ready.warm).query(prompt);
+          } catch (error) {
+            log.warn(`workshop agent: the run started ahead failed: ${String(error)}`);
+          }
+        } else void ready?.warm.then((w) => w.close()).catch(() => undefined);
+        return query({ prompt, options: options(session) });
+      };
+      ahead();
+      server.httpServer?.once("close", () => {
+        ears.close();
+        void next?.warm.then((w) => w.close()).catch(() => undefined);
+        next = undefined;
+      });
       const body = (req: import("node:http").IncomingMessage) =>
         new Promise<string>((done) => {
           let text = "";
@@ -274,6 +425,7 @@ export function agent(): Plugin {
         era += 1;
         exchanges.length = 0;
         void running?.query.interrupt().catch(() => undefined);
+        if (running === undefined) ahead();
         res.end();
       });
       server.middlewares.use("/__agent", (req, res, next) => {
@@ -335,109 +487,10 @@ export function agent(): Plugin {
               await was.query.interrupt().catch(() => undefined);
               await was.ended;
             }
-            /** A new id, and what the page answers on it. */
-            const await_ = () => {
-              const id = `w${String(++shown)}`;
-              const how = new Promise<string>((done) => {
-                watching.set(id, done);
-                setTimeout(() => done("No word from the page; it may still play."), WATCH);
-              });
-              return { id, how };
-            };
-            const page = createSdkMcpServer({
-              name: "page",
-              alwaysLoad: true,
-              tools: [
-                tool(
-                  "show",
-                  "Show Henrik on the page: the cursor walks the beats, draws and speaks each line. Returns how the walk went.",
-                  { beats: z.array(beat).min(1) },
-                  async ({ beats }) => {
-                    const { id, how } = await_();
-                    send({ type: "show", id, beats });
-                    return { content: [{ type: "text", text: await how }] };
-                  },
-                ),
-                tool(
-                  "act",
-                  "Do what he can do in the workshop, and more, in order: go through the queue, settle, undo, keep, preview, change the settings, design variants, add states, write remarks. Returns what each act did and where the review is now.",
-                  { acts: z.array(act).min(1) },
-                  async ({ acts }) => {
-                    const { id, how } = await_();
-                    send({ type: "act", id, acts });
-                    return { content: [{ type: "text", text: await how }] };
-                  },
-                ),
-                tool(
-                  "feedback",
-                  "Keep his feedback when he says your last answer was wrong, so it becomes a test of you. Call it once, then do it right.",
-                  {
-                    wrong: z
-                      .string()
-                      .describe("What was wrong with the last answer, in his words."),
-                    wanted: z.string().describe("What he wanted instead, in his words."),
-                  },
-                  async ({ wrong, wanted }) => {
-                    const id = await keepFeedback(ROOT, {
-                      reason: `${wrong} He wanted: ${wanted}`,
-                      by: "voice",
-                      exchange: before_,
-                      page: { said: record.request },
-                    });
-                    log.info(`workshop agent: kept feedback ${id}`);
-                    return { content: [{ type: "text", text: "Kept. Now do it right." }] };
-                  },
-                ),
-                tool(
-                  "annotate",
-                  "Put a change to the made-up app in the review queue, on one element. The workshop answers it later.",
-                  {
-                    target: z.string().describe("A selector from the elements list."),
-                    text: z.string().describe("What should change, in one clear sentence."),
-                    revises: z
-                      .boolean()
-                      .optional()
-                      .describe(
-                        'True when this refines the request you queued before on the same element, such as "even shorter": it takes that request\'s place.',
-                      ),
-                  },
-                  async ({ target, text, revises }) => {
-                    send({ type: "annotate", target, text, revises: revises === true });
-                    return {
-                      content: [
-                        {
-                          type: "text",
-                          text: revises === true ? "Changed in the queue." : "In the queue.",
-                        },
-                      ],
-                    };
-                  },
-                ),
-              ],
-            });
-            const run = query({
-              prompt: words(text),
-              options: {
-                model: MODEL,
-                effort: "low",
-                cwd: ROOT,
-                env: envOf(),
-                settingSources: [],
-                systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM },
-                tools: ["Read", "Grep", "Glob", "Edit", "Write"],
-                mcpServers: { page },
-                canUseTool: async (name, input) =>
-                  name.startsWith("mcp__page__") ||
-                  (["Read", "Grep", "Glob", "Edit", "Write"].includes(name) &&
-                    inside(input["file_path"] ?? input["path"]))
-                    ? { behavior: "allow", updatedInput: input }
-                    : {
-                        behavior: "deny",
-                        message: "Only files in this repository, and no commands.",
-                      },
-                ...(session === undefined ? {} : { resume: session }),
-              },
-            });
+            out.send = send;
+            out.before = before_;
+            out.request = record.request;
+            const run = await take(words(text));
             let finish = () => undefined as void;
             const ofEra = era;
             running = { query: run, ended: new Promise<void>((done) => (finish = done)) };
@@ -471,6 +524,8 @@ export function agent(): Plugin {
                 watching.delete(id);
               }
               running = undefined;
+              // The next run starts now, so his next words do not wait for it.
+              ahead();
               finish();
               // A quick agent can end before the hearing: the line still says what it heard.
               await Promise.race([heard, new Promise((done) => setTimeout(done, 8_000))]);

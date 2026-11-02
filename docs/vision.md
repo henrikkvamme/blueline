@@ -226,6 +226,11 @@ or a variant by its number.
   - Measured in the browser on 2026-11-02, from release: words 0.22 s, the line on screen
     1.6 s typical and 3.1 s at worst, the agent's first act 2.8 s. The evals are in
     `evals/hearing/` and `examples/review-demo/evals/`.
+  - The agent's next run starts ahead: after each run, a Claude Code process starts and
+    resumes the session, with the same prompt and tools, so his next words do not wait for
+    it. The browser eval also checks the agent's work, with Opus as the judge. Over its 16
+    cases the agent was right in 16 both before and after, and its first act came 2.1 s
+    after release typical and 4.0 s at worst, against 3.0 s and 6.5 s.
   - The journey's agent, its variants and the orchestrator use Claude Opus 5.5. It leads
     Arena WebDev (1810, against Terra's 1673), and design is where the quality shows.
     Henrik does not wait on it, because the first answer covers the first seconds.
