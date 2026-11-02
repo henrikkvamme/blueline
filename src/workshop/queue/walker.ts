@@ -369,12 +369,13 @@ export class Walker {
     this.turned();
   }
 
-  /** The page that shows; a change while the walk runs stops it. */
+  /** The page that shows. A click of the walk's own, or of his turn, goes on with the walk;
+   * a page he opens himself ends it, quietly, as he chose to go there. */
   navigate(path: string) {
     if (path === this.path) return;
     this.path = path;
     const ours = Date.now() - this.clicked < 1500;
-    if (this.active() && !ours) this.lose("The page changed, so I stopped here.");
+    if (this.active() && !ours) this.stop();
   }
 
   /** Whether the walk runs: its cursor moves, speaks or waits for a turn. */
@@ -604,6 +605,8 @@ export class Walker {
     return new Promise<void>((resolve) => {
       const done = () => {
         element.removeEventListener("click", done, true);
+        // His click may change the page, as the turn asked.
+        this.clicked = Date.now();
         this.turned = undefined;
         resolve();
       };
@@ -630,8 +633,13 @@ export class Walker {
       frame = 0;
       if (generation !== this.generation) return;
       const now = document.querySelector(beat.target);
-      if (now === null || now !== element || !element.isConnected || !framed.isConnected)
-        return this.lose(this.goneWords(beat));
+      if (now === null || now !== element || !element.isConnected || !framed.isConnected) {
+        // A new page takes the element first; the page's own news then ends the walk quietly.
+        window.setTimeout(() => {
+          if (generation === this.generation) this.lose(this.goneWords(beat));
+        }, 200);
+        return;
+      }
       const box = boxOf(framed.getBoundingClientRect());
       if (box.width === 0 && box.height === 0) return this.lose(this.goneWords(beat));
       if (!moved(box, last)) return;
@@ -674,7 +682,7 @@ export class Walker {
     const onMove = (e: PointerEvent) => {
       this.mouse = { x: e.clientX, y: e.clientY };
     };
-    const onPage = () => this.lose("The page changed, so I stopped here.");
+    const onPage = () => this.stop();
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("pointermove", onMove, true);
     window.addEventListener("popstate", onPage);
