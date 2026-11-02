@@ -11,6 +11,7 @@ import {
   isSettled,
   next,
   pick,
+  remarkOf,
   settleNow,
   show,
   waiting,
@@ -38,6 +39,7 @@ import { Strokes, TalkView, usePointAndTalk } from "./talk";
 import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
 import { ask, elements, forget, played } from "./agent";
 import { perform, type Act, type Shows } from "./acts";
+import { DesignPreview, Designs, type Shown } from "./design";
 import * as timing from "./timing";
 import { QueueStates } from "./queue-states";
 
@@ -221,6 +223,18 @@ function Live() {
     };
   }, []);
 
+  /** A variant that the agent designed as markup, by its remark and name. */
+  const designOf = (id: string, value: string) => remarkOf(q, id)?.designs?.[value];
+  // The designs that show on this page: the one he or the guide previews on the remark that
+  // shows, and those he kept.
+  const designs: readonly Shown[] = q.remarks.flatMap((r) => {
+    const previewed = r.id === here?.id ? (peek ?? guidePeek?.variant) : undefined;
+    const value = previewed ?? q.picks[r.id];
+    const html = value === undefined ? undefined : r.designs?.[value];
+    if (html === undefined || r.page !== page) return [];
+    const state = (r.id === here?.id ? (shown ?? guidePeek?.state) : undefined) ?? r.states?.[0];
+    return [{ target: r.target, html, state: state ?? "" }];
+  });
   /** g: pause a walk, go on with it, or walk the remark again. */
   const toggleWalk = () => {
     if (walker.active()) walker.pause();
@@ -733,12 +747,14 @@ function Live() {
             onGo={setVisit}
             changed={changed}
             status={
-              (here?.id === "r-status" ? (peek ?? guidePeek?.variant) : undefined) ??
-              q.picks["r-status"] ??
-              "Dot"
+              [
+                here?.id === "r-status" ? (peek ?? guidePeek?.variant) : undefined,
+                q.picks["r-status"],
+              ].find((v) => v !== undefined && designOf("r-status", v) === undefined) ?? "Dot"
             }
             statusText={here?.id === "r-status" ? (shown ?? guidePeek?.state) : undefined}
           />
+          <Designs shown={designs} />
         </div>
       </main>
       <Pins queue={q} page={page} onShow={(id) => move((s) => show(s, id))} />
@@ -746,7 +762,14 @@ function Live() {
       <TalkView talk={talk} reduced={guide.reduced} />
       <Panel
         docked
-        preview={(r, v, state) => <Board remark={r.id} value={v} state={state} />}
+        preview={(r, v, state) => {
+          const html = r.designs?.[v];
+          return html === undefined ? (
+            <Board remark={r.id} value={v} state={state} />
+          ) : (
+            <DesignPreview html={html} state={state ?? r.states?.[0] ?? ""} />
+          );
+        }}
         peek={peek ?? (here?.kind === "choice" ? guidePeek?.variant : undefined)}
         state={shown ?? guidePeek?.state}
         onState={setShown}
