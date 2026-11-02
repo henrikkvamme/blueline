@@ -2,7 +2,7 @@
  * The hearing evals: how fast and how right the first answer is, from the moment he lets go
  * of the keys to the first word of the line, without a browser.
  *
- *   node examples/review-demo/evals/hearing.ts [--stt batch,realtime] [--hear terra,haiku,hedge:1500]
+ *   node examples/review-demo/evals/hearing.ts [--stt batch,realtime] [--hear terra,haiku]
  *                             [--repeat 2] [--only id,id] [--no-judge]
  *
  * The cases are evals/hearing/cases.json (made-up remarks on the demo's request page, spoken by ElevenLabs)
@@ -23,7 +23,14 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { keytermsOf } from "../../../src/workshop/queue/ears.ts";
 import { ears, type Ear } from "../hearing.ts";
+
+/** The texts on the page, which the realtime ears get as keyterms, as the page sends them. */
+const pageTexts = (c: { readonly context: Record<string, unknown> }) =>
+  ((c.context["elements"] ?? []) as readonly { where?: string; text?: string }[]).flatMap((e) =>
+    e.where === "page" && e.text !== undefined ? [e.text] : [],
+  );
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const HERE = join(ROOT, "evals", "hearing");
@@ -135,7 +142,7 @@ async function batch(audio: string) {
 }
 
 /** Realtime: the audio streams as he speaks it; the wait counts from the last chunk. */
-async function realtime(audio: string) {
+async function realtime(audio: string, keyterms: readonly string[]) {
   const pcm = execFileSync("ffmpeg", [
     "-loglevel",
     "error",
@@ -151,7 +158,8 @@ async function realtime(audio: string) {
   ]);
   const url =
     "wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime" +
-    "&commit_strategy=manual&audio_format=pcm_16000";
+    "&commit_strategy=manual&audio_format=pcm_16000" +
+    keyterms.map((k) => `&keyterms=${encodeURIComponent(k)}`).join("");
   const ws = new WebSocket(url, { headers: { "xi-api-key": key } } as never);
   return new Promise<{ ms: number; text: string }>((done, fail) => {
     let last = 0;
@@ -231,12 +239,7 @@ async function main() {
   );
   const results: Result[] = [];
   for (const how of hears) {
-    const [use, hedgeText] = how.split(":");
-    const hearing = ears({
-      cwd: ROOT,
-      use: use === "haiku" ? "haiku" : "terra",
-      hedge: use === "hedge" ? Number(hedgeText ?? 1500) : undefined,
-    });
+    const hearing = ears({ cwd: ROOT, use: how === "haiku" ? "haiku" : "terra" });
     hearing.ready();
     // Let the warm thread or process start, as the dev server does before he speaks.
     await new Promise((r) => setTimeout(r, 8000));
@@ -247,7 +250,10 @@ async function main() {
           let words: string | undefined = c.said;
           if (c.audio !== undefined) {
             try {
-              const got = stt === "realtime" ? await realtime(c.audio) : await batch(c.audio);
+              const got =
+                stt === "realtime"
+                  ? await realtime(c.audio, keytermsOf(pageTexts(c)))
+                  : await batch(c.audio);
               sttMs = got.ms;
               words = got.text;
             } catch (error) {

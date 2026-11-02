@@ -81,8 +81,33 @@ export interface Listening {
   readonly cancel: () => void;
 }
 
-/** Streams the microphone to the realtime ears. `partial` gets the words so far. */
-export function listen(stream: MediaStream, partial: (text: string) => void): Listening {
+/**
+ * The names and words on the page, which the ears should expect: "Ingrid" was heard as
+ * "English" without them. Measured: no slower.
+ */
+export function keytermsOf(texts: readonly string[]): readonly string[] {
+  const found = new Set<string>();
+  for (const text of texts) {
+    // Each capitalized word, and each pair, such as "Ingrid" and "Ingrid Berg".
+    const names = [...text.matchAll(/\p{Lu}[\p{L}'-]+/gu)].map((m) => m[0]);
+    for (const [i, name] of names.entries()) {
+      found.add(name);
+      const next = names[i + 1];
+      if (next !== undefined && text.includes(`${name} ${next}`)) found.add(`${name} ${next}`);
+    }
+  }
+  return [...found].slice(0, 50);
+}
+
+/**
+ * Streams the microphone to the realtime ears. `partial` gets the words so far. `keyterms`
+ * are words on the page that he may say.
+ */
+export function listen(
+  stream: MediaStream,
+  partial: (text: string) => void,
+  keyterms: readonly string[] = [],
+): Listening {
   let socket: WebSocket | undefined;
   let started = false;
   let failed = false;
@@ -126,7 +151,8 @@ export function listen(stream: MediaStream, partial: (text: string) => void): Li
 
   void token().then((t) => {
     if (t === undefined || failed) return fail();
-    const ws = new WebSocket(`${URL_}&token=${encodeURIComponent(t)}`);
+    const terms = keyterms.map((k) => `&keyterms=${encodeURIComponent(k)}`).join("");
+    const ws = new WebSocket(`${URL_}${terms}&token=${encodeURIComponent(t)}`);
     socket = ws;
     ws.onmessage = (e) => {
       const m = JSON.parse(String(e.data)) as {

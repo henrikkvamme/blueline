@@ -211,11 +211,16 @@ or a variant by its number.
   **Which model does what** (measured on fry on 2026-11-02, through the subscriptions, with
   no API key; the queue workshop has the first answer):
   - The first answer is GPT-6.1 Terra with no reasoning, through a Codex app-server on the
-    ChatGPT plan. The trick is a warm thread: a new thread's first turn took 2.6 to 3.3 s
-    to the first word, and a later turn on the same thread 1.3 to 2.8 s, about 1.7 s
-    typical, with a screenshot. Haiku 5.5 was as fast (0.7 to 2.4 s) but reads the page
-    less well, so it only answers when Codex cannot. Codex's Fast tier gave no gain. On
-    the OpenAI API, Terra is about 1 s.
+    ChatGPT plan, on a warm thread (a new thread's first turn is about 1 s slower). In the
+    hearing evals Terra was right in 100% of cases and Haiku 5.5 in 81 to 88%, and Haiku
+    was slower, so Haiku only answers when Codex fails. On the OpenAI API, Terra would be
+    about 1 s.
+  - His words stream to ElevenLabs' realtime speech to text while he speaks, with the
+    names on the page as keyterms. The words come 0.22 s after he lets go, where sending
+    the recording after took 0.4 to 0.8 s.
+  - Measured in the browser on 2026-11-02, from release: words 0.22 s, the line on screen
+    1.6 s typical and 3.1 s at worst, the agent's first act 2.8 s. The evals are in
+    `evals/hearing/` and `examples/review-demo/evals/`.
   - The journey's agent, its variants and the orchestrator use Claude Opus 5.5. It leads
     Arena WebDev (1810, against Terra's 1673), and design is where the quality shows.
     Henrik does not wait on it, because the first answer covers the first seconds.

@@ -7,9 +7,9 @@ import { type Part, terra } from "./terra.ts";
  * evals (evals/hearing) use this same code.
  *
  * GPT-6.1 Terra hears, on a warm Codex thread (terra.ts). Claude Haiku 5.5 with no thinking
- * hears when Terra fails, and, with `hedge`, also when Terra has said no word by then: the
- * first of the two to say a word is shown, and the other stops. Terra's slow answers take 3
- * to 5 s, about one in six, and a hedge cuts them.
+ * hears only when Terra fails. In the evals Terra was right in 100% of cases and Haiku in 81
+ * to 88%, and Haiku was slower (2.0 s to the first word, Terra 1.4 s), so a race between the
+ * two gained nothing.
  */
 
 /** The model that hears him when Terra cannot, with no thinking and no tools. */
@@ -139,10 +139,8 @@ export type Ear = "terra" | "haiku";
 export interface EarsOptions {
   /** Where Codex runs. */
   readonly cwd: string;
-  /** Which model hears: Terra with Haiku as backup, or one alone. */
+  /** Which model hears: Terra with Haiku as backup, or Haiku alone. */
   readonly use?: "terra" | "haiku";
-  /** With Terra: ms with no word from it before Haiku hears too. None: Haiku only on failure. */
-  readonly hedge?: number | undefined;
   readonly warn?: (why: string) => void;
 }
 
@@ -150,7 +148,7 @@ export interface EarsOptions {
  * The ears. `hear` streams the line: `on` gets the line so far, and who says it, as its words
  * come. The text is the page's JSON, as the agent gets it.
  */
-export function ears({ cwd, use = "terra", hedge, warn = () => undefined }: EarsOptions) {
+export function ears({ cwd, use = "terra", warn = () => undefined }: EarsOptions) {
   const first = terra(HEAR, cwd);
   const backup = haiku();
   return {
@@ -160,39 +158,16 @@ export function ears({ cwd, use = "terra", hedge, warn = () => undefined }: Ears
     },
     hear: async (text: string, signal: AbortSignal, on: (line: string, ear: Ear) => void) => {
       if (use === "haiku") return backup.hear(text, signal, (line) => on(line, "haiku"));
-      let winner: Ear | undefined;
-      const stopTerra = new AbortController();
-      const stopHaiku = new AbortController();
-      const stopBoth = () => {
-        stopTerra.abort();
-        stopHaiku.abort();
-      };
-      signal.addEventListener("abort", stopBoth, { once: true });
-      const said = (ear: Ear) => (line: string) => {
-        if (winner === undefined) {
-          winner = ear;
-          (ear === "terra" ? stopHaiku : stopTerra).abort();
-        }
-        if (winner === ear) on(line, ear);
-      };
-      let haikuRun: Promise<void> | undefined;
-      const askHaiku = () => {
-        haikuRun ??= backup.hear(text, stopHaiku.signal, said("haiku"));
-        return haikuRun;
-      };
-      const timer =
-        hedge === undefined ? undefined : setTimeout(() => void askHaiku().catch(() => {}), hedge);
+      let said = false;
       try {
-        await first.hear(parts(text), stopTerra.signal, said("terra"));
+        await first.hear(parts(text), signal, (line) => {
+          said = true;
+          on(line, "terra");
+        });
       } catch (error) {
-        if (winner === undefined && !signal.aborted) {
-          warn(`Terra did not hear, so Haiku does: ${String(error)}`);
-          await askHaiku();
-        }
-      } finally {
-        clearTimeout(timer);
-        if (winner !== "terra") await haikuRun?.catch(() => undefined);
-        signal.removeEventListener("abort", stopBoth);
+        if (said || signal.aborted) return;
+        warn(`Terra did not hear, so Haiku does: ${String(error)}`);
+        await backup.hear(text, signal, (line) => on(line, "haiku"));
       }
     },
     close: () => {

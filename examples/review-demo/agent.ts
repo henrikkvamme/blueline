@@ -28,8 +28,6 @@ import { ears as makeEars, envOf, words } from "./hearing.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const MODEL = "claude-opus-5-5";
-/** Ms with no word from Terra before Haiku hears too; see hearing.ts. */
-const HEDGE: number | undefined = undefined;
 
 /** How long a walk may take before the agent goes on without hearing how it went. */
 const WATCH = 120_000;
@@ -197,7 +195,6 @@ export function agent(): Plugin {
       const log = server.config.logger;
       const ears = makeEars({
         cwd: ROOT,
-        hedge: HEDGE,
         warn: (why) => log.warn(`workshop agent: ${why}`),
       });
       ears.ready();

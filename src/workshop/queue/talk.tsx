@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { cx } from "../../ui/cx";
 import { selectorOf } from "./script";
 import type { Drawn, Pointed } from "../../queue/queue";
+import { elements } from "./agent";
 import * as ears from "./ears";
 import * as timing from "./timing";
 import { hear, type Word } from "./voice";
@@ -352,10 +353,14 @@ export function usePointAndTalk({
         held = false;
         return fail("No microphone");
       }
-      listening = ears.listen(stream, (words) => {
-        partial = words;
-        show();
-      });
+      listening = ears.listen(
+        stream,
+        (words) => {
+          partial = words;
+          show();
+        },
+        ears.keytermsOf(elements().flatMap((e) => (e.where === "page" ? [e.text] : []))),
+      );
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => chunks.push(e.data);
