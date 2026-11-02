@@ -3,3 +3,4 @@ dist
 .blueline
 *.tgz
 test/.apps
+evals/*/runs/*/
