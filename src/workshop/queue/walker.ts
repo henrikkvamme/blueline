@@ -447,7 +447,9 @@ export class Walker {
 
   /** The element the walk waits for him to click, during a turn. */
   turnTarget() {
-    return this.snap.phase === "turn" ? this.walk[this.at]?.target : undefined;
+    return this.snap.phase === "turn" && this.turned !== undefined
+      ? this.walk[this.at]?.target
+      : undefined;
   }
 
   /** Whether the walk runs: its cursor moves, speaks or waits for a turn. */
@@ -682,6 +684,8 @@ export class Walker {
         // His click may change the page, as the turn asked.
         this.clicked = Date.now();
         this.turned = undefined;
+        // The turn is his no more, though its line may still be spoken.
+        this.set({ ...this.snap });
         resolve();
       };
       element.addEventListener("click", done, true);
