@@ -210,10 +210,12 @@ or a variant by its number.
 
   **Which model does what** (measured on fry on 2026-11-02, through the subscriptions, with
   no API key; the queue workshop has the first answer):
-  - The first answer is Claude Haiku 5.5 with no thinking, in a Claude Code process that
-    is started before he speaks. Its first word comes in 0.7 to 2.4 s. Sonnet 5.5 took 1.8
-    to 3.2 s. GPT-6.1 Terra is about 1 s on the OpenAI API, but through a warm Codex
-    app-server it took 3.3 to 4.7 s. Use Terra here only if Blueline gets an API key.
+  - The first answer is GPT-6.1 Terra with no reasoning, through a Codex app-server on the
+    ChatGPT plan. The trick is a warm thread: a new thread's first turn took 2.6 to 3.3 s
+    to the first word, and a later turn on the same thread 1.3 to 2.8 s, about 1.7 s
+    typical, with a screenshot. Haiku 5.5 was as fast (0.7 to 2.4 s) but reads the page
+    less well, so it only answers when Codex cannot. Codex's Fast tier gave no gain. On
+    the OpenAI API, Terra is about 1 s.
   - The journey's agent, its variants and the orchestrator use Claude Opus 5.5. It leads
     Arena WebDev (1810, against Terra's 1673), and design is where the quality shows.
     Henrik does not wait on it, because the first answer covers the first seconds.

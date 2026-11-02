@@ -11,6 +11,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { Plugin } from "vite";
 import { z } from "zod";
+import { type Part, terra } from "./terra";
 
 /*
  * The agent behind the workshop's point and talk, on the dev server only. `POST /__agent`
@@ -26,16 +27,16 @@ import { z } from "zod";
  * commands. `POST /__agent/played` tells it how a walk went; `POST /__agent/forget` starts a
  * new session.
  *
- * A fast model hears him first. While Opus starts, Haiku with no thinking says in one line what
- * he asks for, about a second after he stops, so a wrong hearing shows at once. Measured on
- * fry on 2026-11-02, through the subscription: Haiku 5.5 gave its first word in 0.7 to 2.4 s,
- * and GPT-6.1 Terra through a warm Codex app-server in 3.3 to 4.7 s. Opus does the work, where
- * the design matters.
+ * A fast model hears him first. While Opus starts, GPT-6.1 Terra with no reasoning says in one
+ * line what he asks for, so a wrong hearing shows at once. On a warm Codex thread its first
+ * word came in 1.4 to 2.0 s on fry, with a screenshot, close to Haiku 5.5's 1.2 to 1.9 s, and
+ * Terra reads the page better. Haiku hears when Codex cannot. Opus does the work, where the
+ * design matters. See terra.ts.
  */
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const MODEL = "claude-opus-5-5";
-/** The model that hears him first, with no thinking and no tools. */
+/** The model that hears him when Terra cannot, with no thinking and no tools. */
 const FAST = "claude-haiku-5-5";
 
 /** How long a walk may take before the agent goes on without hearing how it went. */
@@ -178,37 +179,41 @@ function doing(name: string, input: Record<string, unknown>) {
 }
 
 /**
- * What the page sent, as his message to the agent: the screenshots first, each with what it
- * is, and the rest as JSON. Each loop's crop comes first, as Clicky's does: it is what he
- * means most.
+ * What the page sent, as his message: the screenshots first, each with what it is, and the
+ * rest as JSON. Each loop's crop comes first, as Clicky's does: it is what he means most.
  */
-async function* words(text: string): AsyncGenerator<SDKUserMessage> {
+function parts(text: string): readonly Part[] {
   const { images, ...context } = JSON.parse(text) as {
     images?: { screen?: string; circled?: readonly string[] };
   };
-  const image = (url: string) => {
-    const [, type = "image/jpeg", data = ""] = /^data:([^;]+);base64,(.*)$/s.exec(url) ?? [];
+  return [
+    ...(images?.circled ?? []).flatMap((url, i): Part[] => [
+      { type: "text", text: `Loop ${String(i + 1)}, close up: what he circled.` },
+      { type: "image", url },
+    ]),
+    ...(images?.screen === undefined
+      ? []
+      : ([
+          {
+            type: "text",
+            text: "The page and the panel as he saw them, with his strokes in blue.",
+          },
+          { type: "image", url: images.screen },
+        ] as const)),
+    { type: "text", text: JSON.stringify(context) },
+  ];
+}
+
+/** What the page sent, as his message to Claude Code. */
+async function* words(text: string): AsyncGenerator<SDKUserMessage> {
+  const content = parts(text).map((part) => {
+    if (part.type === "text") return part;
+    const [, type = "image/jpeg", data = ""] = /^data:([^;]+);base64,(.*)$/s.exec(part.url) ?? [];
     return {
       type: "image" as const,
       source: { type: "base64" as const, media_type: type as "image/jpeg", data },
     };
-  };
-  const content = [
-    ...(images?.circled ?? []).flatMap((url, i) => [
-      { type: "text" as const, text: `Loop ${String(i + 1)}, close up: what he circled.` },
-      image(url),
-    ]),
-    ...(images?.screen === undefined
-      ? []
-      : [
-          {
-            type: "text" as const,
-            text: "The page and the panel as he saw them, with his strokes in blue.",
-          },
-          image(images.screen),
-        ]),
-    { type: "text" as const, text: JSON.stringify(context) },
-  ];
+  });
   yield {
     type: "user",
     message: { role: "user", content },
@@ -220,11 +225,11 @@ async function* words(text: string): AsyncGenerator<SDKUserMessage> {
 const HEAR = `Henrik reviews a web app by eye. He pointed at the page and spoke; a slower agent does what he asks. You only say back, at once, what he asks for, so he sees a wrong hearing before the agent starts. One line of at most twelve words, starting with a verb, in plain words: "Make the pill green once it is approved." For a question, say what he asks: "Asks what 'Waiting on approvers' means." Never answer it, never say how you read his pointing, and never add anything else.`;
 
 /**
- * The fast model's process, started before he speaks, so a hearing does not wait for Claude
- * Code to start. Each hearing takes it, and the next one starts at once. `close` ends the one
- * that waits, with the dev server.
+ * Haiku's ears, for when Terra cannot hear: a Claude Code process, started ahead after its
+ * first use, so a hearing does not wait for it to start. Each hearing takes it, and the next
+ * one starts at once. `close` ends the one that waits, with the dev server.
  */
-function hearing() {
+function haiku() {
   const spare = () => {
     const stop = new AbortController();
     const warm = startup({
@@ -302,9 +307,28 @@ export function agent(): Plugin {
     apply: "serve",
     configureServer(server) {
       const log = server.config.logger;
-      const ears = hearing();
+      const ears = terra(HEAR, ROOT);
+      const backup = haiku();
       ears.ready();
-      server.httpServer?.once("close", ears.close);
+      server.httpServer?.once("close", () => {
+        ears.close();
+        backup.close();
+      });
+      /** What he asked for, in one line from Terra, or from Haiku when Terra cannot answer. */
+      const hear = async (text: string, signal: AbortSignal, on: (line: string) => void) => {
+        let heard = false;
+        const said = (line: string) => {
+          heard = true;
+          on(line);
+        };
+        try {
+          await ears.hear(parts(text), signal, said);
+        } catch (error) {
+          if (heard || signal.aborted) return;
+          log.warn(`workshop agent: Terra did not hear, so Haiku does: ${String(error)}`);
+          await backup.hear(text, signal, said);
+        }
+      };
       const body = (req: import("node:http").IncomingMessage) =>
         new Promise<string>((done) => {
           let text = "";
@@ -355,11 +379,15 @@ export function agent(): Plugin {
               gone.abort();
             });
             // The fast model hears him at once, and does not wait for the old work to stop.
-            void ears
-              .hear(text, gone.signal, (heard) => send({ type: "heard", text: heard }))
-              .catch((error: unknown) => {
-                if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
-              });
+            const asked = Date.now();
+            let first = true;
+            const heard = hear(text, gone.signal, (words) => {
+              if (first) log.info(`workshop agent: heard in ${String(Date.now() - asked)} ms`);
+              first = false;
+              send({ type: "heard", text: words });
+            }).catch((error: unknown) => {
+              if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
+            });
             // New words stop the work on the old ones, and the session goes on from there.
             // Words that come while the old work stops wait in line behind it.
             const before = line;
@@ -474,6 +502,8 @@ export function agent(): Plugin {
               }
               running = undefined;
               finish();
+              // A quick agent can end before the hearing: the line still says what it heard.
+              await Promise.race([heard, new Promise((done) => setTimeout(done, 8_000))]);
               res.end();
             }
           })
