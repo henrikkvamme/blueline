@@ -577,6 +577,8 @@ function stepsOf(answers: readonly Answer[]) {
           };
         });
       if (e["type"] === "act") return [{ act: e["acts"] }];
+      if (e["type"] === "status" && /^(Reading|Looking through)/.test(String(e["text"])))
+        return [{ readCode: e["text"] }];
       if (e["type"] === "annotate")
         return [
           {
