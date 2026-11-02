@@ -308,6 +308,7 @@ function MockView({
   return (
     <div
       aria-hidden
+      data-mock={mock.key}
       className="pointer-events-none fixed z-[2147483002] overflow-visible"
       style={{
         ...mock.style,
