@@ -375,8 +375,14 @@ function Live() {
     }
     lastSettled.current = did.toast;
     if (did.toast.length > 0 && did.toast !== toast) setToast(did.toast);
+    // A variant it designs for the remark that shows, shows at once, as his preview would.
+    const here_ = current(did.queue)?.id;
+    const designed = acts
+      .flatMap((a) => (a.do === "addVariants" && a.remark === here_ ? a.variants : []))
+      .at(-1)?.name;
     // A new remark clears what showed of the last one, so what only shows comes after it.
     window.setTimeout(() => {
+      if (designed !== undefined) setPeek(designed);
       for (const shows of did.shows) showAct(shows, did.queue);
       window.setTimeout(() => {
         const now = current(did.queue);

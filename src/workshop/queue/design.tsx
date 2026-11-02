@@ -50,6 +50,7 @@ function DesignView({ design }: { readonly design: Shown }) {
   if (at === undefined) return null;
   return (
     <div
+      data-design={design.target}
       className="pointer-events-none fixed z-[5] flex w-max items-center"
       style={{ ...at.look, left: at.left, top: at.top, minHeight: at.height, padding: 0 }}
       // Cleaned of scripts and handlers above.
