@@ -257,7 +257,9 @@ async function runCase(browser: Browser, c: Case, rep: number) {
     await page.mouse.move(at.x, at.y);
     const view = { width: 1512 - 360, height: 900 };
     const before = path.join(dir, "before.png");
-    await page.screenshot({ path: before, clip: clipAround([box], view) });
+    const clip = clipAround([box], view);
+    await page.screenshot({ path: before, clip });
+    let wider: typeof clip | undefined;
     await page.keyboard.press("Control");
     await sleep(90);
     await page.keyboard.press("Control");
@@ -274,7 +276,9 @@ async function runCase(browser: Browser, c: Case, rep: number) {
         done: Reflect.get(window, "__agentDone") === true,
         mocks: [...document.querySelectorAll<HTMLElement>("[data-mock]")].map((m) => ({
           key: m.dataset["mock"] ?? "",
-          text: (Reflect.get(window, "__textOf") as (e: Element) => string)(m),
+          text: (Reflect.get(window, "__textOf") as (e: Element) => string)(
+            document.querySelector("[data-mock-shows]") ?? m,
+          ),
           box: m.getBoundingClientRect().toJSON() as {
             x: number;
             y: number;
@@ -288,7 +292,14 @@ async function runCase(browser: Browser, c: Case, rep: number) {
         seen.add(m.key);
         await sleep(250);
         const file = path.join(dir, `mock-${String(shots.length + 1)}.png`);
-        await page.screenshot({ path: file, clip: clipAround([box, m.box], view) });
+        const inside =
+          m.box.x >= clip.x &&
+          m.box.y >= clip.y &&
+          m.box.x + m.box.width <= clip.x + clip.width &&
+          m.box.y + m.box.height <= clip.y + clip.height;
+        const region = inside ? (wider ?? clip) : clipAround([box, m.box], view);
+        if (!inside && wider === undefined) wider = region;
+        await page.screenshot({ path: file, clip: region });
         shots.push({ key: m.key, text: m.text, file, at: (Date.now() - since) / 1000 });
       }
       if (state.done) {
@@ -296,6 +307,17 @@ async function runCase(browser: Browser, c: Case, rep: number) {
         break;
       }
       await sleep(150);
+    }
+    if (wider !== undefined) {
+      const quiet = Date.now();
+      while (
+        Date.now() - quiet < 30_000 &&
+        (await page.evaluate(
+          () => document.querySelector("[data-mock], [data-mock-shows]") !== null,
+        ))
+      )
+        await sleep(200);
+      await page.screenshot({ path: before, clip: wider });
     }
     const full = path.join(dir, "end.png");
     await page.screenshot({ path: full });
@@ -321,7 +343,26 @@ const textOfBeats = (events: { e: Record<string, unknown> }[]) =>
     .filter((x) => x.e["type"] === "show")
     .flatMap((x) => (x.e["beats"] as Record<string, unknown>[] | undefined) ?? []);
 
-async function opus(prompt: string, images: readonly string[]): Promise<Verdict> {
+const CLAUDE_JUDGES: Record<string, string> = {
+  opus: "claude-opus-5-5",
+  sonnet: "claude-sonnet-5-5",
+  haiku: "claude-haiku-5-5",
+};
+const CODEX_JUDGES: Record<string, string> = { sol: "gpt-6.1-sol", luna: "gpt-6-luna" };
+
+function judge(name: string, prompt: string, images: readonly string[]): Promise<Verdict> {
+  const claudeModel = CLAUDE_JUDGES[name];
+  if (claudeModel !== undefined) return claudeJudge(claudeModel, prompt, images);
+  const codexModel = CODEX_JUDGES[name];
+  if (codexModel !== undefined) return codexJudge(codexModel, prompt, images);
+  throw new Error(`No judge called ${name}`);
+}
+
+async function claudeJudge(
+  model: string,
+  prompt: string,
+  images: readonly string[],
+): Promise<Verdict> {
   const sdk = await import(
     path.join(REPO, "examples/review-demo/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs")
   );
@@ -352,7 +393,7 @@ async function opus(prompt: string, images: readonly string[]): Promise<Verdict>
   for await (const m of sdk.query({
     prompt: message(),
     options: {
-      model: "claude-opus-5-5",
+      model,
       tools: [],
       settingSources: [],
       systemPrompt: JUDGE,
@@ -364,13 +405,13 @@ async function opus(prompt: string, images: readonly string[]): Promise<Verdict>
   })) {
     if (m.type !== "result") continue;
     if (m.subtype !== "success" || m.structured_output === undefined)
-      throw new Error(`Opus judge: ${String(m.subtype)}`);
+      throw new Error(`${model} judge: ${String(m.subtype)}`);
     return m.structured_output as Verdict;
   }
-  throw new Error("Opus judge gave no result");
+  throw new Error(`${model} judge gave no result`);
 }
 
-function sol(prompt: string, images: readonly string[]): Promise<Verdict> {
+function codexJudge(model: string, prompt: string, images: readonly string[]): Promise<Verdict> {
   const work = path.join(
     tmpdir(),
     `judge-${String(process.pid)}-${String(Math.random()).slice(2)}`,
@@ -386,7 +427,7 @@ function sol(prompt: string, images: readonly string[]): Promise<Verdict> {
       [
         "exec",
         "-m",
-        "gpt-6.1-sol",
+        model,
         "-c",
         'model_reasoning_effort="medium"',
         "--ephemeral",
@@ -409,7 +450,7 @@ function sol(prompt: string, images: readonly string[]): Promise<Verdict> {
     child.on("close", (code) => {
       clearTimeout(timer);
       if (code !== 0 || !existsSync(out))
-        return fail(new Error(`Sol judge exited ${String(code)}: ${err.slice(-300)}`));
+        return fail(new Error(`${model} judge exited ${String(code)}: ${err.slice(-300)}`));
       done(JSON.parse(readFileSync(out, "utf8")) as Verdict);
     });
   });
@@ -432,6 +473,61 @@ function judgePrompt(c: Case, beats: readonly Record<string, unknown>[]) {
 
 const avg = (xs: readonly number[]) =>
   xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length;
+
+async function rejudge() {
+  const results = path.join(OUT, "results.jsonl");
+  const out = path.join(OUT, "judges.jsonl");
+  const rows = readFileSync(results, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as Record<string, unknown> & { prompt_id: string; rep: number });
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  await Promise.all(
+    rows.map(async (row) => {
+      const c = byId.get(row.prompt_id);
+      const meta = row["meta"] as { shots: { file: string }[] };
+      const before = path.join(
+        OUT,
+        "shots",
+        `${row.prompt_id}_rep${String(row.rep)}`,
+        "before.png",
+      );
+      if (c === undefined || c.expect.kind === "none" || meta.shots.length === 0) return;
+      const trace = JSON.parse(
+        readFileSync(path.join(OUT, "traces", `${c.id}_rep${String(row.rep)}.json`), "utf8"),
+      ) as { role: string; content: unknown }[];
+      const beats = trace
+        .filter((t) => t.role === "tool_call" && typeof t.content === "string")
+        .flatMap((t) => {
+          try {
+            const input = JSON.parse(t.content as string) as { beats?: Record<string, unknown>[] };
+            return input.beats ?? [];
+          } catch {
+            return [];
+          }
+        });
+      const images = [before, ...meta.shots.slice(0, 3).map((s) => path.join(FLOW, s.file))];
+      const prompt = judgePrompt(c, beats);
+      const verdicts = Object.fromEntries(
+        await Promise.all(
+          JUDGES.map(async (j) => {
+            try {
+              return [j, await judge(j, prompt, images)] as const;
+            } catch (error) {
+              return [j, { error: String(error) }] as const;
+            }
+          }),
+        ),
+      );
+      appendFileSync(out, `${JSON.stringify({ prompt_id: c.id, rep: row.rep, verdicts })}\n`);
+      console.log(
+        `${c.id}: ${JUDGES.map((j) => `${j}=${JSON.stringify(verdicts[j])}`)
+          .join(" ")
+          .slice(0, 300)}`,
+      );
+    }),
+  );
+}
 
 async function main() {
   mkdirSync(path.join(OUT, "traces"), { recursive: true });
@@ -580,7 +676,7 @@ async function main() {
               await Promise.all(
                 JUDGES.map(async (j) => {
                   try {
-                    verdicts[j] = await (j === "opus" ? opus(prompt, images) : sol(prompt, images));
+                    verdicts[j] = await judge(j, prompt, images);
                   } catch (error) {
                     verdicts[j] = { error: String(error) };
                   }
@@ -608,4 +704,4 @@ async function main() {
   );
 }
 
-await main();
+await (flags.rejudge ? rejudge() : main());
