@@ -1,6 +1,7 @@
 import type { Beat } from "../../queue/queue";
 import { PANEL } from "../../ui/geometry";
 import { TARGETS } from "./script";
+import type { Act } from "./acts";
 
 /*
  * The page's side of the workshop's agent: what the reviewer said, pointed at and saw goes
@@ -14,6 +15,8 @@ export type AgentEvent =
   | { readonly type: "heard"; readonly text: string; readonly ear: string }
   | { readonly type: "show"; readonly id: string; readonly beats: readonly Beat[] }
   | { readonly type: "annotate"; readonly target: string; readonly text: string }
+  /** What he can do in the workshop, done for him; the page answers on the id. */
+  | { readonly type: "act"; readonly id: string; readonly acts: readonly Act[] }
   | { readonly type: "done"; readonly text: string }
   | { readonly type: "failed"; readonly why: string };
 

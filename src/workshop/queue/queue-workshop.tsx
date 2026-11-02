@@ -37,6 +37,7 @@ import { Walker, type Preview } from "./walker";
 import { Strokes, TalkView, usePointAndTalk } from "./talk";
 import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
 import { ask, elements, forget, played } from "./agent";
+import { perform, type Act, type Shows } from "./acts";
 import * as timing from "./timing";
 import { QueueStates } from "./queue-states";
 
@@ -275,9 +276,81 @@ function Live() {
   };
   useEffect(() => {
     if (toast.length === 0) return;
+    lastSettled.current = toast;
     const id = setTimeout(() => setToast([]), 4000);
     return () => clearTimeout(id);
   }, [toast]);
+  // The agent's acts come after the words that asked for them, so they read the queue now.
+  const lastSettled = useRef<readonly string[]>([]);
+  const queueNow = useRef(q);
+  queueNow.current = q;
+
+  /** What only shows of the agent's acts, as his keys would show it. */
+  const showAct = (act: Shows, queue: Queue) => {
+    switch (act.do) {
+      case "preview":
+        if (act.variant !== undefined) setPeek(act.variant ?? undefined);
+        if (act.state !== undefined) setShown(act.state ?? undefined);
+        break;
+      case "go": {
+        const to = PAGES.find((p) => p.path === act.page || p.title === act.page);
+        if (to !== undefined) setVisit(to.path);
+        break;
+      }
+      case "seen":
+        setTree(act.open);
+        break;
+      case "settings": {
+        const speaker = VOICES.find((v) => v.id === act.speaker || v.name === act.speaker);
+        setGuide((g) => ({
+          ...g,
+          ...(act.voice === undefined ? {} : { voice: act.voice }),
+          ...(act.walks === undefined ? {} : { on: act.walks }),
+          ...(act.lessMotion === undefined ? {} : { reduced: act.lessMotion }),
+          ...(speaker === undefined ? {} : { speaker: speaker.id }),
+        }));
+        if (act.delay !== undefined) {
+          const delay = Math.max(0, act.delay);
+          setState((s) => ({ ...s, delay }));
+        }
+        break;
+      }
+      case "walk": {
+        const r = current(queue);
+        if (r?.walk !== undefined) walkRemark(r.id, r.walk, r.page);
+        break;
+      }
+      case "stopShip":
+        setState((s) => ({ ...s, stopped: true }));
+        break;
+    }
+  };
+
+  /** Does the agent's acts, in order, and tells it what each did and where the review is. */
+  const act = (id: string, acts: readonly Act[]) => {
+    const from = queueNow.current;
+    const did = perform(from, lastSettled.current, acts, Date.now());
+    if (did.queue !== from) {
+      past.current = [...past.current.slice(-49), placeOf(from)];
+      future.current = [];
+      queueNow.current = did.queue;
+      setState((s) => ({ ...s, queue: did.queue, stopped: false }));
+    }
+    lastSettled.current = did.toast;
+    if (did.toast.length > 0 && did.toast !== toast) setToast(did.toast);
+    // A new remark clears what showed of the last one, so what only shows comes after it.
+    window.setTimeout(() => {
+      for (const shows of did.shows) showAct(shows, did.queue);
+      window.setTimeout(() => {
+        const now = current(did.queue);
+        played(
+          id,
+          `${did.said.join("; ")}. The review now shows ${now === undefined ? "no remark" : `“${now.title}” (${now.id})`}.`,
+          pageNow.current,
+        );
+      }, 150);
+    }, 60);
+  };
 
   /** What shows now, for the agent to see what he saw: the variant and the state of the
    * part, and the line the agent's cursor says, if it speaks. */
@@ -410,6 +483,9 @@ function Live() {
               update((x) => ({ ...x, tone: "showing", walk: event.beats }));
               walker.start(event.beats, pageNow.current);
               watch(event.id);
+              break;
+            case "act":
+              act(event.id, event.acts);
               break;
             case "annotate": {
               const id = note(event.target, event.text);
