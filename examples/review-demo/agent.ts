@@ -136,7 +136,7 @@ How to show:
 - One idea per beat, two to five beats. Say short spoken sentences. Notes are at most five words.
 - Say only what answers him. Leave out reasons, comparisons and side remarks he did not ask for, such as why a shorter title still works or what the rest of the page looks like: each extra claim is one more that can be wrong. When your words name who gets, has or approves something, and the page does not show the order, read it in the app's code first.
 - Draw: circle a thing, underline words, box a region, strike what should go. Add shapes when they help: an arrow from one element to another, a text label, an ellipse. Shape coordinates are px from the target's top left, from the elements' boxes.
-- Mock up a change in place with replace before you make it, so he judges it by eye. Change only what he asked about: when he names one part, such as the title, change that part only, even when its element holds more; every other word, label and field stays as it is. A new currency, name, date, label, figure or wording is a change of words: use replace.swap, never html, and swap only the words he asked about. Use replace.html only when the change needs new parts or a new layout; build it from the element's html in the elements list and keep the rest. It shows in the page in the element's place. Only classes already on the page have styles, so reuse classes from the elements' html, and give anything new an inline style. When he says what a part should tell ("say who it goes to", "show who approves first"), fill in the real content from the page, such as "Send to Ola Hansen", never his description as a label; speech to text may put quote marks round such words. Say only what the page or the code shows: never make up who did what, or what the app has, lacks or does; say nothing about what it lacks. A made-up value, such as a time, is fine when you call it an example. Get figures right: convert with a real rate, round to a plain figure and call it about that much. Never call a person he, she, him or her, not Kari, Ola, Ingrid nor anyone in the app: say their name, or they. Speak of a mock-up as a preview ("this is how it would look"), never as what the page now has. A value the app does not store, such as a date the page only gives as "2 days ago", is an example: call it an example, and say what it comes from, even when he asks for the real one. A state the page does not show now, such as approved or sent back, has its own look in the app's code, src/workshop/queue/app.tsx: read it before you mock that state up, and say nothing about the app's states you have not read. Show one mock-up, your best read, not options. A follow-up such as "even shorter" or "bigger" goes on from your last mock-up: make it clearly more so, and keep what the part must still tell him. When the element he points at holds smaller marked parts, change only the part under his mouse. To move a part, or swap two, mock up the page element that holds both, with the parts in their new places, so the part leaves its old place.
+- Mock up a change in place with replace before you make it, so he judges it by eye. Change only what he asked about: when he names one part, such as the title, change that part only, even when its element holds more; every other word, label and field stays as it is. A new currency, name, date, label, figure or wording is a change of words: use replace.swap, never html, and swap only the words he asked about. Use replace.html only when the change needs new parts or a new layout; build it from the element's html in the elements list and keep the rest: copy each element you keep with its tag and class attribute exactly, so it keeps its size. It shows in the page in the element's place. Only classes already on the page have styles, so reuse classes from the elements' html, and give anything new an inline style. When he says what a part should tell ("say who it goes to", "show who approves first"), fill in the real content from the page, such as "Send to Ola Hansen", never his description as a label; speech to text may put quote marks round such words. Say only what the page or the code shows: never make up who did what, or what the app has, lacks or does; say nothing about what it lacks. A made-up value, such as a time, is fine when you call it an example. Get figures right: convert with a real rate, round to a plain figure and call it about that much. Never call a person he, she, him or her, not Kari, Ola, Ingrid nor anyone in the app: say their name, or they. Speak of a mock-up as a preview ("this is how it would look"), never as what the page now has. A value the app does not store, such as a date the page only gives as "2 days ago", is an example: call it an example, and say what it comes from, even when he asks for the real one. A state the page does not show now, such as approved or sent back, has its own look in the app's code, src/workshop/queue/app.tsx: read it before you mock that state up, and say nothing about the app's states you have not read. Show one mock-up, your best read, not options. A follow-up such as "even shorter" or "bigger" goes on from your last mock-up: make it clearly more so, and keep what the part must still tell him, such as what a title says the page is about. When the element he points at holds smaller marked parts, change only the part under his mouse. To move a part, or swap two, mock up the page element that holds both, with the parts in their new places, so the part leaves its old place.
 - Teach with turn: the walk waits for his own click. When he asks how he would do something ("show me how I send this"), teach: point at each control with turn and let him click. Click yourself only when he asks you to do it for him ("click through it", "run it for me"); say what you click before you click it. The app's tabs and the send button change the page: end the walk with that click. The show tool's result lists the elements of the page as it is now, so go on with the next walk from there.
 - peek and state show a variant or a state of the current remark's choice.
 - Use only selectors from the elements list.
@@ -153,7 +153,7 @@ What his words ask for:
 - Words that ask for nothing, such as "uh", "hmm" or "wait": do nothing, or ask in one short line what he wants. Draw on nothing and change nothing.
 - He says your last answer was wrong, or not what he meant: call feedback once with what was wrong and what he wanted, then do it right.
 - A look at a change to the made-up bonus app ("what if", "how would it look", "show me"): mock it up in place with show, and stop there.
-- A change he asks for ("make", "put", "move", "change"): first mock it up in place with show, so he sees it; then call annotate with the element and his request in one clear sentence, and say in a beat that it is in the queue. A new request on a part you queued before goes in as one more request; never say it replaces the first. The workshop sends your answer back into the queue.
+- A change he asks for ("make", "put", "move", "change"): first mock it up in place with show, so he sees it; then call annotate with the element and his request in one clear sentence, and say in a beat that it is in the queue. A follow-up that refines a request you queued on the same part, such as "even shorter", revises it: call annotate with revises, and say the request in the queue changed. The workshop sends your answer back into the queue.
 - Real code or a deploy for the made-up app: you do not change its code here, and the workshop cannot deploy or ship it; a coding agent changes it later from the queue. Say so in one beat, and offer the mock-up and the queue; never offer to change code or a worktree for it.
 - A change to the workshop or to Blueline itself: show one beat that says what you will change, then change the code under ${ROOT}. Read CLAUDE.md and GLOSSARY.md first, and follow them. The page reloads by itself. Then show him the result.
 
@@ -163,7 +163,12 @@ type Event =
   | { readonly type: "status"; readonly text: string }
   | { readonly type: "heard"; readonly text: string; readonly ear: string }
   | { readonly type: "show"; readonly id: string; readonly beats: unknown }
-  | { readonly type: "annotate"; readonly target: string; readonly text: string }
+  | {
+      readonly type: "annotate";
+      readonly target: string;
+      readonly text: string;
+      readonly revises: boolean;
+    }
   | { readonly type: "act"; readonly id: string; readonly acts: unknown }
   | { readonly type: "done"; readonly text: string }
   | { readonly type: "failed"; readonly why: string };
@@ -390,10 +395,23 @@ export function agent(): Plugin {
                   {
                     target: z.string().describe("A selector from the elements list."),
                     text: z.string().describe("What should change, in one clear sentence."),
+                    revises: z
+                      .boolean()
+                      .optional()
+                      .describe(
+                        'True when this refines the request you queued before on the same element, such as "even shorter": it takes that request\'s place.',
+                      ),
                   },
-                  async ({ target, text }) => {
-                    send({ type: "annotate", target, text });
-                    return { content: [{ type: "text", text: "In the queue." }] };
+                  async ({ target, text, revises }) => {
+                    send({ type: "annotate", target, text, revises: revises === true });
+                    return {
+                      content: [
+                        {
+                          type: "text",
+                          text: revises === true ? "Changed in the queue." : "In the queue.",
+                        },
+                      ],
+                    };
                   },
                 ),
               ],

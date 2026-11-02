@@ -14,7 +14,14 @@ export type AgentEvent =
   /** What a fast model heard him ask for, in one line, before the agent answers. */
   | { readonly type: "heard"; readonly text: string; readonly ear: string }
   | { readonly type: "show"; readonly id: string; readonly beats: readonly Beat[] }
-  | { readonly type: "annotate"; readonly target: string; readonly text: string }
+  /** A change for the queue; one that revises takes the place of the last waiting request on
+   * the same element. */
+  | {
+      readonly type: "annotate";
+      readonly target: string;
+      readonly text: string;
+      readonly revises?: boolean;
+    }
   /** What he can do in the workshop, done for him; the page answers on the id. */
   | { readonly type: "act"; readonly id: string; readonly acts: readonly Act[] }
   | { readonly type: "done"; readonly text: string }

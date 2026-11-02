@@ -531,6 +531,25 @@ function Live() {
               act(event.id, event.acts);
               break;
             case "annotate": {
+              const was =
+                event.revises === true
+                  ? waiting(queueNow.current)
+                      .filter((a) => a.target === event.target)
+                      .at(-1)
+                  : undefined;
+              if (was !== undefined) {
+                setState((s) => ({
+                  ...s,
+                  queue: {
+                    ...s.queue,
+                    annotations: s.queue.annotations.map((a) =>
+                      a.id === was.id ? { ...a, text: event.text } : a,
+                    ),
+                  },
+                }));
+                update((x) => ({ ...x, annotation: was.id }));
+                break;
+              }
               const id = note(event.target, event.text);
               update((x) => ({ ...x, annotation: id }));
               break;
