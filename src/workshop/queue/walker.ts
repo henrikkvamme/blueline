@@ -547,7 +547,10 @@ export class Walker {
       const draw = turn ? "frame" : beat.draw;
       const shapes = beat.shapes ?? [];
       const framed = beat.replace === undefined ? undefined : this.mockUp(element, beat.replace);
-      const shown = framed === undefined ? rect : boxOf(framed.getBoundingClientRect());
+      const placed = framed === undefined ? undefined : boxOf(framed.getBoundingClientRect());
+      // A mock-up that takes the part away has no box: its mark stays where the part was.
+      const shown =
+        placed === undefined || (placed.width === 0 && placed.height === 0) ? rect : placed;
       const voice = this.settings.voice;
       // With no voice, the note holds the whole line, so nothing that is said is lost.
       const words = beat.note ?? beat.say;
@@ -722,7 +725,8 @@ export class Walker {
         return;
       }
       const box = boxOf(framed.getBoundingClientRect());
-      if (box.width === 0 && box.height === 0) return this.lose(this.goneWords(beat));
+      if (box.width === 0 && box.height === 0)
+        return framed === element ? this.lose(this.goneWords(beat)) : undefined;
       if (!moved(box, last)) return;
       last = box;
       void this.player?.moveTo(aim(box, this.view()).tip, {
