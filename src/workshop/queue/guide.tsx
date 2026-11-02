@@ -291,9 +291,8 @@ function MarkView({
 }
 
 /**
- * A mock-up in the element's place, in the element's own look, while the beat shows: the
- * agent shows a change before it makes it. It grows from the element's box, so longer words
- * still fit, and a faint ring says that it is not the page's own.
+ * The ring round a mock-up while the beat shows. The page itself holds the change, in its own
+ * styles and layout; the ring says that it is not the page's own.
  */
 function MockView({
   mock,
@@ -309,33 +308,21 @@ function MockView({
     <div
       aria-hidden
       data-mock={mock.key}
-      className="pointer-events-none fixed z-[2147483002] overflow-visible"
+      className="pointer-events-none fixed z-[2147483002] rounded-[4px]"
       style={{
-        ...mock.style,
         // The page has no panel tokens: the ring takes the agent's colour by its value.
         boxShadow: `0 0 0 3px #fff, 0 0 0 5px ${FILL}59`,
         left: box.left,
         top: box.top,
-        ...(mock.copy === true
-          ? { width: box.width, minHeight: box.height }
-          : {
-              width: "max-content",
-              minWidth: box.width,
-              maxWidth: Math.max(box.width, 480),
-              minHeight: box.height,
-            }),
+        width: box.width,
+        height: box.height,
         animation: going
           ? GONE.animation
           : reduced
             ? undefined
             : "dt-mock 360ms cubic-bezier(.3,1.4,.5,1) both",
       }}
-      // The markup was cleaned of scripts and handlers by the walker.
-      // oxlint-disable-next-line react/no-danger -- a mock-up from the agent, cleaned
-      dangerouslySetInnerHTML={mock.html === undefined ? undefined : { __html: mock.html }}
-    >
-      {mock.html === undefined ? mock.text : undefined}
-    </div>
+    />
   );
 }
 

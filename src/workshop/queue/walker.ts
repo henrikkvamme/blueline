@@ -1,6 +1,6 @@
 import type { Beat, Shape } from "../../queue/queue";
 import { MotionPlayer } from "../../vendor/cua-cursor-motion.js";
-import { clean, lookOf } from "./markup";
+import { clean } from "./markup";
 import { fetchLine, hush, say } from "./voice";
 
 /*
@@ -73,14 +73,10 @@ export interface Note {
   readonly key: string;
 }
 
-/** A mock-up in the element's place: its words or its markup, in the element's own look. */
+/** Where a mock-up shows: the page itself holds the change, and this frames it. */
 export interface Mock {
   readonly box: Box;
-  readonly text: string | undefined;
-  readonly html: string | undefined;
-  readonly style: Readonly<Record<string, string>>;
   readonly key: string;
-  readonly copy?: boolean;
 }
 
 export interface Snapshot {
@@ -166,76 +162,64 @@ const IDLE: Snapshot = {
   skipped: false,
 };
 
-const SIDES = ["top", "right", "bottom", "left"] as const;
-
-const COPIED = [
-  "font-family",
-  "font-size",
-  "font-weight",
-  "font-style",
-  "line-height",
-  "letter-spacing",
-  "text-transform",
-  "text-align",
-  "white-space",
-  "color",
-  "background-color",
-  "box-sizing",
-  "display",
-  "flex-direction",
-  "flex-wrap",
-  "align-items",
-  "justify-content",
-  "gap",
-  "opacity",
-  ...SIDES.flatMap((side) => [
-    `padding-${side}`,
-    `border-${side}-width`,
-    `border-${side}-style`,
-    `border-${side}-color`,
-  ]),
-  "border-top-left-radius",
-  "border-top-right-radius",
-  "border-bottom-left-radius",
-  "border-bottom-right-radius",
-] as const;
-
-const FIXED = new Set(["INPUT", "TEXTAREA", "SELECT", "IMG", "svg", "BUTTON"]);
-
-function swappedCopy(
+/** Swaps words in the element's own text and fields, in place, so the page lays them out as
+ * it would its own. It gives back the undo. */
+function swapInPlace(
   element: Element,
   swap: readonly { readonly from: string; readonly to: string }[],
 ) {
-  const copy = element.cloneNode(true);
-  if (!(copy instanceof HTMLElement)) return undefined;
   const change = (words: string) =>
     swap.reduce((text, { from, to }) => (from === "" ? text : text.split(from).join(to)), words);
-  const originals = [element, ...element.querySelectorAll("*")];
-  [copy, ...copy.querySelectorAll("*")].forEach((part, i) => {
-    const was = originals[i];
-    if (!(part instanceof HTMLElement || part instanceof SVGElement) || was === undefined) return;
-    const look = getComputedStyle(was);
-    for (const name of COPIED) part.style.setProperty(name, look.getPropertyValue(name));
-    if (FIXED.has(part.tagName)) {
-      part.style.setProperty("width", look.getPropertyValue("width"));
-      part.style.setProperty("height", look.getPropertyValue("height"));
-    }
-  });
-  const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
-    node.textContent = change(node.textContent ?? "");
-  const live = element.querySelectorAll("input, textarea");
-  copy.querySelectorAll("input, textarea").forEach((field, i) => {
-    const was = live[i];
-    const value =
-      was instanceof HTMLInputElement || was instanceof HTMLTextAreaElement ? was.value : "";
-    field.setAttribute("value", change(value));
-    if (field instanceof HTMLTextAreaElement) field.textContent = change(value);
-  });
-  if (element instanceof HTMLInputElement) copy.setAttribute("value", change(element.value));
-  copy.removeAttribute("data-q");
-  copy.style.visibility = "visible";
-  copy.style.margin = "0";
+  const undo: (() => void)[] = [];
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const text = node;
+    const was = text.nodeValue ?? "";
+    const now = change(was);
+    if (now === was) continue;
+    text.nodeValue = now;
+    undo.push(() => {
+      if (text.nodeValue === now) text.nodeValue = was;
+    });
+  }
+  const fields = [element, ...element.querySelectorAll("input, textarea")].filter(
+    (field) => field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement,
+  );
+  for (const field of fields) {
+    const was = field.value;
+    const now = change(was);
+    if (now === was) continue;
+    field.value = now;
+    undo.push(() => {
+      if (field.value === now) field.value = was;
+    });
+  }
+  return () => undo.forEach((step) => step());
+}
+
+/** Puts the agent's markup in the element's place, in the page itself, so the page's own
+ * styles and layout hold. It gives back the part to frame and the undo. */
+function placeInstead(element: Element, html: string) {
+  const holder = document.createElement("div");
+  holder.style.display = "contents";
+  holder.innerHTML = clean(html);
+  holder.querySelectorAll("[data-q]").forEach((part) => part.removeAttribute("data-q"));
+  element.after(holder);
+  const hidden = element instanceof HTMLElement ? element.style.display : undefined;
+  if (element instanceof HTMLElement) element.style.display = "none";
+  return {
+    framed: holder.firstElementChild ?? holder,
+    undo: () => {
+      holder.remove();
+      if (element instanceof HTMLElement && hidden !== undefined) element.style.display = hidden;
+    },
+  };
+}
+
+function textInstead(element: Element, text: string) {
+  const copy = element.cloneNode(false);
+  if (!(copy instanceof HTMLElement)) return undefined;
+  copy.textContent = text;
   return copy.outerHTML;
 }
 
@@ -469,7 +453,8 @@ export class Walker {
       const key = `${String(this.at)}-${String(generation)}`;
       const draw = turn ? "frame" : beat.draw;
       const shapes = beat.shapes ?? [];
-      const mock = beat.replace === undefined ? undefined : this.mockUp(element, beat.replace);
+      const framed = beat.replace === undefined ? undefined : this.mockUp(element, beat.replace);
+      const shown = framed === undefined ? rect : boxOf(framed.getBoundingClientRect());
       const voice = this.settings.voice;
       // With no voice, the note holds the whole line, so nothing that is said is lost.
       const words = beat.note ?? beat.say;
@@ -479,7 +464,7 @@ export class Walker {
           ...this.snap,
           phase: turn ? "turn" : "speaking",
           mark: draw === undefined && shapes.length === 0 ? undefined : { draw, box, shapes, key },
-          mock: mock === undefined ? undefined : { ...mock, box, key },
+          mock: framed === undefined ? undefined : { box, key },
           note: {
             tone: turn ? "turn" : "say",
             step: beat.label ?? String(this.at + 1),
@@ -489,14 +474,20 @@ export class Walker {
             key,
           },
         });
-      let last = rect;
+      let last = shown;
       let heard = voice !== undefined;
-      show(rect, heard);
+      show(shown, heard);
       this.element = element;
-      this.track(beat, element, generation, (box) => {
-        last = box;
-        show(box, heard);
-      });
+      this.track(
+        beat,
+        element,
+        generation,
+        (box) => {
+          last = box;
+          show(box, heard);
+        },
+        framed,
+      );
       const read = () => sleep(900 + beat.say.split(/\s+/).length * 260);
       // A voice that plays sets the pace. With none, or one that fails, the note shows the
       // line and the time to read it does.
@@ -556,27 +547,18 @@ export class Walker {
     if (live() && this.snap.phase === "done") this.set({ ...this.snap, shown: false });
   }
 
-  /** Hides the element, and takes its look for the mock-up that shows in its place. */
+  /** Shows the change in the page itself, and gives back the part to frame. */
   private mockUp(element: Element, replace: NonNullable<Beat["replace"]>) {
-    const style = lookOf(element);
-    const swapped =
-      replace.swap === undefined || replace.swap.length === 0
-        ? undefined
-        : swappedCopy(element, replace.swap);
-    if (element instanceof HTMLElement) {
-      const was = element.style.visibility;
-      element.style.visibility = "hidden";
-      this.unhide = () => {
-        element.style.visibility = was;
-      };
+    if (replace.swap !== undefined && replace.swap.length > 0) {
+      this.unhide = swapInPlace(element, replace.swap);
+      return element;
     }
-    if (swapped !== undefined)
-      return { text: undefined, html: clean(swapped), style: {}, copy: true };
-    return {
-      text: replace.html === undefined ? replace.text : undefined,
-      html: replace.html === undefined ? undefined : clean(replace.html),
-      style,
-    };
+    const html =
+      replace.html ?? (replace.text === undefined ? undefined : textInstead(element, replace.text));
+    if (html === undefined) return undefined;
+    const placed = placeInstead(element, html);
+    this.unhide = placed.undo;
+    return placed.framed;
   }
 
   private find(beat: Beat): Element | undefined {
@@ -614,16 +596,22 @@ export class Walker {
    * the DOM checks it again. A moved element moves the cursor, its mark and its note; an
    * element that is gone, or no longer the one the selector finds, stops the walk.
    */
-  private track(beat: Beat, element: Element, generation: number, onMove: (box: Box) => void) {
-    let last = boxOf(element.getBoundingClientRect());
+  private track(
+    beat: Beat,
+    element: Element,
+    generation: number,
+    onMove: (box: Box) => void,
+    framed: Element = element,
+  ) {
+    let last = boxOf(framed.getBoundingClientRect());
     let frame = 0;
     const check = () => {
       frame = 0;
       if (generation !== this.generation) return;
       const now = document.querySelector(beat.target);
-      if (now === null || now !== element || !element.isConnected)
+      if (now === null || now !== element || !element.isConnected || !framed.isConnected)
         return this.lose(this.goneWords(beat));
-      const box = boxOf(element.getBoundingClientRect());
+      const box = boxOf(framed.getBoundingClientRect());
       if (box.width === 0 && box.height === 0) return this.lose(this.goneWords(beat));
       if (!moved(box, last)) return;
       last = box;
@@ -638,7 +626,7 @@ export class Walker {
       if (frame === 0) frame = requestAnimationFrame(check);
     };
     const resize = new ResizeObserver(soon);
-    resize.observe(element);
+    resize.observe(framed);
     const dom = new MutationObserver(soon);
     dom.observe(document.body, { childList: true, subtree: true, attributes: true });
     window.addEventListener("scroll", soon, true);
