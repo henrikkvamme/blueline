@@ -378,6 +378,11 @@ export class Walker {
     if (this.active() && !ours) this.stop();
   }
 
+  /** The element the walk waits for him to click, during a turn. */
+  turnTarget() {
+    return this.snap.phase === "turn" ? this.walk[this.at]?.target : undefined;
+  }
+
   /** Whether the walk runs: its cursor moves, speaks or waits for a turn. */
   active() {
     const { phase } = this.snap;

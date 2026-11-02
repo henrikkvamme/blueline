@@ -4,3 +4,5 @@ dist
 *.tgz
 test/.apps
 evals/*/runs/*/
+evals/answers/inbox/
+evals/answers/audio/

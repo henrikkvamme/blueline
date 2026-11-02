@@ -82,6 +82,15 @@ export interface Line {
   readonly change?: string | undefined;
   /** Shows the agent's last walk again. */
   readonly onAgain?: (() => void) | undefined;
+  /** Says the answer was wrong and why: it becomes an eval case. */
+  readonly wrong?: Wrong | undefined;
+}
+
+export interface Wrong {
+  readonly state: "idle" | "asking" | "saving" | "saved" | "failed";
+  readonly onOpen: () => void;
+  readonly onSend: (reason: string) => void;
+  readonly onClose: () => void;
 }
 
 export interface PanelProps {
@@ -564,6 +573,7 @@ const KEYS = [
   ["Space", "Show me, pause, go on"],
   ["r", "Show me again from the start"],
   ["m", "Mute the voice"],
+  ["w", "Say the answer was wrong; it becomes an eval case"],
   ["Esc", "Pause the cursor; again, stop it"],
 ] as const;
 
@@ -1094,6 +1104,39 @@ function Shipping({
  * words stay, with when a change it put in the queue comes back, and Again shows its walk
  * again.
  */
+/** What the answer should have been, in his words: the start of an eval case. */
+function WrongBox({ wrong }: { readonly wrong: Wrong }) {
+  const [reason, setReason] = useState("");
+  return (
+    <form
+      className="flex animate-dt-fade items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (reason.trim() !== "") wrong.onSend(reason.trim());
+      }}
+    >
+      <input
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- it opens on his own key or click
+        autoFocus
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            wrong.onClose();
+          }
+        }}
+        onBlur={() => {
+          if (reason.trim() === "") wrong.onClose();
+        }}
+        placeholder="What should it have done?"
+        aria-label="What should it have done?"
+        className="min-w-0 flex-1 rounded-md border border-dt-line bg-dt-raised px-2 py-1 text-dt-text outline-none placeholder:text-dt-faint focus:border-dt-accent"
+      />
+    </form>
+  );
+}
+
 function ExchangeLine({ line }: { readonly line: Line }) {
   const busy = line.tone === "busy" || line.tone === "listening";
   return (
@@ -1135,6 +1178,7 @@ function ExchangeLine({ line }: { readonly line: Line }) {
           )}
         </span>
       )}
+      {line.wrong?.state === "asking" && <WrongBox wrong={line.wrong} />}
       <span className="flex min-h-5 items-center gap-2.5" role="status">
         {line.tone === "listening" ? (
           <Mic className="size-3.5 shrink-0 animate-pulse text-dt-accent" aria-hidden />
@@ -1174,6 +1218,26 @@ function ExchangeLine({ line }: { readonly line: Line }) {
         )}
         {line.change !== undefined && (
           <span className="shrink-0 text-dt-faint tabular-nums">{line.change}</span>
+        )}
+        {line.wrong?.state === "idle" && (
+          <button
+            type="button"
+            data-guide-ui=""
+            onClick={line.wrong.onOpen}
+            title="Say what it should have done; it becomes an eval case"
+            className="-my-1 shrink-0 rounded-full px-2 py-1 text-dt-faint hover:bg-dt-raised hover:text-dt-text"
+          >
+            Wrong
+          </button>
+        )}
+        {line.wrong !== undefined && ["saving", "saved", "failed"].includes(line.wrong.state) && (
+          <span className="shrink-0 text-dt-faint">
+            {line.wrong.state === "saving"
+              ? "Saving"
+              : line.wrong.state === "saved"
+                ? "Saved as a case"
+                : "Not saved"}
+          </span>
         )}
         {line.onAgain !== undefined && (
           <button

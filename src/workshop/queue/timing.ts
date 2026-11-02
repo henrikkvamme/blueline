@@ -103,6 +103,29 @@ function keep() {
 }
 
 /**
+ * Tells the dev server that the last answer was wrong, and why, with his audio and what the
+ * agent got. The server adds the answer as it ran, and keeps it all as feedback for the
+ * answer evals (evals/answers/inbox/). Resolves to whether it was kept.
+ */
+export async function reportWrong(reason: string): Promise<boolean> {
+  if (current !== undefined && current.marks.heard !== undefined) {
+    window.clearTimeout(sendTimer);
+    keep();
+  }
+  const body = new FormData();
+  body.append(
+    "feedback",
+    JSON.stringify({ reason, trace: last?.trace, context: last?.context, page: location.hash }),
+  );
+  if (last?.audio !== undefined) body.append("audio", last.audio, "audio.webm");
+  try {
+    return (await fetch("/__agent/feedback", { method: "POST", body })).ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Saves the last exchange as an eval case: his audio, what the agent got and the trace.
  * Resolves to whether the dev server kept it.
  */

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { createSdkMcpServer, type Query, query, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { Plugin } from "vite";
 import { z } from "zod";
+import { type Exchange, keepFeedback } from "./feedback.ts";
 import { ears as makeEars, envOf, words } from "./hearing.ts";
 
 /*
@@ -148,6 +149,7 @@ Say what you do as you do it, with a short show beat, unless the act is all he a
 
 What his words ask for:
 - A question: answer with show only.
+- He says your last answer was wrong, or not what he meant: call feedback once with what was wrong and what he wanted, then do it right.
 - A change to the made-up bonus app: call annotate with the element and his request in one clear sentence, then show one beat that says you are on it. The workshop sends your answer back into the queue.
 - A change to the workshop or to Blueline itself: show one beat that says what you will change, then change the code under ${ROOT}. Read CLAUDE.md and GLOSSARY.md first, and follow them. The page reloads by itself. Then show him the result.
 
@@ -187,6 +189,8 @@ export function agent(): Plugin {
   /** Ends when the last request has started its run, so requests start one at a time. */
   let line = Promise.resolve();
   let shown = 0;
+  /** The last few exchanges as they ran, for feedback on one of them. */
+  const exchanges: Exchange[] = [];
 
   return {
     name: "workshop-agent",
@@ -223,6 +227,38 @@ export function agent(): Plugin {
           .catch((error: unknown) => log.warn(`workshop agent: ${String(error)}`))
           .finally(() => res.end());
       });
+      server.middlewares.use("/__agent/feedback", (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end();
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", () => {
+          void new Response(new Uint8Array(Buffer.concat(chunks)), {
+            headers: { "Content-Type": req.headers["content-type"] ?? "" },
+          })
+            .formData()
+            .then(async (form) => {
+              const sent = form.get("feedback");
+              if (typeof sent !== "string") throw new Error("No feedback in the form");
+              const page = JSON.parse(sent) as { reason: string };
+              const audio = form.get("audio");
+              const id = await keepFeedback(
+                ROOT,
+                { reason: page.reason, by: "box", exchange: exchanges.at(-1), page },
+                audio instanceof Blob ? new Uint8Array(await audio.arrayBuffer()) : undefined,
+              );
+              log.info(`workshop agent: kept feedback ${id}`);
+            })
+            .catch((error: unknown) => {
+              log.warn(`workshop agent, feedback: ${String(error)}`);
+              res.statusCode = 500;
+            })
+            .finally(() => res.end());
+        });
+      });
       server.middlewares.use("/__agent/forget", (_req, res) => {
         session = undefined;
         void running?.query.interrupt().catch(() => undefined);
@@ -240,7 +276,22 @@ export function agent(): Plugin {
             res.setHeader("Content-Type", "application/x-ndjson");
             res.setHeader("Cache-Control", "no-store");
             let open = true;
+            const record: Exchange = {
+              asked: new Date().toISOString(),
+              request: (() => {
+                try {
+                  return JSON.parse(text) as unknown;
+                } catch {
+                  return text;
+                }
+              })(),
+              events: [],
+            };
+            const before_ = exchanges.at(-1);
+            exchanges.push(record);
+            if (exchanges.length > 6) exchanges.shift();
             const send = (event: Event) => {
+              record.events.push(event);
               if (open) res.write(`${JSON.stringify(event)}\n`);
             };
             const gone = new AbortController();
@@ -303,6 +354,26 @@ export function agent(): Plugin {
                     const { id, how } = await_();
                     send({ type: "act", id, acts });
                     return { content: [{ type: "text", text: await how }] };
+                  },
+                ),
+                tool(
+                  "feedback",
+                  "Keep his feedback when he says your last answer was wrong, so it becomes a test of you. Call it once, then do it right.",
+                  {
+                    wrong: z
+                      .string()
+                      .describe("What was wrong with the last answer, in his words."),
+                    wanted: z.string().describe("What he wanted instead, in his words."),
+                  },
+                  async ({ wrong, wanted }) => {
+                    const id = await keepFeedback(ROOT, {
+                      reason: `${wrong} He wanted: ${wanted}`,
+                      by: "voice",
+                      exchange: before_,
+                      page: { said: record.request },
+                    });
+                    log.info(`workshop agent: kept feedback ${id}`);
+                    return { content: [{ type: "text", text: "Kept. Now do it right." }] };
                   },
                 ),
                 tool(

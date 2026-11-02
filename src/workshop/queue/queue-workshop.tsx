@@ -71,6 +71,8 @@ interface Exchange {
   readonly heard: string | undefined;
   /** Whether he saved it as an eval case. */
   readonly saved?: "saving" | "saved" | "failed" | undefined;
+  /** Whether he says the answer was wrong, and whether that was kept as a case. */
+  readonly wrong?: "asking" | "saving" | "saved" | "failed" | undefined;
   readonly tone: "busy" | "showing" | "done" | "failed";
   /** What the agent does now, or its last words. */
   readonly status: string;
@@ -191,6 +193,12 @@ function Live() {
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new remark starts a walk, not a new setting
   }, [here?.id, walker]);
   useEffect(() => walker.navigate(page), [walker, page]);
+  // For the answer evals: where the walk is, and what it waits for him to click.
+  useEffect(() => {
+    const root = document.documentElement.dataset;
+    root["walk"] = walk.phase;
+    root["walkTurn"] = walker.turnTarget() ?? "";
+  }, [walker, walk]);
   /** g: pause a walk, go on with it, or walk the remark again. */
   const toggleWalk = () => {
     if (walker.active()) walker.pause();
@@ -440,6 +448,20 @@ function Live() {
       );
   }
 
+  /** He says why the answer was wrong; the dev server keeps it for a new eval case. */
+  function sendWrong(reason: string) {
+    setExchange((x) => (x === undefined ? x : { ...x, wrong: "saving" }));
+    void timing
+      .reportWrong(reason)
+      .then((ok) =>
+        setExchange((x) => (x === undefined ? x : { ...x, wrong: ok ? "saved" : "failed" })),
+      );
+  }
+  const askWrong = (open: boolean) =>
+    setExchange((x) => (x === undefined ? x : { ...x, wrong: open ? "asking" : undefined }));
+  const answered_ =
+    exchange !== undefined && (exchange.tone === "done" || exchange.tone === "failed");
+
   /** What the panel's line says about the exchange: his words, and the agent's answer. */
   const line = (() => {
     if (talk.phase === "listening")
@@ -460,6 +482,14 @@ function Live() {
       heard: exchange.heard,
       saved: exchange.saved,
       onSave: exchange.heard === undefined || exchange.saved !== undefined ? undefined : saveTake,
+      wrong: answered_
+        ? {
+            state: exchange.wrong ?? ("idle" as const),
+            onOpen: () => askWrong(true),
+            onSend: sendWrong,
+            onClose: () => askWrong(false),
+          }
+        : undefined,
       tone: exchange.tone,
       // While it shows him, the line says what the cursor says.
       status: exchange.tone === "showing" ? (walk.note?.words ?? "Showing you") : exchange.status,
@@ -517,7 +547,14 @@ function Live() {
         else undo();
         return;
       }
-      if (composer !== undefined || talk.phase === "typing" || e.metaKey || e.ctrlKey || e.altKey)
+      if (
+        composer !== undefined ||
+        talk.phase === "typing" ||
+        typing ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      )
         return;
       const values = here?.variants ?? here?.options ?? [];
       const n = Number(e.key);
@@ -547,6 +584,10 @@ function Live() {
       else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
       else if (e.key === "s" && exchange?.heard !== undefined && exchange.saved === undefined)
         saveTake();
+      else if (e.key === "w" && answered_ && exchange.wrong === undefined) {
+        e.preventDefault();
+        askWrong(true);
+      }
       // A number previews; Enter keeps what it previews.
       else if (n >= 1 && n <= values.length) setPeek(values[n - 1]);
       else if (e.key === "Enter" && peek !== undefined) choose(peek);
