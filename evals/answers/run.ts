@@ -450,7 +450,11 @@ async function runCase(browser: Browser, c: Case, rep: number, url: string, tree
         }
         if (state.turn !== "") {
           const target = page.locator(state.turn).first();
-          await target.scrollIntoViewIfNeeded();
+          if ((await target.count()) === 0) {
+            await sleep(250);
+            continue;
+          }
+          await target.scrollIntoViewIfNeeded({ timeout: 5000 });
           const box = await target.boundingBox();
           if (box !== null) {
             await sleep(700);
@@ -573,7 +577,16 @@ function stepsOf(answers: readonly Answer[]) {
           };
         });
       if (e["type"] === "act") return [{ act: e["acts"] }];
-      if (e["type"] === "annotate") return [{ queued: { on: e["target"], change: e["text"] } }];
+      if (e["type"] === "annotate")
+        return [
+          {
+            queued: {
+              on: e["target"],
+              change: e["text"],
+              tookThePlaceOfTheLastRequestOnIt: e["revises"] === true || undefined,
+            },
+          },
+        ];
       return [];
     }),
     pageToldItHowEachShowWent: a.played,
