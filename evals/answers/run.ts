@@ -140,7 +140,7 @@ The made-up app is a bonus request with three pages, behind tabs: Request, Appro
 - Approvers: the same two rows with drag handles, and "Add an approver", which adds Kari Nordmann, HR.
 - Sent: "Sent for approval", and a grey line that ends "Ingrid Berg gets it once Ola Hansen approves." The app stores no send time.
 - The app has no exchange rates. A real rate in late 2026 is about 10.5 to 12.5 NOK to the euro and 9.5 to 11.5 NOK to the US dollar; a figure in that range, rounded, is right.
-The workshop: a review queue of remarks about the app, in a panel on the right. He can go next and back, settle a remark, undo, open the tree of remarks, keep a variant, and ask the agent. The agent may change the workshop's own code only when he asks for a change to the workshop; a change to the made-up app is mocked up or put in the queue, never made in code. A change in the queue waits there for the coding agent; in this eval its answer comes only after the case ends, so the app looks the same at the end unless the agent or he changed it through the page.`;
+The workshop: a review queue of remarks about the app, in a panel on the right. Its script, src/workshop/queue/script.ts, holds the canned answers to queued changes, such as the approver role "Director · approves first" and the button "Send to Ola Hansen"; an agent that read it may quote them. He can go next and back, settle a remark, undo, open the tree of remarks, keep a variant, and ask the agent. The agent may change the workshop's own code only when he asks for a change to the workshop; a change to the made-up app is mocked up or put in the queue, never made in code. A change in the queue waits there for the coding agent; in this eval its answer comes only after the case ends, so the app looks the same at the end unless the agent or he changed it through the page.`;
 
 const INIT = `
 localStorage.setItem("blueline.workshop.queue.guide", JSON.stringify({ on: false, voice: false, reduced: true }));
@@ -838,39 +838,60 @@ async function rejudge() {
     .split("\n")
     .filter(Boolean)
     .map((l) => JSON.parse(l) as Record<string, unknown>);
-  await Promise.all(
-    rows.map(async (row) => {
-      const meta = row["meta"] as { evidence: string; pictures: Picture[] };
-      const pictures = meta.pictures.map((p) => ({ ...p, file: path.join(RUNS, p.file) }));
-      const verdicts = Object.fromEntries(
-        await Promise.all(
-          JUDGES.map(async (j) => {
-            try {
-              return [j, await judge(SDK, j, meta.evidence, pictures)] as const;
-            } catch (error) {
-              return [j, { error: String(error) }] as const;
-            }
-          }),
-        ),
+  const only = flags.only?.split(",");
+  const chosen = rows.filter((r) => only === undefined || only.includes(String(r["prompt_id"])));
+  // A few at a time: a hundred judges at once fail on the model's limits.
+  let at = 0;
+  const one = async (row: Record<string, unknown>) => {
+    const meta = row["meta"] as { evidence: string; pictures: Picture[] };
+    const pictures = meta.pictures.map((p) => ({ ...p, file: path.join(RUNS, p.file) }));
+    const verdicts = Object.fromEntries(
+      await Promise.all(
+        JUDGES.map(async (j) => {
+          try {
+            return [j, await judge(SDK, j, meta.evidence, pictures)] as const;
+          } catch (error) {
+            return [j, { error: String(error) }] as const;
+          }
+        }),
+      ),
+    );
+    if (flags.regrade) {
+      const grade = row["grade"] as Record<string, number>;
+      const code = Object.fromEntries(
+        ["mockup", "target", "clicks", "no_edit", "checks", "answered"].map((k) => [
+          k,
+          grade[k] ?? 0,
+        ]),
       );
-      if (flags.regrade) {
-        const grade = row["grade"] as Record<string, number>;
-        const code = Object.fromEntries(
-          ["mockup", "target", "clicks", "no_edit", "checks", "answered"].map((k) => [
-            k,
-            grade[k] ?? 0,
-          ]),
-        );
-        row["grade"] = gradeRow(code, verdicts);
-        row["verdicts"] = verdicts;
-      } else
-        appendFileSync(
-          path.join(OUT, "judges.jsonl"),
-          `${JSON.stringify({ prompt_id: row["prompt_id"], rep: row["rep"], verdicts })}\n`,
-        );
-      console.log(`${String(row["prompt_id"])}: ${JSON.stringify(verdicts).slice(0, 240)}`);
+      row["grade"] = gradeRow(code, verdicts);
+      row["verdicts"] = verdicts;
+    } else
+      appendFileSync(
+        path.join(OUT, "judges.jsonl"),
+        `${JSON.stringify({ prompt_id: row["prompt_id"], rep: row["rep"], verdicts })}\n`,
+      );
+    console.log(`${String(row["prompt_id"])}: ${JSON.stringify(verdicts).slice(0, 240)}`);
+  };
+  await Promise.all(
+    Array.from({ length: 4 }, async () => {
+      while (at < chosen.length) {
+        const row = chosen[at++];
+        if (row !== undefined) await one(row);
+      }
     }),
   );
+  const failed = chosen.filter((r) =>
+    Object.values((r["verdicts"] ?? {}) as Record<string, unknown>).some(
+      (v) => typeof v === "object" && v !== null && "error" in v,
+    ),
+  );
+  if (flags.regrade && failed.length > 0) {
+    console.log(
+      `${String(failed.length)} rows had a judge error; results.jsonl is kept as it was.`,
+    );
+    return;
+  }
   if (flags.regrade) {
     writeFileSync(results, rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
     summary(results);
