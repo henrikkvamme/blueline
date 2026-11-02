@@ -6,7 +6,8 @@
  *
  * - Next goes forward on the trail of remarks shown, and past its end to the queue's first.
  * - Back goes back on the trail, settled remarks too.
- * - A remark that the reviewer leaves with no annotation of his own on it settles.
+ * - A remark that the reviewer leaves with no annotation of his own on it settles, once he saw
+ *   its walk to the end, his own turns in it too.
  * - A remark that he annotated waits, and settles when the agent's answers to it settle.
  */
 
@@ -67,6 +68,9 @@ export interface Remark {
   readonly answers?: readonly string[];
   /** For a choice: the variants, by their labels. */
   readonly variants?: readonly string[];
+  /** For a choice: a variant that the agent designed, as markup by its label. `{state}`
+   * stands for the words of the state that it shows. */
+  readonly designs?: Readonly<Record<string, string>>;
   /** For a choice: what the part can show, to go through with each variant. The first is
    * what the page shows now. */
   readonly states?: readonly string[];
@@ -126,6 +130,7 @@ export interface Queue {
   readonly trail: readonly string[];
   /** Where on the trail the reviewer is; -1 before the first. */
   readonly at: number;
+  readonly walked?: readonly string[];
 }
 
 export const empty = (): Queue => ({
@@ -144,6 +149,12 @@ export const remarkOf = (q: Queue, id: string | undefined) =>
 export const current = (q: Queue) => remarkOf(q, q.trail[q.at]);
 
 export const isSettled = (q: Queue, id: string) => q.settled.includes(id);
+
+export const isTried = (q: Queue, remark: Remark) =>
+  remark.walk === undefined || remark.walk.length === 0 || (q.walked ?? []).includes(remark.id);
+
+export const walked = (q: Queue, id: string): Queue =>
+  (q.walked ?? []).includes(id) ? q : { ...q, walked: [...(q.walked ?? []), id] };
 
 /** The agent's answer to an annotation, if it came. */
 export const answerOf = (q: Queue, annotation: string) =>
@@ -187,6 +198,15 @@ export function order(q: Queue): readonly Remark[] {
     .sort((a, b) => byRank(rankOf(q, a), rankOf(q, b)));
 }
 
+export const behind = (q: Queue): readonly Remark[] =>
+  q.trail
+    .slice(0, Math.max(q.at, 0))
+    .map((id) => remarkOf(q, id))
+    .filter(
+      (r): r is Remark =>
+        r !== undefined && !isSettled(q, r.id) && annotationsOn(q, r.id).length === 0,
+    );
+
 /** One place in the queue ahead: a remark, or the agent's answer to an annotation, which
  * has not come yet. */
 export type Ahead =
@@ -214,7 +234,8 @@ export function ahead(q: Queue): readonly Ahead[] {
       rank: rank(q, { page: annotation.page, answer: true, at: Number.MAX_SAFE_INTEGER }),
     })),
   ].sort((a, b) => byRank(a.rank, b.rank));
-  return [...trail, ...rest.map((r): Ahead => r.item)];
+  const again = behind(q).map((remark): Ahead => ({ kind: "remark", remark }));
+  return [...trail, ...rest.map((r): Ahead => r.item), ...again];
 }
 
 /** The remarks that he saw before the one that shows, and those settled before, the last
@@ -257,12 +278,13 @@ function settle(q: Queue, id: string): Queue {
 
 /** What leaving the remark that shows does: it settles unless he annotated it. Gives the
  * remarks that settled, for the toast. */
-function leave(q: Queue): { readonly queue: Queue; readonly settled: readonly string[] } {
+function leave(q: Queue): Move {
   const here = current(q);
   if (here === undefined || isSettled(q, here.id)) return { queue: q, settled: [] };
   if (annotationsOn(q, here.id).length > 0) return { queue: q, settled: [] };
   if (here.kind === "choice" && q.picks[here.id] === undefined) return { queue: q, settled: [] };
   if (here.kind === "question" && q.picks[here.id] === undefined) return { queue: q, settled: [] };
+  if (!isTried(q, here)) return { queue: q, settled: [], untried: here.id };
   const queue = settle(q, here.id);
   return { queue, settled: queue.settled.filter((id) => !q.settled.includes(id)) };
 }
@@ -271,36 +293,46 @@ export interface Move {
   readonly queue: Queue;
   /** The remarks that the move settled. */
   readonly settled: readonly string[];
+  readonly untried?: string;
 }
 
 /** Next: the next open remark on the trail ahead, else the queue's first remark. A settled
  * remark ahead is passed over, so Next goes back from the past to what needs him. With
- * nothing to show, the reviewer stays, and the remark that he leaves still settles. */
+ * nothing to show, the reviewer stays, and the remark that he leaves still settles. A remark
+ * whose walk he did not see to the end goes back into the queue, to come again. */
 export function next(q: Queue): Move {
-  const { queue, settled } = leave(q);
+  const left = leave(q);
+  const queue =
+    left.untried === undefined
+      ? left.queue
+      : {
+          ...left.queue,
+          trail: left.queue.trail.filter((id) => id !== left.untried),
+          at: left.queue.at - 1,
+        };
   const open = queue.trail.findIndex((id, i) => i > queue.at && !isSettled(queue, id));
-  if (open !== -1) return { queue: { ...queue, at: open }, settled };
-  const first = order(queue)[0];
-  if (first === undefined) return { queue, settled };
-  return {
-    queue: { ...queue, trail: [...queue.trail, first.id], at: queue.trail.length },
-    settled,
-  };
+  if (open !== -1) return { ...left, queue: { ...queue, at: open } };
+  const first =
+    order(queue).find((r) => r.id !== left.untried) ??
+    behind(queue).find((r) => r.id !== left.untried);
+  if (first === undefined) return left;
+  const trail = [...queue.trail.filter((id) => id !== first.id), first.id];
+  return { ...left, queue: { ...queue, trail, at: trail.length - 1 } };
 }
 
 /** Back: the remark shown before, settled or not. */
 export function back(q: Queue): Move {
   if (q.at <= 0) return { queue: q, settled: [] };
-  const { queue, settled } = leave(q);
-  return { queue: { ...queue, at: queue.at - 1 }, settled };
+  const left = leave(q);
+  return { ...left, queue: { ...left.queue, at: left.queue.at - 1 } };
 }
 
 /** Show one remark now, as a click on its pin does. */
 export function show(q: Queue, id: string): Move {
   if (current(q)?.id === id || remarkOf(q, id) === undefined) return { queue: q, settled: [] };
-  const { queue, settled } = leave(q);
-  const kept = queue.trail.slice(0, queue.at + 1).filter((t) => t !== id);
-  return { queue: { ...queue, trail: [...kept, id], at: kept.length }, settled };
+  const left = leave(q);
+  const kept = left.queue.trail.slice(0, left.queue.at + 1).filter((t) => t !== id);
+  return { ...left, queue: { ...left.queue, trail: [...kept, id], at: kept.length } };
 }
 
 /** Settle the remark that shows now, and go on. */
@@ -313,6 +345,11 @@ export function settleNow(q: Queue): Move {
     queue: moved.queue,
     settled: [...settled.settled.filter((id) => !q.settled.includes(id)), ...moved.settled],
   };
+}
+
+export function settleOne(q: Queue, id: string): Move {
+  const queue = settle(q, id);
+  return { queue, settled: queue.settled.filter((x) => !q.settled.includes(x)) };
 }
 
 /** Take settles back, as undo does. */

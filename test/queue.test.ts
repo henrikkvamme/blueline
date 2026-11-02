@@ -14,6 +14,7 @@ import {
   seen,
   show,
   unsettle,
+  walked,
   type Annotation,
   type Queue,
   type Remark,
@@ -154,6 +155,29 @@ describe("the queue", () => {
     expect(next(q).settled).toEqual([]);
     q = pick(q, "c", "Two");
     expect(next(q).settled).toEqual(["c"]);
+  });
+
+  it("comes back to a choice left with no pick, so what is left is what Next shows", () => {
+    let q = start({ ...look("c", "/a", 1), kind: "choice", variants: ["One", "Two"] });
+    q = go(q, next, next);
+    q = { ...q, remarks: [...q.remarks, look("d", "/a", 2)] };
+    q = go(q, next, next);
+    expect(current(q)?.id).toBe("c");
+    expect(left(q)).toBe(1);
+  });
+
+  it("settles a remark with a walk only once he saw the walk to the end", () => {
+    const walk = [{ target: "#a", say: "Click Send", turn: true }];
+    let q = start({ ...look("a", "/a", 1), walk }, look("b", "/a", 2));
+    q = go(q, next);
+    const skipped = next(q);
+    expect(skipped).toMatchObject({ settled: [], untried: "a" });
+    expect(current(skipped.queue)?.id).toBe("b");
+    expect(ahead(skipped.queue).map((x) => x.kind === "remark" && x.remark.id)).toContain("a");
+    q = go(skipped.queue, next);
+    expect(current(q)?.id).toBe("a");
+    expect(next(walked(q, "a")).settled).toEqual(["a"]);
+    expect(settleNow(go(skipped.queue, next)).settled).toEqual(["a"]);
   });
 
   it("settles at once, goes on, and undo takes it back", () => {

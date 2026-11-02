@@ -1,6 +1,12 @@
 import { basename, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createSdkMcpServer, type Query, query, tool } from "@anthropic-ai/claude-agent-sdk";
+import {
+  createSdkMcpServer,
+  type Query,
+  query,
+  type SDKUserMessage,
+  tool,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { Plugin } from "vite";
 import { z } from "zod";
 
@@ -54,7 +60,58 @@ const beat = z.object({
   state: z.string().optional().describe("A state of the remark's choice to show."),
 });
 
-const SYSTEM = `You are the agent in Blueline's queue workshop. Henrik reviews UI by eye and judges; he does not read long text. He holds Option and Command, points with his mouse, may draw a loop round an element, and speaks. You get his words, what he pointed at while he said each part, and what the page shows.
+const design = z.object({
+  name: z.string().describe("The variant's label, a word or two."),
+  html: z
+    .string()
+    .describe(
+      "Small inline-styled HTML that stands in the element's place; it takes the element's font. {state} stands for the words of the state it shows.",
+    ),
+});
+const act = z.union([
+  z.object({
+    do: z.enum(["next", "back", "settle", "undo", "walk", "stopShip"]),
+  }),
+  z.object({ do: z.literal("open"), remark: z.string() }),
+  z.object({ do: z.literal("keep"), value: z.string(), remark: z.string().optional() }),
+  z.object({
+    do: z.literal("preview"),
+    variant: z.string().nullable().optional(),
+    state: z.string().nullable().optional(),
+  }),
+  z.object({ do: z.literal("go"), page: z.string() }),
+  z.object({ do: z.literal("seen"), open: z.boolean() }),
+  z.object({
+    do: z.literal("settings"),
+    voice: z.boolean().optional(),
+    walks: z.boolean().optional(),
+    speaker: z.enum(["Alice", "River", "Eric"]).optional(),
+    delay: z.number().optional(),
+    lessMotion: z.boolean().optional(),
+  }),
+  z.object({ do: z.literal("addVariants"), remark: z.string(), variants: z.array(design).min(1) }),
+  z.object({ do: z.literal("addStates"), remark: z.string(), states: z.array(z.string()).min(1) }),
+  z.object({
+    do: z.literal("addRemark"),
+    open: z.boolean().optional().describe("Show it now, in place of the remark that shows."),
+    remark: z.object({
+      id: z.string().optional(),
+      kind: z.enum(["look", "choice", "question"]),
+      page: z.string(),
+      target: z.string().describe("A selector from the elements list."),
+      title: z.string(),
+      text: z.string().optional(),
+      options: z.array(z.string()).optional().describe("A question's answers."),
+      states: z.array(z.string()).optional(),
+      variants: z.array(design).optional().describe("A choice's variants."),
+      walk: z.array(beat).optional().describe("The walk the cursor plays when it shows."),
+    }),
+  }),
+]);
+
+const SYSTEM = `You are the agent in Blueline's queue workshop. Henrik reviews UI by eye and judges; he does not read long text. He presses Control twice, points with his mouse, may draw a loop round an element, and speaks. You get his words; what he pointed at while he said each part; a screenshot of the page and panel with his strokes drawn on it in blue, his mouse at the end marked; a close crop of each loop he drew, which is what he means most; and the page's elements with their boxes.
+
+Trust the images over the element names: a loop means the thing inside it. Never talk about how his pointing, hovering or loops were read, or where a loop landed. Speak about the thing itself, as a person beside him would.
 
 Answer on the page, as Clicky does, with the show tool: your cursor flies to each element, draws on it and speaks the line in a voice. That is how he hears you. Never answer in prose alone.
 
@@ -67,6 +124,13 @@ How to show:
 - peek and state show a variant or a state of the current remark's choice.
 - Use only selectors from the elements list.
 
+He can ask you to do anything he can do in the workshop, and more. The act tool does it, in order, as his own keys would, and returns what each act did and where the review is now:
+- next, back, settle (the remark that shows, then go on), undo (the last settle), open a remark by id, keep a variant or answer a question (keep), preview a variant or a state (null ends it), go to a page, walk (play the remark's walk), seen (the list of earlier remarks), stopShip, settings (voice, walks, speaker, the delay of answers in s, lessMotion);
+- addVariants: design new variants of a choice as small HTML, in the app's look. They show in the element's place and on the panel's board. Add a few at once, each a clear idea. Then preview them one by one with a show, so he sees each.
+- addStates: more states for a choice to go through, such as a long name;
+- addRemark: write a new remark into the queue: a look, a choice with designed variants, or a question with answers, with a walk. open shows it now.
+Say what you do as you do it, with a short show beat, unless the act is all he asked for.
+
 What his words ask for:
 - A question: answer with show only.
 - A change to the made-up bonus app: call annotate with the element and his request in one clear sentence, then show one beat that says you are on it. The workshop sends your answer back into the queue.
@@ -78,6 +142,7 @@ type Event =
   | { readonly type: "status"; readonly text: string }
   | { readonly type: "show"; readonly id: string; readonly beats: unknown }
   | { readonly type: "annotate"; readonly target: string; readonly text: string }
+  | { readonly type: "act"; readonly id: string; readonly acts: unknown }
   | { readonly type: "done"; readonly text: string }
   | { readonly type: "failed"; readonly why: string };
 
@@ -96,8 +161,49 @@ function doing(name: string, input: Record<string, unknown>) {
   if (name === "Edit" || name === "Write") return `Changing ${file}`;
   if (name === "Grep" || name === "Glob") return "Looking through the code";
   if (name.endsWith("__annotate")) return "Putting it in the queue";
+  if (name.endsWith("__act")) return undefined;
   if (name.endsWith("__show")) return undefined;
   return "Working";
+}
+
+/**
+ * What the page sent, as his message to the agent: the screenshots first, each with what it
+ * is, and the rest as JSON. Each loop's crop comes first, as Clicky's does: it is what he
+ * means most.
+ */
+async function* words(text: string): AsyncGenerator<SDKUserMessage> {
+  const { images, ...context } = JSON.parse(text) as {
+    images?: { screen?: string; circled?: readonly string[] };
+  };
+  const image = (url: string) => {
+    const [, type = "image/jpeg", data = ""] = /^data:([^;]+);base64,(.*)$/s.exec(url) ?? [];
+    return {
+      type: "image" as const,
+      source: { type: "base64" as const, media_type: type as "image/jpeg", data },
+    };
+  };
+  const content = [
+    ...(images?.circled ?? []).flatMap((url, i) => [
+      { type: "text" as const, text: `Loop ${String(i + 1)}, close up: what he circled.` },
+      image(url),
+    ]),
+    ...(images?.screen === undefined
+      ? []
+      : [
+          {
+            type: "text" as const,
+            text: "The page and the panel as he saw them, with his strokes in blue.",
+          },
+          image(images.screen),
+        ]),
+    { type: "text" as const, text: JSON.stringify(context) },
+  ];
+  yield {
+    type: "user",
+    message: { role: "user", content },
+    parent_tool_use_id: null,
+    origin: { kind: "human" },
+  };
 }
 
 const inside = (path: unknown) => {
@@ -110,6 +216,8 @@ export function agent(): Plugin {
   let session: string | undefined;
   let running: { readonly query: Query; readonly ended: Promise<void> } | undefined;
   const watching = new Map<string, (how: string) => void>();
+  /** Ends when the last request has started its run, so requests start one at a time. */
+  let line = Promise.resolve();
   let shown = 0;
 
   return {
@@ -125,19 +233,21 @@ export function agent(): Plugin {
         });
 
       server.middlewares.use("/__agent/played", (req, res) => {
-        void body(req).then((text) => {
-          const { id, how, page, elements } = JSON.parse(text) as {
-            id: string;
-            how: string;
-            page: string;
-            elements: unknown;
-          };
-          watching.get(id)?.(
-            `${how}\nThe page now: ${page}. Its elements: ${JSON.stringify(elements)}`,
-          );
-          watching.delete(id);
-          res.end();
-        });
+        void body(req)
+          .then((text) => {
+            const { id, how, page, elements } = JSON.parse(text) as {
+              id: string;
+              how: string;
+              page: string;
+              elements: unknown;
+            };
+            watching.get(id)?.(
+              `${how}\nThe page now: ${page}. Its elements: ${JSON.stringify(elements)}`,
+            );
+            watching.delete(id);
+          })
+          .catch((error: unknown) => log.warn(`workshop agent: ${String(error)}`))
+          .finally(() => res.end());
       });
       server.middlewares.use("/__agent/forget", (_req, res) => {
         session = undefined;
@@ -151,111 +261,140 @@ export function agent(): Plugin {
           res.end();
           return;
         }
-        void body(req).then(async (prompt) => {
-          // New words stop the work on the old ones, and the session goes on from there.
-          if (running !== undefined) {
-            await running.query.interrupt().catch(() => undefined);
-            await running.ended;
-          }
-          res.setHeader("Content-Type", "application/x-ndjson");
-          res.setHeader("Cache-Control", "no-store");
-          let open = true;
-          const send = (event: Event) => {
-            if (open) res.write(`${JSON.stringify(event)}\n`);
-          };
-          res.on("close", () => {
-            open = false;
-          });
-          const page = createSdkMcpServer({
-            name: "page",
-            alwaysLoad: true,
-            tools: [
-              tool(
-                "show",
-                "Show Henrik on the page: the cursor walks the beats, draws and speaks each line. Returns how the walk went.",
-                { beats: z.array(beat).min(1) },
-                async ({ beats }) => {
-                  const id = `w${String(++shown)}`;
-                  const how = new Promise<string>((done) => {
-                    watching.set(id, done);
-                    setTimeout(() => done("No word from the page; it may still play."), WATCH);
-                  });
-                  send({ type: "show", id, beats });
-                  return { content: [{ type: "text", text: await how }] };
-                },
-              ),
-              tool(
-                "annotate",
-                "Put a change to the made-up app in the review queue, on one element. The workshop answers it later.",
-                {
-                  target: z.string().describe("A selector from the elements list."),
-                  text: z.string().describe("What should change, in one clear sentence."),
-                },
-                async ({ target, text }) => {
-                  send({ type: "annotate", target, text });
-                  return { content: [{ type: "text", text: "In the queue." }] };
-                },
-              ),
-            ],
-          });
-          const run = query({
-            prompt,
-            options: {
-              model: MODEL,
-              effort: "low",
-              cwd: ROOT,
-              env: envOf(),
-              settingSources: [],
-              systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM },
-              tools: ["Read", "Grep", "Glob", "Edit", "Write"],
-              mcpServers: { page },
-              canUseTool: async (name, input) =>
-                name.startsWith("mcp__page__") ||
-                (["Read", "Grep", "Glob", "Edit", "Write"].includes(name) &&
-                  inside(input["file_path"] ?? input["path"]))
-                  ? { behavior: "allow", updatedInput: input }
-                  : {
-                      behavior: "deny",
-                      message: "Only files in this repository, and no commands.",
-                    },
-              ...(session === undefined ? {} : { resume: session }),
-            },
-          });
-          let finish = () => undefined as void;
-          running = { query: run, ended: new Promise<void>((done) => (finish = done)) };
-          send({ type: "status", text: "Thinking" });
-          try {
-            for await (const message of run) {
-              if (session !== message.session_id) {
-                session = message.session_id;
-                log.info(`workshop agent: session ${session} (claude --resume ${session})`);
+        void body(req)
+          .then(async (text) => {
+            // New words stop the work on the old ones, and the session goes on from there.
+            // Words that come while the old work stops wait in line behind it.
+            const before = line;
+            let mine = () => undefined as void;
+            line = new Promise<void>((done) => (mine = done));
+            await before;
+            const was = running;
+            if (was !== undefined) {
+              await was.query.interrupt().catch(() => undefined);
+              await was.ended;
+            }
+            res.setHeader("Content-Type", "application/x-ndjson");
+            res.setHeader("Cache-Control", "no-store");
+            let open = true;
+            const send = (event: Event) => {
+              if (open) res.write(`${JSON.stringify(event)}\n`);
+            };
+            res.on("close", () => {
+              open = false;
+            });
+            /** A new id, and what the page answers on it. */
+            const await_ = () => {
+              const id = `w${String(++shown)}`;
+              const how = new Promise<string>((done) => {
+                watching.set(id, done);
+                setTimeout(() => done("No word from the page; it may still play."), WATCH);
+              });
+              return { id, how };
+            };
+            const page = createSdkMcpServer({
+              name: "page",
+              alwaysLoad: true,
+              tools: [
+                tool(
+                  "show",
+                  "Show Henrik on the page: the cursor walks the beats, draws and speaks each line. Returns how the walk went.",
+                  { beats: z.array(beat).min(1) },
+                  async ({ beats }) => {
+                    const { id, how } = await_();
+                    send({ type: "show", id, beats });
+                    return { content: [{ type: "text", text: await how }] };
+                  },
+                ),
+                tool(
+                  "act",
+                  "Do what he can do in the workshop, and more, in order: go through the queue, settle, undo, keep, preview, change the settings, design variants, add states, write remarks. Returns what each act did and where the review is now.",
+                  { acts: z.array(act).min(1) },
+                  async ({ acts }) => {
+                    const { id, how } = await_();
+                    send({ type: "act", id, acts });
+                    return { content: [{ type: "text", text: await how }] };
+                  },
+                ),
+                tool(
+                  "annotate",
+                  "Put a change to the made-up app in the review queue, on one element. The workshop answers it later.",
+                  {
+                    target: z.string().describe("A selector from the elements list."),
+                    text: z.string().describe("What should change, in one clear sentence."),
+                  },
+                  async ({ target, text }) => {
+                    send({ type: "annotate", target, text });
+                    return { content: [{ type: "text", text: "In the queue." }] };
+                  },
+                ),
+              ],
+            });
+            const run = query({
+              prompt: words(text),
+              options: {
+                model: MODEL,
+                effort: "low",
+                cwd: ROOT,
+                env: envOf(),
+                settingSources: [],
+                systemPrompt: { type: "preset", preset: "claude_code", append: SYSTEM },
+                tools: ["Read", "Grep", "Glob", "Edit", "Write"],
+                mcpServers: { page },
+                canUseTool: async (name, input) =>
+                  name.startsWith("mcp__page__") ||
+                  (["Read", "Grep", "Glob", "Edit", "Write"].includes(name) &&
+                    inside(input["file_path"] ?? input["path"]))
+                    ? { behavior: "allow", updatedInput: input }
+                    : {
+                        behavior: "deny",
+                        message: "Only files in this repository, and no commands.",
+                      },
+                ...(session === undefined ? {} : { resume: session }),
+              },
+            });
+            let finish = () => undefined as void;
+            running = { query: run, ended: new Promise<void>((done) => (finish = done)) };
+            mine();
+            send({ type: "status", text: "Thinking" });
+            try {
+              for await (const message of run) {
+                if (session !== message.session_id) {
+                  session = message.session_id;
+                  log.info(`workshop agent: session ${session} (claude --resume ${session})`);
+                }
+                if (message.type === "assistant")
+                  for (const block of message.message.content)
+                    if (block.type === "tool_use") {
+                      const text = doing(block.name, block.input as Record<string, unknown>);
+                      if (text !== undefined) send({ type: "status", text });
+                    }
+                if (message.type === "result")
+                  send(
+                    message.subtype === "success"
+                      ? { type: "done", text: message.result.trim() }
+                      : { type: "failed", why: "Stopped" },
+                  );
               }
-              if (message.type === "assistant")
-                for (const block of message.message.content)
-                  if (block.type === "tool_use") {
-                    const text = doing(block.name, block.input as Record<string, unknown>);
-                    if (text !== undefined) send({ type: "status", text });
-                  }
-              if (message.type === "result")
-                send(
-                  message.subtype === "success"
-                    ? { type: "done", text: message.result.trim() }
-                    : { type: "failed", why: "Stopped" },
-                );
+            } catch (error) {
+              log.warn(`workshop agent: ${String(error)}`);
+              send({ type: "failed", why: "The agent stopped" });
+            } finally {
+              for (const [id, done] of watching) {
+                done("Stopped.");
+                watching.delete(id);
+              }
+              running = undefined;
+              finish();
+              res.end();
             }
-          } catch (error) {
+          })
+          .catch((error: unknown) => {
+            // Nothing that goes wrong with one request stops the dev server.
             log.warn(`workshop agent: ${String(error)}`);
-            send({ type: "failed", why: "The agent stopped" });
-          } finally {
-            for (const [id, done] of watching) {
-              done("Stopped.");
-              watching.delete(id);
-            }
-            running = undefined;
-            finish();
+            if (!res.headersSent) res.statusCode = 500;
             res.end();
-          }
-        });
+          });
       });
     },
   };

@@ -248,12 +248,11 @@ export function Board({
             ))}
           </span>
           <span
-            className="rounded px-2 py-0.5 text-[10px] font-medium text-white transition-colors"
-            style={{ background: count >= enough ? "#4a6cf7" : "#c9c9d1" }}
+            className="w-16"
+            style={count >= enough ? { color: "#1f1f24", fontWeight: 500 } : { color: "#8e8e98" }}
           >
-            Send
+            {count >= enough ? "can send" : "waits"}
           </span>
-          <span className="w-16">{count >= enough ? "can send" : "waits"}</span>
         </span>
       ))}
     </span>

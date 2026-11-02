@@ -26,6 +26,7 @@ import {
   current,
   done,
   isSettled,
+  remarkOf,
   left,
   order,
   seen,
@@ -83,6 +84,8 @@ export interface PanelProps {
   readonly eta: number | undefined;
   readonly composer: Composer | undefined;
   readonly toast: readonly string[];
+  readonly leftOpen?: string | undefined;
+  readonly onSettleOpen?: () => void;
   /** Point and talk: what he said last, and how far the agent's answer is. */
   readonly exchange?: Line | undefined;
   readonly ship: Ship | undefined;
@@ -140,9 +143,26 @@ const button =
 const ghost = `${button} text-dt-muted enabled:hover:bg-dt-raised enabled:hover:text-dt-text`;
 const primary = `${button} bg-dt-accent pr-2 pl-3 text-white enabled:hover:brightness-110`;
 
+interface Gone {
+  readonly remark: Remark;
+  readonly settled: boolean;
+  readonly back: boolean;
+}
+
 export function Panel(props: PanelProps) {
   const { queue: q } = props;
   const here = current(q);
+  const [shownAt, setShownAt] = useState({ id: here?.id, at: q.at });
+  const [gone, setGone] = useState<Gone | undefined>(undefined);
+  if (shownAt.id !== here?.id) {
+    setShownAt({ id: here?.id, at: q.at });
+    const was = remarkOf(q, shownAt.id);
+    setGone(
+      was === undefined || here === undefined
+        ? undefined
+        : { remark: was, settled: props.toast.includes(was.id), back: q.at < shownAt.at },
+    );
+  }
   const forward = ahead(q).some((item) => item.kind === "remark");
   const shipping = done(q) && props.ship !== undefined;
   return (
@@ -157,18 +177,61 @@ export function Panel(props: PanelProps) {
       )}
     >
       <Header {...props} />
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
         {shipping ? (
           <Shipping ship={props.ship} onStop={props.onStop} />
         ) : here === undefined ? (
           <Idle queue={q} eta={props.eta} />
         ) : (
-          <RemarkView key={here.id} {...props} remark={here} />
+          <div
+            key={here.id}
+            className={cx(
+              gone !== undefined &&
+                (gone.back ? "motion-safe:animate-dt-in-back" : "motion-safe:animate-dt-in-next"),
+              gone?.settled === true && "[animation-delay:300ms]",
+            )}
+          >
+            <RemarkView {...props} remark={here} />
+          </div>
+        )}
+        {gone !== undefined && here !== undefined && !shipping && (
+          <div
+            key={`${gone.remark.id}-gone`}
+            aria-hidden
+            onAnimationEnd={(e) => {
+              if (e.target === e.currentTarget) setGone(undefined);
+            }}
+            className={cx(
+              "pointer-events-none absolute inset-x-0 top-0 bg-dt-panel motion-reduce:hidden",
+              gone.settled
+                ? "animate-dt-settled"
+                : gone.back
+                  ? "animate-dt-out-back"
+                  : "animate-dt-out-next",
+            )}
+          >
+            <RemarkView
+              {...props}
+              walk={undefined}
+              peek={undefined}
+              state={undefined}
+              remark={gone.remark}
+            />
+            {gone.settled && (
+              <span className="absolute inset-0 grid place-items-center">
+                <span className="grid size-12 animate-dt-stamp place-items-center rounded-full bg-dt-good text-dt-ground shadow-dt-float">
+                  <Check className="size-6" strokeWidth={3} aria-hidden />
+                </span>
+              </span>
+            )}
+          </div>
         )}
       </div>
       {props.composer === undefined &&
         (props.toast.length > 0 ? (
           <Toast count={props.toast.length} onUndo={props.onUndo} />
+        ) : props.leftOpen !== undefined ? (
+          <LeftOpen onSettle={props.onSettleOpen} />
         ) : props.exchange !== undefined ? (
           <ExchangeLine line={props.exchange} />
         ) : (
@@ -374,13 +437,14 @@ const KEYS = [
   ["←  →", "The variant before, after"],
   ["↑  ↓", "The state before, after"],
   ["a", "Annotate what shows"],
-  ["⌥⌘ held", "Point, draw and talk"],
+  ["⌃⌃", "Point, draw and talk; ⌃ again sends"],
   ["1–9", "Preview a variant or an answer"],
   ["Enter", "Keep what the preview shows"],
   ["y", "Settle now and go on"],
   ["u", "Undo the last settle"],
   ["b held", "An answer: the page as it was"],
   ["Space", "Show me, pause, go on"],
+  ["r", "Show me again from the start"],
   ["m", "Mute the voice"],
   ["Esc", "Pause the cursor; again, stop it"],
 ] as const;
@@ -999,6 +1063,24 @@ function Toast({ count, onUndo }: { readonly count: number; readonly onUndo: () 
       >
         Undo
       </button>
+    </div>
+  );
+}
+
+function LeftOpen({ onSettle }: { readonly onSettle: (() => void) | undefined }) {
+  return (
+    <div className="flex h-10 shrink-0 animate-dt-fade items-center gap-2.5 border-t border-dt-line px-4 text-[12px]">
+      <span className="size-4 rounded-full border-[1.5px] border-dashed border-dt-faint" />
+      <span className="flex-1">Not tried yet, so it comes again</span>
+      {onSettle !== undefined && (
+        <button
+          type="button"
+          className="-mr-2 rounded-dt-control px-2 py-1 text-dt-muted hover:bg-dt-raised hover:text-dt-text"
+          onClick={onSettle}
+        >
+          Settle
+        </button>
+      )}
     </div>
   );
 }

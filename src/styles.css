@@ -25,6 +25,12 @@
   --animate-dt-fade: dt-fade 150ms ease-out;
   --animate-dt-left: dt-left 250ms ease-out both;
   --animate-dt-draw: dt-draw 140ms ease-out both;
+  --animate-dt-settled: dt-settled 560ms ease-in both;
+  --animate-dt-stamp: dt-stamp 560ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  --animate-dt-out-next: dt-out-next 220ms ease-in both;
+  --animate-dt-out-back: dt-out-back 220ms ease-in both;
+  --animate-dt-in-next: dt-in-next 260ms ease-out both;
+  --animate-dt-in-back: dt-in-back 260ms ease-out both;
   --shadow-dt-float: 0 18px 48px -12px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 
@@ -90,6 +96,62 @@
   }
   to {
     stroke-dashoffset: 0;
+  }
+}
+
+@keyframes dt-settled {
+  0%,
+  45% {
+    opacity: 1;
+    translate: 0;
+  }
+  100% {
+    opacity: 0;
+    translate: -32px 0;
+  }
+}
+
+@keyframes dt-stamp {
+  0% {
+    opacity: 0;
+    scale: 0.4;
+  }
+  30%,
+  70% {
+    opacity: 1;
+    scale: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 0.9;
+  }
+}
+
+@keyframes dt-out-next {
+  to {
+    opacity: 0;
+    translate: -24px 0;
+  }
+}
+
+@keyframes dt-out-back {
+  to {
+    opacity: 0;
+    translate: 24px 0;
+  }
+}
+
+@keyframes dt-in-next {
+  from {
+    opacity: 0;
+    translate: 24px 0;
+  }
+}
+
+@keyframes dt-in-back {
+  from {
+    opacity: 0;
+    translate: -24px 0;
   }
 }
 

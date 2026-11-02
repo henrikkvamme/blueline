@@ -1,5 +1,6 @@
 import type { Beat, Shape } from "../../queue/queue";
 import { MotionPlayer } from "../../vendor/cua-cursor-motion.js";
+import { clean, lookOf } from "./markup";
 import { fetchLine, hush, say } from "./voice";
 
 /*
@@ -93,6 +94,7 @@ export interface Snapshot {
   readonly run: number;
   /** Whether the cursor is on the screen. */
   readonly shown: boolean;
+  readonly skipped: boolean;
 }
 
 export interface Settings {
@@ -160,38 +162,8 @@ const IDLE: Snapshot = {
   mock: undefined,
   run: 0,
   shown: false,
+  skipped: false,
 };
-
-/** The look of the element that a mock-up copies, so it reads as the page's own. */
-const LOOK = [
-  "font-family",
-  "font-size",
-  "font-weight",
-  "line-height",
-  "letter-spacing",
-  "color",
-  "background-color",
-  "border-radius",
-  "padding",
-  "display",
-  "align-items",
-  "justify-content",
-  "gap",
-  "text-align",
-] as const;
-
-/** Markup from the agent, with no scripts, frames or handlers: it only shows. */
-function clean(html: string) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  for (const bad of doc.body.querySelectorAll("script, iframe, object, embed, link, style, meta"))
-    bad.remove();
-  for (const element of doc.body.querySelectorAll("*"))
-    // A copy of the names: removing from the live list as it is read would skip some.
-    for (const name of element.getAttributeNames())
-      if (/^on/i.test(name) || /javascript:/i.test(element.getAttribute(name) ?? ""))
-        element.removeAttribute(name);
-  return doc.body.innerHTML;
-}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
@@ -317,7 +289,9 @@ export class Walker {
 
   /** The reviewer skips his turn. */
   skip() {
-    this.turned?.();
+    if (this.turned === undefined) return;
+    this.set({ ...this.snap, skipped: true });
+    this.turned();
   }
 
   /** The page that shows; a change while the walk runs stops it. */
@@ -510,8 +484,7 @@ export class Walker {
 
   /** Hides the element, and takes its look for the mock-up that shows in its place. */
   private mockUp(element: Element, replace: NonNullable<Beat["replace"]>) {
-    const computed = getComputedStyle(element);
-    const style = Object.fromEntries(LOOK.map((name) => [name, computed.getPropertyValue(name)]));
+    const style = lookOf(element);
     if (element instanceof HTMLElement) {
       const was = element.style.visibility;
       element.style.visibility = "hidden";

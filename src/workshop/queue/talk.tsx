@@ -6,8 +6,10 @@ import type { Drawn, Pointed } from "../../queue/queue";
 import { hear, type Word } from "./voice";
 
 /*
- * Point and talk, as Clicky's push-to-talk: hold ⌥⌘, point and say what should change. The
- * press stops the agent's walk and its voice at once. While the keys are held the cursor
+ * Point and talk, as Clicky's: press Control twice, point and say what should change. Hold
+ * the second press to talk while it is held, or let go of it at once to talk hands free until
+ * the next Control; Escape drops what he said. Option stays free for the Mac's own dictation.
+ * The press stops the agent's walk and its voice at once. While he talks the cursor
  * leaves ink, which fades behind it; a loop that closes stays, and snaps to the element it
  * surrounds. The agent's waveform by the cursor shows that it listens, and its spinner that it
  * thinks, in the agent's colour: it stands where its cursor would. Let
@@ -54,6 +56,8 @@ export type Talk =
 /** A hold shorter than this is a slip, not words. */
 const SHORTEST = 300;
 
+const TAPS = { tap: 250, between: 400, hold: 300 } as const;
+
 /** How long the ink stays behind the cursor, in ms. */
 const INK = 900;
 
@@ -92,39 +96,48 @@ export function pointedWhile(words: readonly Word[], trail: Trail): readonly Poi
 const pathOf = (points: readonly Point[]) =>
   points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(0)} ${p.y.toFixed(0)}`).join(" ");
 
+/** Whether a point is inside a closed stroke, by the even-odd rule. */
+function inside(x: number, y: number, ring: readonly Point[]) {
+  let within = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    if (a === undefined || b === undefined) continue;
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) within = !within;
+  }
+  return within;
+}
+
+/** The share of an element's box that a loop encloses, from a grid of points on it. */
+function enclosed(r: DOMRect, ring: readonly Point[]) {
+  let hits = 0;
+  for (let i = 0; i < 5; i++)
+    for (let j = 0; j < 5; j++)
+      if (inside(r.left + ((i + 0.5) * r.width) / 5, r.top + ((j + 0.5) * r.height) / 5, ring))
+        hits++;
+  return hits / 25;
+}
+
 /**
- * The element a stroke is about: the one whose box matches the stroke's box best, so a loop
- * round the status takes the status and not the card it sits in. A stroke that matches none
- * well, such as a short line, takes the element just above its middle, as an underline does.
+ * The element a loop is about: the largest one that the loop encloses most of, so a loop
+ * round the status takes the status, and a loop round the whole form takes the form. A hand
+ * draws wide, so the loop's own size counts for nothing. When it encloses none, the one it
+ * encloses the most of, if that is much; else none, and the agent sees the loop in its image.
  */
 function snap(points: readonly Point[]) {
-  const xs = points.map((p) => p.x - scrollX);
-  const ys = points.map((p) => p.y - scrollY);
-  const box = {
-    left: Math.min(...xs),
-    top: Math.min(...ys),
-    right: Math.max(...xs),
-    bottom: Math.max(...ys),
-  };
-  const area = (w: number, h: number) => Math.max(0, w) * Math.max(0, h);
-  const own = area(box.right - box.left, box.bottom - box.top);
-  let best: { target: string; box: Box; score: number } | undefined;
+  const ring = points.map((p) => ({ x: p.x - scrollX, y: p.y - scrollY }));
+  let best: { target: string; size: number; share: number } | undefined;
+  let most: { target: string; share: number } | undefined;
   for (const el of document.querySelectorAll("[data-q]")) {
     const r = el.getBoundingClientRect();
-    const overlap = area(
-      Math.min(r.right, box.right) - Math.max(r.left, box.left),
-      Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top),
-    );
-    const score = overlap / (own + r.width * r.height - overlap);
-    if (score > (best?.score ?? 0.15))
-      best = {
-        target: selectorOf(el.getAttribute("data-q") ?? ""),
-        box: { left: r.left, top: r.top, width: r.width, height: r.height },
-        score,
-      };
+    if (r.width === 0 || r.height === 0) continue;
+    const share = enclosed(r, ring);
+    const target = selectorOf(el.getAttribute("data-q") ?? "");
+    if (share >= 0.6 && r.width * r.height > (best?.size ?? 0))
+      best = { target, size: r.width * r.height, share };
+    if (share > (most?.share ?? 0.3)) most = { target, share };
   }
-  if (best !== undefined) return { target: best.target, box: best.box };
-  return pointed((box.left + box.right) / 2, box.top - 8);
+  return { target: best?.target ?? most?.target };
 }
 
 /** The element of the app under a point: its target, and where it is. */
@@ -224,6 +237,11 @@ export function usePointAndTalk({
     let level = 0;
     let frame = 0;
     let end: (() => void) | undefined;
+    let free = false;
+    let dropped = false;
+    let clean = false;
+    let downAt = 0;
+    let tapAt = 0;
     let failing = 0;
     let trail: { target: string | undefined; at: number }[] = [];
     let heardFrom = 0;
@@ -257,6 +275,7 @@ export function usePointAndTalk({
 
     const start = async () => {
       held = true;
+      dropped = false;
       since = Date.now();
       trail = [];
       heardFrom = 0;
@@ -300,6 +319,10 @@ export function usePointAndTalk({
       };
       recorder.onstop = () => {
         release();
+        if (dropped) {
+          dropped = false;
+          return setTalk(IDLE);
+        }
         const drawn = loops.map((l) => ({ path: pathOf(l.points), target: l.target }));
         if (Date.now() - since < SHORTEST) return setTalk(IDLE);
         setTalk({ phase: "thinking", strokes: strokes(), at: mouse });
@@ -337,14 +360,45 @@ export function usePointAndTalk({
     };
 
     const onDown = (e: KeyboardEvent) => {
-      const chord = e.altKey && e.metaKey && (e.key === "Alt" || e.key === "Meta");
-      if (chord && !held && !e.repeat) {
-        e.preventDefault();
-        void start();
-      } else if (held && e.key !== "Alt" && e.key !== "Meta") stop();
+      if (e.key === "Control") {
+        if (e.repeat) return;
+        if (held) {
+          clean = false;
+          if (free) {
+            e.preventDefault();
+            stop();
+          }
+          return;
+        }
+        clean = !e.altKey && !e.metaKey && !e.shiftKey;
+        downAt = Date.now();
+        if (clean && downAt - tapAt < TAPS.between) {
+          e.preventDefault();
+          tapAt = 0;
+          clean = false;
+          free = false;
+          void start();
+        }
+        return;
+      }
+      clean = false;
+      tapAt = 0;
+      if (!held) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        dropped = true;
+        stop();
+      } else if (!free) stop();
     };
     const onUp = (e: KeyboardEvent) => {
-      if (e.key === "Alt" || e.key === "Meta") stop();
+      if (e.key !== "Control") return;
+      if (held) {
+        if (!free && Date.now() - since < TAPS.hold) free = true;
+        else if (!free) stop();
+        return;
+      }
+      tapAt = clean && Date.now() - downAt < TAPS.tap ? Date.now() : 0;
     };
     const onMove = (e: PointerEvent) => {
       mouse = { x: e.clientX, y: e.clientY };

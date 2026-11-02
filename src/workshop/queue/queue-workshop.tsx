@@ -16,6 +16,9 @@ import {
   unsettle,
   waiting,
   type Beat,
+  isTried,
+  settleOne,
+  walked,
   type Moment,
   type Move,
   type Queue,
@@ -111,6 +114,7 @@ function Live() {
   const [state, setState] = useState<State>(load);
   const [composer, setComposer] = useState<Composer | undefined>(undefined);
   const [toast, setToast] = useState<readonly string[]>([]);
+  const [leftOpen, setLeftOpen] = useState<string | undefined>(undefined);
   const [shipAt, setShipAt] = useState<number | undefined>(undefined);
   const [clock, setClock] = useState(Date.now());
   const [seen, setSeen] = useState(false);
@@ -151,13 +155,31 @@ function Live() {
   const page: Path = visit ?? (here?.page as Path | undefined) ?? "/request";
   const pageNow = useRef(page);
   pageNow.current = page;
+  const remarkRun = useRef<{ readonly run: number; readonly id: string } | undefined>(undefined);
+  const walkRemark = (id: string, beats: readonly Beat[], path: string) => {
+    walker.start(beats, path);
+    remarkRun.current = { run: walker.snapshot().run, id };
+  };
+  useEffect(() => {
+    const off = walker.subscribe(() => {
+      const snap = walker.snapshot();
+      const mine = remarkRun.current;
+      if (snap.phase !== "done" || snap.skipped || mine?.run !== snap.run) return;
+      remarkRun.current = undefined;
+      setState((s) => ({ ...s, queue: walked(s.queue, mine.id) }));
+    });
+    return () => {
+      off();
+    };
+  }, [walker]);
   // Each remark walks when it shows, with walks on; its preview ends when it goes.
   useEffect(() => {
     setPeek(undefined);
     setShown(undefined);
     setBefore(false);
     setVisit(undefined);
-    if (guide.on && here?.walk !== undefined) walker.start(here.walk, here.page);
+    if (guide.on && here?.walk !== undefined && !isTried(q, here))
+      walkRemark(here.id, here.walk, here.page);
     else walker.stop();
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new remark starts a walk, not a new setting
   }, [here?.id, walker]);
@@ -166,7 +188,7 @@ function Live() {
   const toggleWalk = () => {
     if (walker.active()) walker.pause();
     else if (walk.phase === "paused" || walk.phase === "lost") walker.resume();
-    else if (here?.walk !== undefined) walker.start(here.walk, page);
+    else if (here?.walk !== undefined) walkRemark(here.id, here.walk, page);
   };
 
   useEffect(() => localStorage.setItem(KEY, JSON.stringify(state)), [state]);
@@ -204,7 +226,20 @@ function Live() {
       exchange?.annotation !== undefined && answerOf(q, exchange.annotation) === undefined;
     if (exchange !== undefined && exchange.tone !== "busy" && !open) setExchange(undefined);
     if (moved.settled.length > 0) setToast(moved.settled);
+    setLeftOpen(moved.untried);
     setState((s) => ({ ...s, queue: moved.queue, stopped: false }));
+  };
+  useEffect(() => {
+    if (leftOpen === undefined) return;
+    const id = setTimeout(() => setLeftOpen(undefined), 5000);
+    return () => clearTimeout(id);
+  }, [leftOpen]);
+  const settleOpen = () => {
+    if (leftOpen === undefined) return;
+    const moved = settleOne(q, leftOpen);
+    setToast(moved.settled);
+    setLeftOpen(undefined);
+    setState((s) => ({ ...s, queue: moved.queue }));
   };
   useEffect(() => {
     if (toast.length === 0) return;
@@ -252,7 +287,7 @@ function Live() {
     });
   };
 
-  // Point and talk: ⌥⌘ held stops the walk. His words go to the agent, with what he pointed
+  // Point and talk: ⌃⌃ stops the walk. His words go to the agent, with what he pointed
   // at and what the page shows, and the agent answers on the page with its cursor. With no
   // agent, the script puts his words in the queue and says it is on it.
   const talk = usePointAndTalk({
@@ -453,6 +488,7 @@ function Live() {
       else if (e.key === "u" && toast.length > 0) undo();
       else if (e.key === "a" && here !== undefined) open(here.target);
       else if (e.key === " ") toggleWalk();
+      else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);
       else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
       // A number previews; Enter keeps what it previews.
       else if (n >= 1 && n <= values.length) setPeek(values[n - 1]);
@@ -541,6 +577,8 @@ function Live() {
         eta={eta}
         composer={composer}
         toast={toast}
+        leftOpen={leftOpen}
+        onSettleOpen={settleOpen}
         exchange={line}
         ship={ship}
         onNext={() => move(next)}
