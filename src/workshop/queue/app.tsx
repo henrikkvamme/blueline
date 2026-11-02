@@ -64,7 +64,7 @@ export function AppPage({
   };
   if (path === "/approvers")
     return (
-      <section className={card}>
+      <section data-q="page" className={card}>
         <h1>Approvers</h1>
         <div data-q="approver-list" className="flex flex-col gap-2">
           {(added ? [...APPROVERS, ADDED] : APPROVERS).map((a, i) => (
@@ -100,7 +100,7 @@ export function AppPage({
     );
   if (path === "/sent")
     return (
-      <section className={card}>
+      <section data-q="page" className={card}>
         <h1>Sent for approval</h1>
         <p data-q="sent" className="text-[14px] text-[#5b5b66]">
           {words("sent")} Ingrid Berg gets it once Ola Hansen approves.
@@ -108,7 +108,7 @@ export function AppPage({
       </section>
     );
   return (
-    <section className={card}>
+    <section data-q="page" className={card}>
       <div className="flex flex-col gap-2">
         <span className="text-[12px] font-medium tracking-wide text-[#8a8a94] uppercase">
           A made-up page

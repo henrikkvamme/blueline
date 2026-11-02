@@ -19,6 +19,7 @@ export type Path = (typeof PAGES)[number]["path"];
 
 /** The elements of the made-up app that a remark or an annotation can be about. */
 export const TARGETS: Readonly<Record<string, string>> = {
+  page: "the page",
   title: "the title",
   asker: "who asked",
   status: "the status",

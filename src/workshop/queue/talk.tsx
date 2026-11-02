@@ -156,9 +156,12 @@ function snap(points: readonly Point[]) {
   return { target: best?.target ?? most?.target };
 }
 
+/** A part his mouse can be on: over the page's background it is on no part. */
+const PART = '[data-q]:not([data-q="page"])';
+
 /** The element of the app under a point: its target, and where it is. */
 function pointed(x: number, y: number) {
-  const el = document.elementFromPoint(x, y)?.closest("[data-q]");
+  const el = document.elementFromPoint(x, y)?.closest(PART);
   if (el === null || el === undefined) return { target: undefined, box: undefined };
   const r = el.getBoundingClientRect();
   return {
