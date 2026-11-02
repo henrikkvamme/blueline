@@ -166,6 +166,42 @@ const IDLE: Snapshot = {
   skipped: false,
 };
 
+const SIDES = ["top", "right", "bottom", "left"] as const;
+
+const COPIED = [
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "line-height",
+  "letter-spacing",
+  "text-transform",
+  "text-align",
+  "white-space",
+  "color",
+  "background-color",
+  "box-sizing",
+  "display",
+  "flex-direction",
+  "flex-wrap",
+  "align-items",
+  "justify-content",
+  "gap",
+  "opacity",
+  ...SIDES.flatMap((side) => [
+    `padding-${side}`,
+    `border-${side}-width`,
+    `border-${side}-style`,
+    `border-${side}-color`,
+  ]),
+  "border-top-left-radius",
+  "border-top-right-radius",
+  "border-bottom-left-radius",
+  "border-bottom-right-radius",
+] as const;
+
+const FIXED = new Set(["INPUT", "TEXTAREA", "SELECT", "IMG", "svg", "BUTTON"]);
+
 function swappedCopy(
   element: Element,
   swap: readonly { readonly from: string; readonly to: string }[],
@@ -174,6 +210,17 @@ function swappedCopy(
   if (!(copy instanceof HTMLElement)) return undefined;
   const change = (words: string) =>
     swap.reduce((text, { from, to }) => (from === "" ? text : text.split(from).join(to)), words);
+  const originals = [element, ...element.querySelectorAll("*")];
+  [copy, ...copy.querySelectorAll("*")].forEach((part, i) => {
+    const was = originals[i];
+    if (!(part instanceof HTMLElement || part instanceof SVGElement) || was === undefined) return;
+    const look = getComputedStyle(was);
+    for (const name of COPIED) part.style.setProperty(name, look.getPropertyValue(name));
+    if (FIXED.has(part.tagName)) {
+      part.style.setProperty("width", look.getPropertyValue("width"));
+      part.style.setProperty("height", look.getPropertyValue("height"));
+    }
+  });
   const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
     node.textContent = change(node.textContent ?? "");
