@@ -131,6 +131,8 @@ export interface PanelProps {
   readonly beat?: { readonly at: number; readonly of: number } | undefined;
   /** Pause the walk, go on with it, or walk again. */
   readonly onWalk?: () => void;
+  /** He holds Space: the walk plays at double pace. */
+  readonly fast?: boolean;
   readonly voice?: boolean;
   readonly onVoice?: () => void;
   /** Docked at the page's right edge, as the real panel is, or in the flow of the states
@@ -675,7 +677,17 @@ function WalkControls(props: PanelProps & { readonly phase: Phase }) {
           ))}
         </span>
       )}
-      <button type="button" onClick={props.onWalk} className={control}>
+      {props.fast === true && running && (
+        <span className="animate-dt-fade text-[11px] font-semibold text-dt-accent tabular-nums">
+          2×
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={props.onWalk}
+        className={control}
+        title="Space: tap to pause or go on, hold to play at double pace"
+      >
         {running ? (
           <>
             <Pause className="size-3.5" aria-hidden />

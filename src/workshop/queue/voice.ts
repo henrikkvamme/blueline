@@ -33,6 +33,19 @@ export function fetchLine(text: string, voice: string): Promise<string | undefin
 
 let playing: HTMLAudioElement | undefined;
 
+/** How fast the voice speaks: 1, or 2 while he holds Space. */
+let rate = 1;
+
+/** Speaks faster or at the normal pace, from now: the line that plays changes at once. The
+ * pitch stays his. */
+export function setRate(to: number) {
+  rate = to;
+  if (playing !== undefined) playing.playbackRate = to;
+}
+
+/** How fast the voice speaks now. */
+export const rateNow = () => rate;
+
 /** Stops the line that plays. */
 export function hush() {
   playing?.pause();
@@ -46,6 +59,7 @@ export async function say(text: string, voice: string): Promise<boolean> {
   const url = await fetchLine(text, voice);
   if (url === undefined) return false;
   const audio = new Audio(url);
+  audio.playbackRate = rate;
   playing = audio;
   return new Promise((resolve) => {
     const end = () => resolve(true);

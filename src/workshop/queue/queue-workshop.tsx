@@ -32,7 +32,7 @@ import { PANEL } from "../../ui/geometry";
 import { Panel, SHIP_SECONDS, type Composer, type Ship } from "./panel";
 import { AppNav, AppPage, Board } from "./app";
 import { Guide, GuideToggle } from "./guide";
-import { VOICES } from "./voice";
+import { setRate, VOICES } from "./voice";
 import { Walker, type Preview } from "./walker";
 import { Strokes, TalkView, usePointAndTalk } from "./talk";
 import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
@@ -198,12 +198,48 @@ function Live() {
     root["walk"] = walk.phase;
     root["walkTurn"] = walker.turnTarget() ?? "";
   }, [walker, walk]);
+  /**
+   * Space, as in a video player: a tap pauses the walk or goes on with it, and a hold plays it
+   * at double pace while he holds it, the voice and the cursor both. A hold is a press of more
+   * than a quarter of a second.
+   */
+  const [fast, setFast] = useState(false);
+  const spaceRef = useRef({ timer: 0, fast: false, down: false });
+  const toggleRef = useRef(() => {});
+  const space = {
+    down: () => {
+      const s = spaceRef.current;
+      s.down = true;
+      s.timer = window.setTimeout(() => {
+        s.fast = true;
+        setRate(2);
+        setFast(true);
+      }, 250);
+    },
+  };
+  useEffect(() => {
+    const up = (e: KeyboardEvent) => {
+      const s = spaceRef.current;
+      if (e.key !== " " || !s.down) return;
+      s.down = false;
+      window.clearTimeout(s.timer);
+      if (s.fast) {
+        s.fast = false;
+        setRate(1);
+        setFast(false);
+      } else toggleRef.current();
+    };
+    window.addEventListener("keyup", up);
+    return () => window.removeEventListener("keyup", up);
+  }, []);
+
   /** g: pause a walk, go on with it, or walk the remark again. */
   const toggleWalk = () => {
     if (walker.active()) walker.pause();
     else if (walk.phase === "paused" || walk.phase === "lost") walker.resume();
     else if (here?.walk !== undefined) walkRemark(here.id, here.walk, page);
   };
+  toggleRef.current = toggleWalk;
 
   useEffect(() => localStorage.setItem(KEY, JSON.stringify(state)), [state]);
 
@@ -645,8 +681,10 @@ function Live() {
       else if (e.key === "y") move(settleNow);
       else if (e.key === "u") undo();
       else if (e.key === "a" && here !== undefined) open(here.target);
-      else if (e.key === " ") toggleWalk();
-      else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);
+      // Space: a tap pauses or goes on, on its release; a hold speaks at double pace.
+      else if (e.key === " ") {
+        if (!e.repeat) space.down();
+      } else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);
       else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
       else if (e.key === "w" && answered_ && exchange.wrong === undefined) {
         e.preventDefault();
@@ -733,6 +771,7 @@ function Live() {
         before={before}
         onBefore={setBefore}
         onWalk={toggleWalk}
+        fast={fast}
         voice={guide.voice}
         onVoice={() => setGuide((g) => ({ ...g, voice: !g.voice }))}
         queue={q}

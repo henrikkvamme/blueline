@@ -1,7 +1,7 @@
 import type { Beat, Shape } from "../../queue/queue";
 import { MotionPlayer } from "../../vendor/cua-cursor-motion.js";
 import { clean } from "./markup";
-import { fetchLine, hush, say } from "./voice";
+import { fetchLine, hush, rateNow, say } from "./voice";
 
 /*
  * The agent's cursor as a controller: it walks a remark's beats, and the reviewer always wins.
@@ -579,7 +579,8 @@ export class Walker {
         },
         framed,
       );
-      const read = () => sleep(900 + beat.say.split(/\s+/).length * 260);
+      // With no voice, the time to read the line; a held key makes it shorter too.
+      const read = () => sleep((900 + beat.say.split(/\s+/).length * 260) / rateNow());
       // A voice that plays sets the pace. With none, or one that fails, the note shows the
       // line and the time to read it does.
       const said =
