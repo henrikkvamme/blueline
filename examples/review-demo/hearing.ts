@@ -10,6 +10,11 @@ import { type Part, terra } from "./terra.ts";
  * hears only when Terra fails. In the evals Terra was right in 100% of cases and Haiku in 81
  * to 88%, and Haiku was slower (2.0 s to the first word, Terra 1.4 s), so a race between the
  * two gained nothing.
+ *
+ * Two Terras hear each time, each on its own warm thread, and the first word wins: the other
+ * stops at once. Terra's first word is fast most times but slow some times, and the two are
+ * seldom slow together. In an A/B on fry (24 hearings each) the race brought p90 from 2.1 s to
+ * 1.6 s, at the cost of a second turn on the plan.
  */
 
 /** The model that hears him when Terra cannot, with no thinking and no tools. */
@@ -137,30 +142,67 @@ export function haiku() {
 export type Ear = "terra" | "haiku";
 
 export interface EarsOptions {
-  /** Where Codex runs. */
-  readonly cwd: string;
   /** Which model hears: Terra with Haiku as backup, or Haiku alone. */
   readonly use?: "terra" | "haiku";
   readonly warn?: (why: string) => void;
+}
+
+/** How many Terras race for each hearing. */
+const RACE = 2;
+
+/**
+ * Asks each Terra, and streams the line of the first one that says a word; the others stop.
+ * Rejects only when all of them fail before a word.
+ */
+async function race(
+  terras: readonly ReturnType<typeof terra>[],
+  input: readonly Part[],
+  signal: AbortSignal,
+  on: (line: string) => void,
+) {
+  const stops = terras.map(() => new AbortController());
+  const stopAll = () => {
+    for (const stop of stops) stop.abort();
+  };
+  signal.addEventListener("abort", stopAll, { once: true });
+  let winner: number | undefined;
+  try {
+    const runs = await Promise.allSettled(
+      terras.map((one, i) =>
+        one.hear(input, stops[i]?.signal ?? signal, (line) => {
+          if (winner === undefined) {
+            winner = i;
+            for (const [j, stop] of stops.entries()) if (j !== i) stop.abort();
+          }
+          if (winner === i) on(line);
+        }),
+      ),
+    );
+    if (winner !== undefined || signal.aborted) return;
+    const failed = runs.find((run) => run.status === "rejected");
+    throw failed?.reason ?? new Error("Terra said nothing");
+  } finally {
+    signal.removeEventListener("abort", stopAll);
+  }
 }
 
 /**
  * The ears. `hear` streams the line: `on` gets the line so far, and who says it, as its words
  * come. The text is the page's JSON, as the agent gets it.
  */
-export function ears({ cwd, use = "terra", warn = () => undefined }: EarsOptions) {
-  const first = terra(HEAR, cwd);
+export function ears({ use = "terra", warn = () => undefined }: EarsOptions = {}) {
+  const terras = Array.from({ length: RACE }, () => terra(HEAR));
   const backup = haiku();
   return {
     ready: () => {
-      if (use === "terra") first.ready();
+      if (use === "terra") for (const one of terras) one.ready();
       else backup.ready();
     },
     hear: async (text: string, signal: AbortSignal, on: (line: string, ear: Ear) => void) => {
       if (use === "haiku") return backup.hear(text, signal, (line) => on(line, "haiku"));
       let said = false;
       try {
-        await first.hear(parts(text), signal, (line) => {
+        await race(terras, parts(text), signal, (line) => {
           said = true;
           on(line, "terra");
         });
@@ -171,7 +213,7 @@ export function ears({ cwd, use = "terra", warn = () => undefined }: EarsOptions
       }
     },
     close: () => {
-      first.close();
+      for (const one of terras) one.close();
       backup.close();
     },
   };

@@ -239,7 +239,7 @@ async function main() {
   );
   const results: Result[] = [];
   for (const how of hears) {
-    const hearing = ears({ cwd: ROOT, use: how === "haiku" ? "haiku" : "terra" });
+    const hearing = ears({ use: how === "haiku" ? "haiku" : "terra" });
     hearing.ready();
     // Let the warm thread or process start, as the dev server does before he speaks.
     await new Promise((r) => setTimeout(r, 8000));

@@ -209,7 +209,6 @@ export function agent(): Plugin {
     configureServer(server) {
       const log = server.config.logger;
       const ears = makeEars({
-        cwd: ROOT,
         warn: (why) => log.warn(`workshop agent: ${why}`),
       });
       ears.ready();

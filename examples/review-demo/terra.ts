@@ -1,4 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 /*
@@ -11,6 +14,13 @@ import { createInterface } from "node:readline";
  * thread is started and warmed with one short turn before he speaks. Each hearing is one turn
  * on it, and after a few hearings a new spare takes over, so the thread stays short. The Fast
  * tier gave no gain, so it is not used.
+ *
+ * Codex sends its tools and their instructions with every turn, for a coding agent: about 13,700
+ * input tokens for a line of twelve words. Without the tools, the skills, the permissions and
+ * the repository's AGENTS.md, it sends about 7,400, and the first word came 150 ms sooner at the
+ * median (A/B on fry, 24 hearings each). The rest is Codex's own and the user's AGENTS.md in
+ * CODEX_HOME. A second CODEX_HOME would drop that too, but it would need a copy of the sign-in,
+ * and a token refresh in the copy can sign out the real one.
  */
 
 const MODEL = "gpt-6.1-terra";
@@ -18,13 +28,49 @@ const MODEL = "gpt-6.1-terra";
 /** Hearings on one thread before a new one takes over. */
 const TURNS = 8;
 
-/** What Codex leaves out for this: no MCP servers, apps, plugins or memories. */
+/** What Codex leaves out for this: each tool and each instruction that a line does not need. */
+const OFF = [
+  "apps",
+  "plugins",
+  "memories",
+  "multi_agent",
+  "image_generation",
+  "browser_use",
+  "browser_use_external",
+  "browser_annotation_api",
+  "in_app_browser",
+  "computer_use",
+  "shell_tool",
+  "shell_snapshot",
+  "unified_exec",
+  "unified_exec_tty",
+  "view_image",
+  "sleep_tool",
+  "skill_search",
+  "tool_suggest",
+  "goals",
+  "code_mode_host",
+  "chronicle",
+  "hooks",
+  "guardian_approval",
+  "collaboration_modes",
+  "realtime_conversation",
+  "workspace_dependencies",
+  "worktrees",
+  "mentions_v2",
+  "incremental_tools",
+];
 const BARE = [
-  ["-c", "mcp_servers={}"],
-  ...["apps", "plugins", "memories", "multi_agent", "image_generation", "browser_use"].map(
-    (feature) => ["--disable", feature],
-  ),
-].flat();
+  ...[
+    "mcp_servers={}",
+    "web_search=disabled",
+    "project_doc_max_bytes=0",
+    "skills.include_instructions=false",
+    "include_permissions_instructions=false",
+    "include_environment_context=false",
+  ].flatMap((setting) => ["-c", setting]),
+  ...OFF.flatMap((feature) => ["--disable", feature]),
+];
 
 /** A part of his message to Terra: words, or an image as a data URL. */
 export type Part =
@@ -44,8 +90,12 @@ type Message = {
   readonly error?: { readonly message?: string };
 };
 
-/** The ears: `hear` streams the line; `close` stops the app-server. */
-export function terra(instructions: string, cwd: string) {
+/**
+ * The ears: `hear` streams the line; `close` stops the app-server. Codex runs in an empty
+ * folder of its own, so it reads no repository.
+ */
+export function terra(instructions: string) {
+  const cwd = mkdtempSync(join(tmpdir(), "blueline-ears-"));
   let codex: ChildProcess | undefined;
   let last = 0;
   const waiting = new Map<number, { done: (m: unknown) => void; fail: (e: Error) => void }>();
@@ -208,6 +258,7 @@ export function terra(instructions: string, cwd: string) {
       const child = codex;
       codex = undefined;
       child?.kill();
+      rmSync(cwd, { recursive: true, force: true });
     },
   };
 }

@@ -215,6 +215,11 @@ or a variant by its number.
     hearing evals Terra was right in 100% of cases and Haiku 5.5 in 81 to 88%, and Haiku
     was slower, so Haiku only answers when Codex fails. On the OpenAI API, Terra would be
     about 1 s.
+  - Two Terras race for each line, each on its own warm thread, and the first word wins.
+    Codex runs bare for them: no tools, skills, permissions or repository, so a hearing
+    sends about 7,400 input tokens, not 13,700. Against the one Terra before, over 32
+    hearings each, interleaved: 1.49 s typical against 1.62 s, and 2.1 s at worst against
+    3.0 s. Still right in 100% of cases.
   - His words stream to ElevenLabs' realtime speech to text while he speaks, with the
     names on the page as keyterms. The words come 0.22 s after he lets go, where sending
     the recording after took 0.4 to 0.8 s.
