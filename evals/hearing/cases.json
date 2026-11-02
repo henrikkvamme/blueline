@@ -1,0 +1,1214 @@
+[
+  {
+    "id": "why-grey",
+    "said": "Why is this grey?",
+    "expect": {
+      "kind": "question",
+      "gist": "why the status pill is grey"
+    },
+    "context": {
+      "said": "Why is this grey?",
+      "pointedWhileSaying": [
+        {
+          "words": "this",
+          "target": "[data-q=\"status\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "green-approved",
+    "said": "Can you make this green when the request is approved?",
+    "expect": {
+      "kind": "change",
+      "gist": "make the status green once approved"
+    },
+    "context": {
+      "said": "Can you make this green when the request is approved?",
+      "pointedWhileSaying": [
+        {
+          "words": "this",
+          "target": "[data-q=\"status\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "move-status",
+    "said": "Move the status under the title and make the amount a bit bigger.",
+    "expect": {
+      "kind": "change",
+      "gist": "move the status under the title, and make the amount bigger"
+    },
+    "context": {
+      "said": "Move the status under the title and make the amount a bit bigger.",
+      "pointedWhileSaying": [
+        {
+          "words": "the status",
+          "target": "[data-q=\"status\"]"
+        },
+        {
+          "words": "the amount",
+          "target": "[data-q=\"amount\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "what-mean",
+    "said": "What does this mean?",
+    "expect": {
+      "kind": "question",
+      "gist": "what 'In review' means"
+    },
+    "context": {
+      "said": "What does this mean?",
+      "pointedWhileSaying": [
+        {
+          "words": "this",
+          "target": "[data-q=\"status\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "smaller-title",
+    "said": "Make the title smaller.",
+    "expect": {
+      "kind": "change",
+      "gist": "make the title smaller"
+    },
+    "context": {
+      "said": "Make the title smaller.",
+      "pointedWhileSaying": [
+        {
+          "words": "the title",
+          "target": "[data-q=\"title\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "swap-buttons",
+    "said": "Swap these two.",
+    "expect": {
+      "kind": "change",
+      "gist": "swap the two approvers"
+    },
+    "context": {
+      "said": "Swap these two.",
+      "pointedWhileSaying": [
+        {
+          "words": "these",
+          "target": "[data-q=\"approvers\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "font",
+    "said": "Is this the right font?",
+    "expect": {
+      "kind": "question",
+      "gist": "whether the 'Asked by' line uses the right font"
+    },
+    "context": {
+      "said": "Is this the right font?",
+      "pointedWhileSaying": [
+        {
+          "words": "this",
+          "target": "[data-q=\"asker\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "button-label",
+    "said": "The button should say send instead.",
+    "expect": {
+      "kind": "change",
+      "gist": "change the button label to 'Send'"
+    },
+    "context": {
+      "said": "The button should say send instead.",
+      "pointedWhileSaying": [
+        {
+          "words": "the button",
+          "target": "[data-q=\"submit\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "um-filler",
+    "said": "Um, so, could we, uh, maybe hide this when there are no approvers?",
+    "expect": {
+      "kind": "change",
+      "gist": "hide the approvers list when it is empty"
+    },
+    "context": {
+      "said": "Um, so, could we, uh, maybe hide this when there are no approvers?",
+      "pointedWhileSaying": [
+        {
+          "words": "this",
+          "target": "[data-q=\"approvers\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "long-two-things",
+    "said": "I like the layout but the date here is confusing, show the actual date and put the name in bold.",
+    "expect": {
+      "kind": "change",
+      "gist": "show the real date instead of '2 days ago' and make the name bold"
+    },
+    "context": {
+      "said": "I like the layout but the date here is confusing, show the actual date and put the name in bold.",
+      "pointedWhileSaying": [
+        {
+          "words": "the date here",
+          "target": "[data-q=\"asker\"]"
+        },
+        {
+          "words": "the name",
+          "target": "[data-q=\"asker\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "where-sent",
+    "said": "Where does this go after I send it?",
+    "expect": {
+      "kind": "question",
+      "gist": "where the request goes after sending"
+    },
+    "context": {
+      "said": "Where does this go after I send it?",
+      "pointedWhileSaying": [
+        {
+          "words": "this",
+          "target": "[data-q=\"submit\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "tab-order",
+    "said": "Put the sent tab first.",
+    "expect": {
+      "kind": "change",
+      "gist": "move the Sent tab first"
+    },
+    "context": {
+      "said": "Put the sent tab first.",
+      "pointedWhileSaying": [
+        {
+          "words": "the sent tab",
+          "target": "[data-q=\"tab-sent\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "not-sure",
+    "said": "Hmm, not sure about this colour.",
+    "expect": {
+      "kind": "question",
+      "gist": "doubts the status colour; wants it looked at"
+    },
+    "context": {
+      "said": "Hmm, not sure about this colour.",
+      "pointedWhileSaying": [
+        {
+          "words": "this colour",
+          "target": "[data-q=\"status\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "norwegian-name",
+    "said": "Ingrid should be listed before Ola.",
+    "expect": {
+      "kind": "change",
+      "gist": "list Ingrid Berg before Ola Hansen"
+    },
+    "context": {
+      "said": "Ingrid should be listed before Ola.",
+      "pointedWhileSaying": [
+        {
+          "words": "Ingrid",
+          "target": "[data-q=\"approvers\"]"
+        },
+        {
+          "words": "Ola",
+          "target": "[data-q=\"approvers\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "currency",
+    "said": "Show the amount in euros too.",
+    "expect": {
+      "kind": "change",
+      "gist": "also show the amount in euros"
+    },
+    "context": {
+      "said": "Show the amount in euros too.",
+      "pointedWhileSaying": [
+        {
+          "words": "the amount",
+          "target": "[data-q=\"amount\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  },
+  {
+    "id": "why-two-days",
+    "said": "Why does it say two days ago and not the date?",
+    "expect": {
+      "kind": "question",
+      "gist": "why a relative time is shown instead of the date"
+    },
+    "context": {
+      "said": "Why does it say two days ago and not the date?",
+      "pointedWhileSaying": [
+        {
+          "words": "two days ago",
+          "target": "[data-q=\"asker\"]"
+        }
+      ],
+      "circled": [],
+      "page": "request",
+      "elements": [
+        {
+          "selector": "[data-q=\"tab-request\"]",
+          "where": "page",
+          "text": "Request",
+          "box": [32, 80, 75, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-approvers\"]",
+          "where": "page",
+          "text": "Approvers",
+          "box": [111, 80, 86, 32]
+        },
+        {
+          "selector": "[data-q=\"tab-sent\"]",
+          "where": "page",
+          "text": "Sent",
+          "box": [201, 80, 52, 32]
+        },
+        {
+          "selector": "[data-q=\"title\"]",
+          "where": "page",
+          "text": "Bonus for Kari Nordmann Asked by Ola Hansen · 2 days ago",
+          "box": [65, 187, 266, 96]
+        },
+        {
+          "selector": "[data-q=\"asker\"]",
+          "where": "page",
+          "text": "Asked by Ola Hansen · 2 days ago",
+          "box": [65, 263, 205, 20]
+        },
+        {
+          "selector": "[data-q=\"status\"]",
+          "where": "page",
+          "text": "In review",
+          "box": [65, 290, 68, 20]
+        },
+        {
+          "selector": "[data-q=\"amount\"]",
+          "where": "page",
+          "text": "Amount",
+          "box": [65, 334, 266, 65]
+        },
+        {
+          "selector": "[data-q=\"approvers\"]",
+          "where": "page",
+          "text": "Approvers Ola Hansen Director Ingrid Berg Finance",
+          "box": [65, 422, 266, 106]
+        },
+        {
+          "selector": "[data-q=\"submit\"]",
+          "where": "page",
+          "text": "Send for approval",
+          "box": [183, 552, 148, 37]
+        }
+      ]
+    }
+  }
+]

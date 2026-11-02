@@ -1,17 +1,9 @@
 import { basename, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  createSdkMcpServer,
-  type Query,
-  query,
-  type SDKUserMessage,
-  startup,
-  tool,
-  type WarmQuery,
-} from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, type Query, query, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { Plugin } from "vite";
 import { z } from "zod";
-import { type Part, terra } from "./terra";
+import { ears as makeEars, envOf, words } from "./hearing.ts";
 
 /*
  * The agent behind the workshop's point and talk, on the dev server only. `POST /__agent`
@@ -36,8 +28,8 @@ import { type Part, terra } from "./terra";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const MODEL = "claude-opus-5-5";
-/** The model that hears him when Terra cannot, with no thinking and no tools. */
-const FAST = "claude-haiku-5-5";
+/** Ms with no word from Terra before Haiku hears too; see hearing.ts. */
+const HEDGE: number | undefined = undefined;
 
 /** How long a walk may take before the agent goes on without hearing how it went. */
 const WATCH = 120_000;
@@ -165,20 +157,12 @@ The show tool returns how the walk went: whether he watched it to the end, stopp
 
 type Event =
   | { readonly type: "status"; readonly text: string }
-  | { readonly type: "heard"; readonly text: string }
+  | { readonly type: "heard"; readonly text: string; readonly ear: string }
   | { readonly type: "show"; readonly id: string; readonly beats: unknown }
   | { readonly type: "annotate"; readonly target: string; readonly text: string }
   | { readonly type: "act"; readonly id: string; readonly acts: unknown }
   | { readonly type: "done"; readonly text: string }
   | { readonly type: "failed"; readonly why: string };
-
-/** Only what the Claude Code process needs: no keys of the dev server's own. */
-function envOf() {
-  const keep = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "TERM"];
-  return Object.fromEntries(
-    keep.flatMap((k) => (process.env[k] === undefined ? [] : [[k, process.env[k] ?? ""]])),
-  );
-}
 
 /** What a tool call does, in a few words for his status line. */
 function doing(name: string, input: Record<string, unknown>) {
@@ -190,116 +174,6 @@ function doing(name: string, input: Record<string, unknown>) {
   if (name.endsWith("__act")) return undefined;
   if (name.endsWith("__show")) return undefined;
   return "Working";
-}
-
-/**
- * What the page sent, as his message: the screenshots first, each with what it is, and the
- * rest as JSON. Each loop's crop comes first, as Clicky's does: it is what he means most.
- */
-function parts(text: string): readonly Part[] {
-  const { images, ...context } = JSON.parse(text) as {
-    images?: { screen?: string; circled?: readonly string[] };
-  };
-  return [
-    ...(images?.circled ?? []).flatMap((url, i): Part[] => [
-      { type: "text", text: `Loop ${String(i + 1)}, close up: what he circled.` },
-      { type: "image", url },
-    ]),
-    ...(images?.screen === undefined
-      ? []
-      : ([
-          {
-            type: "text",
-            text: "The page and the panel as he saw them, with his strokes in blue.",
-          },
-          { type: "image", url: images.screen },
-        ] as const)),
-    { type: "text", text: JSON.stringify(context) },
-  ];
-}
-
-/** What the page sent, as his message to Claude Code. */
-async function* words(text: string): AsyncGenerator<SDKUserMessage> {
-  const content = parts(text).map((part) => {
-    if (part.type === "text") return part;
-    const [, type = "image/jpeg", data = ""] = /^data:([^;]+);base64,(.*)$/s.exec(part.url) ?? [];
-    return {
-      type: "image" as const,
-      source: { type: "base64" as const, media_type: type as "image/jpeg", data },
-    };
-  });
-  yield {
-    type: "user",
-    message: { role: "user", content },
-    parent_tool_use_id: null,
-    origin: { kind: "human" },
-  };
-}
-
-const HEAR = `Henrik reviews a web app by eye. He pointed at the page and spoke; a slower agent does what he asks. You only say back, at once, what he asks for, so he sees a wrong hearing before the agent starts. One line of at most twelve words, starting with a verb, in plain words: "Make the pill green once it is approved." For a question, say what he asks: "Asks what 'Waiting on approvers' means." Never answer it, never say how you read his pointing, and never add anything else.`;
-
-/**
- * Haiku's ears, for when Terra cannot hear: a Claude Code process, started ahead after its
- * first use, so a hearing does not wait for it to start. Each hearing takes it, and the next
- * one starts at once. `close` ends the one that waits, with the dev server.
- */
-function haiku() {
-  const spare = () => {
-    const stop = new AbortController();
-    const warm = startup({
-      options: {
-        model: FAST,
-        thinking: { type: "disabled" },
-        tools: [],
-        settingSources: [],
-        systemPrompt: HEAR,
-        persistSession: false,
-        includePartialMessages: true,
-        env: envOf(),
-        abortController: stop,
-      },
-    });
-    // A spare that fails to start fails the hearing that takes it, not the dev server.
-    warm.catch(() => undefined);
-    return { warm, stop };
-  };
-  let next: { readonly warm: Promise<WarmQuery>; readonly stop: AbortController } | undefined;
-  return {
-    /** Starts the process for the first hearing. */
-    ready: () => {
-      next ??= spare();
-    },
-    /**
-     * Streams what it heard him ask for, in one line: `on` gets the line so far as its words
-     * come, so it shows from the first word.
-     */
-    hear: async (text: string, signal: AbortSignal, on: (line: string) => void) => {
-      const { warm, stop } = next ?? spare();
-      next = spare();
-      const end = () => stop.abort();
-      signal.addEventListener("abort", end, { once: true });
-      try {
-        let said = "";
-        for await (const message of (await warm).query(words(text))) {
-          if (message.type !== "stream_event") continue;
-          const { event } = message;
-          if (event.type !== "content_block_delta" || event.delta.type !== "text_delta") continue;
-          said += event.delta.text;
-          const line = said.trimStart().split("\n")[0]?.trimEnd() ?? "";
-          if (line !== "") on(line);
-          // One line only: what comes after it is more than he needs.
-          if (said.trimStart().includes("\n")) break;
-        }
-      } finally {
-        signal.removeEventListener("abort", end);
-        stop.abort();
-      }
-    },
-    close: () => {
-      next?.stop.abort();
-      next = undefined;
-    },
-  };
 }
 
 const inside = (path: unknown) => {
@@ -321,28 +195,13 @@ export function agent(): Plugin {
     apply: "serve",
     configureServer(server) {
       const log = server.config.logger;
-      const ears = terra(HEAR, ROOT);
-      const backup = haiku();
-      ears.ready();
-      server.httpServer?.once("close", () => {
-        ears.close();
-        backup.close();
+      const ears = makeEars({
+        cwd: ROOT,
+        hedge: HEDGE,
+        warn: (why) => log.warn(`workshop agent: ${why}`),
       });
-      /** What he asked for, in one line from Terra, or from Haiku when Terra cannot answer. */
-      const hear = async (text: string, signal: AbortSignal, on: (line: string) => void) => {
-        let heard = false;
-        const said = (line: string) => {
-          heard = true;
-          on(line);
-        };
-        try {
-          await ears.hear(parts(text), signal, said);
-        } catch (error) {
-          if (heard || signal.aborted) return;
-          log.warn(`workshop agent: Terra did not hear, so Haiku does: ${String(error)}`);
-          await backup.hear(text, signal, said);
-        }
-      };
+      ears.ready();
+      server.httpServer?.once("close", ears.close);
       const body = (req: import("node:http").IncomingMessage) =>
         new Promise<string>((done) => {
           let text = "";
@@ -395,13 +254,16 @@ export function agent(): Plugin {
             // The fast model hears him at once, and does not wait for the old work to stop.
             const asked = Date.now();
             let first = true;
-            const heard = hear(text, gone.signal, (words) => {
-              if (first) log.info(`workshop agent: heard in ${String(Date.now() - asked)} ms`);
-              first = false;
-              send({ type: "heard", text: words });
-            }).catch((error: unknown) => {
-              if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
-            });
+            const heard = ears
+              .hear(text, gone.signal, (line, ear) => {
+                if (first)
+                  log.info(`workshop agent: ${ear} heard in ${String(Date.now() - asked)} ms`);
+                first = false;
+                send({ type: "heard", text: line, ear });
+              })
+              .catch((error: unknown) => {
+                if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
+              });
             // New words stop the work on the old ones, and the session goes on from there.
             // Words that come while the old work stops wait in line behind it.
             const before = line;

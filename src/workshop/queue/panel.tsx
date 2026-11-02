@@ -70,6 +70,9 @@ export interface Line {
   /** What a fast model heard him ask for, a second after he spoke, before the agent answers.
    * It grows as its words come. */
   readonly heard?: string | undefined;
+  /** Saves the exchange as a case for the hearing evals, with `s`. */
+  readonly onSave?: (() => void) | undefined;
+  readonly saved?: "saving" | "saved" | "failed" | undefined;
   readonly tone: "listening" | "busy" | "showing" | "done" | "failed";
   /** What the agent does now, or its last words. */
   readonly status: string;
@@ -1114,6 +1117,22 @@ function ExchangeLine({ line }: { readonly line: Line }) {
           <span className="line-clamp-2 min-w-0 flex-1 text-dt-text" title={line.heard}>
             {line.heard}
           </span>
+          {line.onSave !== undefined && (
+            <button
+              type="button"
+              data-guide-ui=""
+              onClick={line.onSave}
+              title="Save this as a case for the hearing evals (s)"
+              className="-my-1 -mr-2 shrink-0 rounded-full px-2 py-0.5 text-dt-faint hover:bg-dt-raised hover:text-dt-text"
+            >
+              Save take
+            </button>
+          )}
+          {line.saved !== undefined && (
+            <span className="shrink-0 text-dt-faint">
+              {line.saved === "saving" ? "Saving" : line.saved === "saved" ? "Saved" : "Not saved"}
+            </span>
+          )}
         </span>
       )}
       <span className="flex min-h-5 items-center gap-2.5" role="status">

@@ -37,6 +37,7 @@ import { Walker, type Preview } from "./walker";
 import { Strokes, TalkView, usePointAndTalk } from "./talk";
 import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
 import { ask, elements, forget, played } from "./agent";
+import * as timing from "./timing";
 import { QueueStates } from "./queue-states";
 
 /*
@@ -68,6 +69,8 @@ interface Exchange {
   readonly said: string;
   /** What the fast model heard him ask for, before the agent answers. */
   readonly heard: string | undefined;
+  /** Whether he saved it as an eval case. */
+  readonly saved?: "saving" | "saved" | "failed" | undefined;
   readonly tone: "busy" | "showing" | "done" | "failed";
   /** What the agent does now, or its last words. */
   readonly status: string;
@@ -379,15 +382,20 @@ function Live() {
         panelWidth: PANEL,
         elements: elements(),
       };
+      timing.asked(context);
+      timing.mark("sent");
       void ask(
         context,
         (event) => {
           if (asking.current !== control) return;
+          if (event.type !== "status" && event.type !== "heard") timing.mark("agent");
           switch (event.type) {
             case "status":
               update((x) => ({ ...x, tone: "busy", status: event.text }));
               break;
             case "heard":
+              timing.mark("heard");
+              timing.note({ line: event.text, ear: event.ear });
               update((x) => ({ ...x, heard: event.text }));
               break;
             case "show":
@@ -422,10 +430,20 @@ function Live() {
     },
   });
 
+  /** Saves the last exchange as a case for the hearing evals. */
+  function saveTake() {
+    setExchange((x) => (x === undefined ? x : { ...x, saved: "saving" }));
+    void timing
+      .saveTake()
+      .then((ok) =>
+        setExchange((x) => (x === undefined ? x : { ...x, saved: ok ? "saved" : "failed" })),
+      );
+  }
+
   /** What the panel's line says about the exchange: his words, and the agent's answer. */
   const line = (() => {
     if (talk.phase === "listening")
-      return { said: undefined, tone: "listening", status: "Listening" } as const;
+      return { said: talk.words, tone: "listening", status: "Listening" } as const;
     if (talk.phase === "thinking")
       return { said: undefined, tone: "busy", status: "Hearing you" } as const;
     if (exchange === undefined) return undefined;
@@ -440,6 +458,8 @@ function Live() {
     return {
       said: exchange.said,
       heard: exchange.heard,
+      saved: exchange.saved,
+      onSave: exchange.heard === undefined || exchange.saved !== undefined ? undefined : saveTake,
       tone: exchange.tone,
       // While it shows him, the line says what the cursor says.
       status: exchange.tone === "showing" ? (walk.note?.words ?? "Showing you") : exchange.status,
@@ -525,6 +545,8 @@ function Live() {
       else if (e.key === " ") toggleWalk();
       else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);
       else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
+      else if (e.key === "s" && exchange?.heard !== undefined && exchange.saved === undefined)
+        saveTake();
       // A number previews; Enter keeps what it previews.
       else if (n >= 1 && n <= values.length) setPeek(values[n - 1]);
       else if (e.key === "Enter" && peek !== undefined) choose(peek);
