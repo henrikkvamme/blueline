@@ -33,7 +33,11 @@ export interface Beat {
   readonly shapes?: readonly Shape[];
   /** What the element shows in its place while the beat shows: a mock-up of a change. It ends
    * with the beat. */
-  readonly replace?: { readonly text?: string; readonly html?: string };
+  readonly replace?: {
+    readonly text?: string;
+    readonly html?: string;
+    readonly swap?: readonly { readonly from: string; readonly to: string }[];
+  };
   /** The reviewer's turn: the walk waits for his own click on the element. */
   readonly turn?: boolean;
   /** The cursor clicks the element itself once it has said its line, to show him a journey. */

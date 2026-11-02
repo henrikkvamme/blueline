@@ -60,10 +60,24 @@ const beat = z.object({
       "Shapes drawn by hand in px from the target's top left; they may go outside its box. An arrow from a note-free spot to a detail, a text label, a rect round a region.",
     ),
   replace: z
-    .object({ text: z.string().optional(), html: z.string().optional() })
+    .object({
+      swap: z
+        .array(z.object({ from: z.string(), to: z.string() }))
+        .optional()
+        .describe(
+          "Words to swap in a copy of the target, which keeps its exact look: labels, borders, sizes and fields stay. Use this whenever only words or figures change.",
+        ),
+      html: z
+        .string()
+        .optional()
+        .describe(
+          "New markup for the target, only when its layout must change. Start from the element's html in the elements list, keep its classes, and change only what he asked.",
+        ),
+      text: z.string().optional().describe("Plain words in the target's look, for a bare label."),
+    })
     .optional()
     .describe(
-      "A mock-up in the target's place, in its own font and colours, for this beat only: show a change before you make it. Plain text, or small inline-styled HTML.",
+      "A mock-up in the target's place, for this beat only: show a change before you make it.",
     ),
   turn: z.boolean().optional().describe("Wait for the reviewer to click the target himself."),
   click: z.boolean().optional().describe("Click the target yourself after the line."),
@@ -130,7 +144,7 @@ How to show:
 - Start the first show call fast, before you read any code, unless his words need the code to answer.
 - One idea per beat, two to five beats. Say short spoken sentences. Notes are at most five words.
 - Draw: circle a thing, underline words, box a region, strike what should go. Add shapes when they help: an arrow from one element to another, a text label, an ellipse. Shape coordinates are px from the target's top left, from the elements' boxes.
-- Mock up a change in place with replace before you make it, so he judges it by eye.
+- Mock up a change in place with replace before you make it, so he judges it by eye. Change only what he asked about; everything else in the element stays as it is. When only words or figures change, use replace.swap. Use replace.html only when the layout must change, built from the element's html in the elements list with its own classes. Get figures right: convert with a real rate, and round as the app does.
 - Teach with turn: the walk waits for his own click. Click yourself only when he asks you to show or run a journey; say what you click before you click it. The app's tabs and the send button change the page: end the walk with that click. The show tool's result lists the elements of the page as it is now, so go on with the next walk from there.
 - peek and state show a variant or a state of the current remark's choice.
 - Use only selectors from the elements list.

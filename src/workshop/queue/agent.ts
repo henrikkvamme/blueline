@@ -104,9 +104,16 @@ interface Seen {
   readonly name: string | undefined;
   readonly where: "page" | "panel";
   readonly text: string;
+  readonly html: string;
   /** Left, top, width and height, in px of the viewport. */
   readonly box: readonly [number, number, number, number];
 }
+
+const markupOf = (element: HTMLElement) =>
+  element.outerHTML
+    .replace(/<svg[\s\S]*?<\/svg>/g, "<svg/>")
+    .replace(/\s+/g, " ")
+    .slice(0, 900);
 
 /** Every element that a beat can point at, that shows now: the app's, and the panel's board. */
 export function elements(): readonly Seen[] {
@@ -127,7 +134,17 @@ export function elements(): readonly Seen[] {
         name:
           q === undefined ? (board === undefined ? "the options" : `option ${board}`) : TARGETS[q],
         where: r.left >= innerWidth - PANEL ? "panel" : "page",
-        text: element.innerText.replace(/\s+/g, " ").trim().slice(0, 140),
+        text: [
+          element.innerText,
+          ...[...element.querySelectorAll("input, textarea")].map((i) =>
+            i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement ? i.value : "",
+          ),
+        ]
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 140),
+        html: markupOf(element),
         box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)],
       },
     ];

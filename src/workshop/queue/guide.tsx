@@ -316,12 +316,14 @@ function MockView({
         boxShadow: `0 0 0 3px #fff, 0 0 0 5px ${FILL}59`,
         left: box.left,
         top: box.top,
-        // At least the element's size, and as wide as its words, so a longer one never wraps
-        // inside the old one's width.
-        width: "max-content",
-        minWidth: box.width,
-        maxWidth: Math.max(box.width, 480),
-        minHeight: box.height,
+        ...(mock.copy === true
+          ? { width: box.width, minHeight: box.height }
+          : {
+              width: "max-content",
+              minWidth: box.width,
+              maxWidth: Math.max(box.width, 480),
+              minHeight: box.height,
+            }),
         animation: going
           ? GONE.animation
           : reduced

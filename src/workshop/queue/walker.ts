@@ -80,6 +80,7 @@ export interface Mock {
   readonly html: string | undefined;
   readonly style: Readonly<Record<string, string>>;
   readonly key: string;
+  readonly copy?: boolean;
 }
 
 export interface Snapshot {
@@ -164,6 +165,32 @@ const IDLE: Snapshot = {
   shown: false,
   skipped: false,
 };
+
+function swappedCopy(
+  element: Element,
+  swap: readonly { readonly from: string; readonly to: string }[],
+) {
+  const copy = element.cloneNode(true);
+  if (!(copy instanceof HTMLElement)) return undefined;
+  const change = (words: string) =>
+    swap.reduce((text, { from, to }) => (from === "" ? text : text.split(from).join(to)), words);
+  const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
+    node.textContent = change(node.textContent ?? "");
+  const live = element.querySelectorAll("input, textarea");
+  copy.querySelectorAll("input, textarea").forEach((field, i) => {
+    const was = live[i];
+    const value =
+      was instanceof HTMLInputElement || was instanceof HTMLTextAreaElement ? was.value : "";
+    field.setAttribute("value", change(value));
+    if (field instanceof HTMLTextAreaElement) field.textContent = change(value);
+  });
+  if (element instanceof HTMLInputElement) copy.setAttribute("value", change(element.value));
+  copy.removeAttribute("data-q");
+  copy.style.visibility = "visible";
+  copy.style.margin = "0";
+  return copy.outerHTML;
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
@@ -485,6 +512,10 @@ export class Walker {
   /** Hides the element, and takes its look for the mock-up that shows in its place. */
   private mockUp(element: Element, replace: NonNullable<Beat["replace"]>) {
     const style = lookOf(element);
+    const swapped =
+      replace.swap === undefined || replace.swap.length === 0
+        ? undefined
+        : swappedCopy(element, replace.swap);
     if (element instanceof HTMLElement) {
       const was = element.style.visibility;
       element.style.visibility = "hidden";
@@ -492,6 +523,8 @@ export class Walker {
         element.style.visibility = was;
       };
     }
+    if (swapped !== undefined)
+      return { text: undefined, html: clean(swapped), style: {}, copy: true };
     return {
       text: replace.html === undefined ? replace.text : undefined,
       html: replace.html === undefined ? undefined : clean(replace.html),
