@@ -12,10 +12,25 @@
  * - sent: the page asked the agent;
  * - heard: the first word of the fast line came;
  * - painted: that word is on screen;
- * - agent: the agent's first act on the page.
+ * - agent: the agent's first act on the page;
+ * - say: the agent's walk comes to its first line, and asks for it to play;
+ * - voice: that line plays.
+ *
+ * The trace also keeps the dev server's own marks for the agent (`server`), so a slow act
+ * shows where its time went.
  */
 
-export type Mark = "press" | "mic" | "release" | "words" | "sent" | "heard" | "painted" | "agent";
+export type Mark =
+  | "press"
+  | "mic"
+  | "release"
+  | "words"
+  | "sent"
+  | "heard"
+  | "painted"
+  | "agent"
+  | "say"
+  | "voice";
 
 export interface Trace {
   readonly id: string;
@@ -26,6 +41,7 @@ export interface Trace {
   ear?: string;
   said?: string;
   line?: string;
+  server?: unknown;
 }
 
 let current: Trace | undefined;
@@ -62,11 +78,16 @@ export function mark(name: Mark) {
       }),
     );
   }
-  if (name === "agent") sendTimer = window.setTimeout(keep, 2000);
+  // The trace is kept a moment after the voice starts, or after 8 s with no voice.
+  if (name === "agent") sendTimer = window.setTimeout(keep, 8000);
+  if (name === "voice") {
+    window.clearTimeout(sendTimer);
+    sendTimer = window.setTimeout(keep, 300);
+  }
 }
 
 /** What the current exchange said and heard. */
-export function note(fields: { said?: string; line?: string; ear?: string }) {
+export function note(fields: { said?: string; line?: string; ear?: string; server?: unknown }) {
   if (current === undefined) return;
   Object.assign(current, fields);
 }

@@ -48,7 +48,20 @@ interface Trace {
   readonly said?: string;
   readonly line?: string;
   readonly ear?: string;
+  readonly server?: { readonly marks: Partial<Record<string, number>>; readonly blocks: string[] };
 }
+
+/** The agent's steps, from the dev server's marks and the page's: name, from, to. */
+const STEPS = [
+  ["run ready", "", "taken"],
+  ["Claude Code begins", "taken", "init"],
+  ["model's answer begins", "init", "api"],
+  ["first block", "api", "block"],
+  ["page tool begins", "block", "tool"],
+  ["walk's first line written", "tool", "line"],
+  ["page tool written", "tool", "input"],
+  ["page tool runs", "input", "sent"],
+] as const;
 
 const { values: args } = parseArgs({
   options: {
@@ -128,6 +141,9 @@ function audioOf(id: string) {
 
 const rows: string[] = [];
 const acts: number[] = [];
+const voices: number[] = [];
+const steps = new Map<string, number[]>();
+const firsts = new Map<string, number>();
 const verdicts: boolean[] = [];
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
 try {
@@ -215,6 +231,32 @@ try {
           : String((m[mark] ?? 0) - (m["release"] ?? 0));
       if (m["agent"] !== undefined && m["release"] !== undefined)
         acts.push(m["agent"] - m["release"]);
+      if (m["voice"] !== undefined && m["release"] !== undefined)
+        voices.push(m["voice"] - m["release"]);
+      // The page's steps from the act to the voice.
+      for (const [name, from, to] of [
+        ["walk comes to the first line", "agent", "say"],
+        ["voice starts to play", "say", "voice"],
+        ["act to voice", "agent", "voice"],
+      ] as const) {
+        const a = m[from];
+        const b = m[to];
+        if (a !== undefined && b !== undefined)
+          steps.set(name, [...(steps.get(name) ?? []), b - a]);
+      }
+      const server = t.server?.marks ?? {};
+      for (const [name, from, to] of STEPS) {
+        const a = from === "" ? 0 : server[from];
+        const b = server[to];
+        if (a !== undefined && b !== undefined)
+          steps.set(name, [...(steps.get(name) ?? []), b - a]);
+      }
+      const ahead = t.server?.blocks.slice(
+        0,
+        t.server.blocks.findIndex((b) => b.startsWith("mcp__page__")),
+      );
+      const first = (ahead ?? []).join(" ") || "none";
+      firsts.set(first, (firsts.get(first) ?? 0) + 1);
       // The agent's work: the stream ends when it is done.
       await page
         .waitForFunction(
@@ -259,6 +301,19 @@ console.log("|---|---|---|---|---|---|---|");
 for (const row of rows) console.log(row);
 const pct = (xs: readonly number[], p: number) =>
   [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor((p / 100) * xs.length))];
+if (steps.size > 0) {
+  console.log("\n| agent step | p50 ms | p90 ms |");
+  console.log("|---|---|---|");
+  for (const [name, xs] of steps)
+    console.log(`| ${name} | ${String(pct(xs, 50))} | ${String(pct(xs, 90))} |`);
+  console.log(
+    `\nBlocks before the first page tool: ${[...firsts].map(([b, n]) => `${b} ${String(n)}`).join(", ")}`,
+  );
+}
+if (voices.length > 0)
+  console.log(
+    `Voice plays after release: p50 ${String(pct(voices, 50))} ms, p90 ${String(pct(voices, 90))} ms`,
+  );
 if (acts.length > 0)
   console.log(
     `\nAgent acts after release: p50 ${String(pct(acts, 50))} ms, p90 ${String(pct(acts, 90))} ms`,
