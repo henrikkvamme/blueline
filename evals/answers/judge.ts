@@ -36,6 +36,8 @@ Decide four claims, each true or false. A claim that does not apply to this answ
 - native: Each mock-up looks like the app's own UI: its fonts, sizes, weights, colours, borders and spacing. New parts follow the app's style and stay in proportion. True when nothing was mocked up.
 - truthful: Everything the agent said and showed is true by the facts and the pictures: figures, names, dates, what the app does, and what it did itself. A plausible example that it presents as an example is fine; a made-up fact presented as real fails.
 
+Be strict: when the pictures or steps leave a claim in doubt, it is false.
+
 why: at most two sentences, naming each claim that failed and why. When all are true, say what was good in a few words.`;
 
 export const SCHEMA = {
