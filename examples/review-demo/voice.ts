@@ -45,6 +45,30 @@ export function voice(): Plugin {
     name: "workshop-voice",
     apply: "serve",
     configureServer(server) {
+      // A single-use token for the page's realtime ears, so the key stays here.
+      server.middlewares.use("/__ears/token", (req, res) => {
+        const key = keyOf();
+        if (req.method !== "POST" || key === undefined) {
+          res.statusCode = key === undefined ? 503 : 405;
+          res.end();
+          return;
+        }
+        fetch("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe", {
+          method: "POST",
+          headers: { "xi-api-key": key },
+        })
+          .then(async (r) => {
+            if (!r.ok) throw new Error(`ElevenLabs ${String(r.status)}: ${await r.text()}`);
+            res.setHeader("Content-Type", "application/json");
+            res.setHeader("Cache-Control", "no-store");
+            res.end(JSON.stringify({ token: ((await r.json()) as { token: string }).token }));
+          })
+          .catch((error: unknown) => {
+            server.config.logger.warn(String(error));
+            res.statusCode = 502;
+            res.end();
+          });
+      });
       server.middlewares.use("/__hear", (req, res) => {
         const key = keyOf();
         if (req.method !== "POST" || key === undefined) {

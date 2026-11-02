@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { cx } from "../../ui/cx";
 import { selectorOf } from "./script";
 import type { Drawn, Pointed } from "../../queue/queue";
+import * as ears from "./ears";
+import * as timing from "./timing";
 import { hear, type Word } from "./voice";
 
 /*
@@ -43,6 +45,8 @@ export type Talk =
    * speaks, 0 to 1. */
   | {
       readonly phase: "listening";
+      /** His words so far, from the realtime ears. */
+      readonly words?: string | undefined;
       readonly ink: readonly Ink[];
       readonly strokes: readonly string[];
       readonly level: number;
@@ -165,6 +169,37 @@ const BUILT_IN = /macbook.*microphone|built-in microphone/i;
 let chosen: string | undefined;
 
 /**
+ * The microphone stays open for a while after he lets go, so the next press records at once:
+ * opening it takes time, and the first words he says before it opens are lost. The Mac shows
+ * the microphone as on for that long.
+ */
+const WARM = 60_000;
+let open_: { stream: MediaStream; cool: number } | undefined;
+
+/** The microphone, warm when it was used in the last minute. */
+async function warmMicrophone(): Promise<MediaStream> {
+  const kept = open_;
+  if (kept !== undefined && kept.stream.getAudioTracks().every((t) => t.readyState === "live")) {
+    window.clearTimeout(kept.cool);
+    return kept.stream;
+  }
+  open_ = undefined;
+  return microphone();
+}
+
+/** Keeps the microphone open for the next press, then closes it. */
+function rest(stream: MediaStream) {
+  if (open_ !== undefined) window.clearTimeout(open_.cool);
+  open_ = {
+    stream,
+    cool: window.setTimeout(() => {
+      for (const track of stream.getTracks()) track.stop();
+      open_ = undefined;
+    }, WARM),
+  };
+}
+
+/**
  * The microphone to record from: the Mac's own when it has one. A Bluetooth headset's
  * microphone, such as AirPods', switches the headset to its call profile, which makes his
  * voice and the agent's sound poor. The browser names devices only after the first
@@ -237,6 +272,7 @@ export function usePointAndTalk({
   calls.current = { onStart, onWords };
 
   useEffect(() => {
+    ears.warm();
     let mouse: Point = { x: innerWidth / 2, y: innerHeight / 2 };
     let held = false;
     let since = 0;
@@ -275,12 +311,23 @@ export function usePointAndTalk({
       window.clearTimeout(failing);
       failing = window.setTimeout(() => setTalk(IDLE), 2400);
     };
+    let partial: string | undefined;
+    let listening: ears.Listening | undefined;
+    let final: ReturnType<ears.Listening["finish"]> | undefined;
     const show = () => {
       if (held)
-        setTalk({ phase: "listening", ink: pieces(), strokes: strokes(), level, at: mouse });
+        setTalk({
+          phase: "listening",
+          words: partial,
+          ink: pieces(),
+          strokes: strokes(),
+          level,
+          at: mouse,
+        });
     };
 
     const start = async () => {
+      timing.begin(false);
       held = true;
       dropped = false;
       since = Date.now();
@@ -296,13 +343,19 @@ export function usePointAndTalk({
         held = false;
         return fail("The microphone needs https");
       }
+      partial = undefined;
+      final = undefined;
       let stream: MediaStream;
       try {
-        stream = await microphone();
+        stream = await warmMicrophone();
       } catch {
         held = false;
         return fail("No microphone");
       }
+      listening = ears.listen(stream, (words) => {
+        partial = words;
+        show();
+      });
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => chunks.push(e.data);
@@ -321,46 +374,59 @@ export function usePointAndTalk({
       };
       const release = () => {
         cancelAnimationFrame(frame);
-        for (const track of stream.getTracks()) track.stop();
+        rest(stream);
         void audio.close();
       };
       recorder.onstop = () => {
         release();
         if (dropped) {
           dropped = false;
+          listening?.cancel();
           return setTalk(IDLE);
         }
         const drawn = loops.map((l) => ({ path: pathOf(l.points), target: l.target }));
         if (Date.now() - since < SHORTEST) return setTalk(IDLE);
         setTalk({ phase: "thinking", strokes: strokes(), at: mouse });
-        void hear(new Blob(chunks, { type: recorder.mimeType })).then((heard) => {
-          if (heard === undefined) return fail("I heard nothing");
-          setTalk(IDLE);
-          const pointed = pointedWhile(heard.words, trail);
-          const most = [...pointed].sort(
-            (a, b) => b.words.split(" ").length - a.words.split(" ").length,
-          )[0];
-          // What he circled wins: it is what he meant. Else what he spoke most about.
-          calls.current.onWords(
-            drawn.at(-1)?.target ?? most?.target ?? target,
-            heard.text,
-            pointed,
-            drawn,
-            mouse,
-          );
-        });
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+        timing.recorded(blob);
+        // The realtime words, else the recording sent whole.
+        const words = final ?? Promise.resolve(undefined);
+        void words
+          .then((live) => live ?? hear(blob))
+          .then((heard) => {
+            timing.mark("words");
+            if (heard === undefined) return fail("I heard nothing");
+            timing.note({ said: heard.text });
+            setTalk(IDLE);
+            const pointed = pointedWhile(heard.words, trail);
+            const most = [...pointed].sort(
+              (a, b) => b.words.split(" ").length - a.words.split(" ").length,
+            )[0];
+            // What he circled wins: it is what he meant. Else what he spoke most about.
+            calls.current.onWords(
+              drawn.at(-1)?.target ?? most?.target ?? target,
+              heard.text,
+              pointed,
+              drawn,
+              mouse,
+            );
+          });
       };
       end = () => recorder.stop();
       // He let go before the microphone was ready.
       if (!held) return end();
       recorder.start();
+      timing.mark("mic");
       heardFrom = Date.now();
       listen();
     };
 
     const stop = () => {
       if (!held) return;
+      timing.mark("release");
       held = false;
+      final = listening?.finish();
+      listening = undefined;
       if (end === undefined) return setTalk(IDLE);
       end();
       end = undefined;
@@ -384,6 +450,8 @@ export function usePointAndTalk({
           closeTyping();
           const words = text.trim();
           if (words === "") return;
+          timing.begin(true);
+          timing.note({ said: words });
           const on = here.target === undefined ? [] : [{ target: here.target, words }];
           calls.current.onWords(here.target, words, on, [], at);
         },
@@ -502,8 +570,18 @@ export function TalkView({ talk, reduced }: { readonly talk: Talk; readonly redu
         </svg>
       )}
       {talk.phase === "listening" && (
-        <span className="absolute" style={by} role="status" aria-label="Listening">
+        <span
+          className="absolute flex items-center gap-2"
+          style={by}
+          role="status"
+          aria-label="Listening"
+        >
           <Level level={talk.level} />
+          {talk.words !== undefined && (
+            <span className="max-w-[320px] truncate rounded-full bg-dt-panel px-2.5 py-1 text-[12px] text-dt-text shadow-dt-float [direction:rtl]">
+              <bdi>{talk.words}</bdi>
+            </span>
+          )}
         </span>
       )}
       {talk.phase === "thinking" && (
