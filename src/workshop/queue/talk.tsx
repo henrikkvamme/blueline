@@ -73,6 +73,10 @@ const TAPS = { tap: 250, between: 400 } as const;
 /** How long the ink stays behind the cursor, in ms. */
 const INK = 900;
 
+/** How long the cursor's path counts for a loop, in ms: longer than the ink shows, as a slow
+ * hand round a large part takes more than a second. */
+const LOOP_MEMORY = 2500;
+
 /** A loop closes when the cursor comes this near to where it was, after this much ink. */
 const LOOP = { near: 36, length: 140 } as const;
 
@@ -300,9 +304,10 @@ export function usePointAndTalk({
     const strokes = () => loops.map((l) => pathOf(l.points));
     const pieces = (): Ink[] => {
       const now = Date.now();
-      ink = ink.filter((p) => now - p.t < INK);
-      return ink.slice(1).flatMap((p, i) => {
-        const q = ink[i];
+      ink = ink.filter((p) => now - p.t < LOOP_MEMORY);
+      const shown = ink.filter((p) => now - p.t < INK);
+      return shown.slice(1).flatMap((p, i) => {
+        const q = shown[i];
         if (q === undefined) return [];
         return [{ d: `M ${q.x} ${q.y} L ${p.x} ${p.y}`, left: 1 - (now - p.t) / INK }];
       });
