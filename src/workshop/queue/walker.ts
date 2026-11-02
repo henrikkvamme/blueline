@@ -549,15 +549,19 @@ export class Walker {
 
   /** Shows the change in the page itself, and gives back the part to frame. */
   private mockUp(element: Element, replace: NonNullable<Beat["replace"]>) {
-    if (replace.swap !== undefined && replace.swap.length > 0) {
-      this.unhide = swapInPlace(element, replace.swap);
-      return element;
-    }
     const html =
       replace.html ?? (replace.text === undefined ? undefined : textInstead(element, replace.text));
-    if (html === undefined) return undefined;
-    const placed = placeInstead(element, html);
-    this.unhide = placed.undo;
+    const swap = replace.swap ?? [];
+    if (swap.length === 0 && html === undefined) return undefined;
+    const placed =
+      swap.length > 0 || html === undefined
+        ? { framed: element, undo: swapInPlace(element, swap) }
+        : placeInstead(element, html);
+    placed.framed.setAttribute("data-mock-shows", "");
+    this.unhide = () => {
+      placed.framed.removeAttribute("data-mock-shows");
+      placed.undo();
+    };
     return placed.framed;
   }
 
