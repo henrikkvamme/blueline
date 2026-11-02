@@ -13,9 +13,11 @@ import {
   pick,
   settleNow,
   show,
-  unsettle,
   waiting,
   type Beat,
+  type Place,
+  placeOf,
+  withPlace,
   isTried,
   settleOne,
   walked,
@@ -221,8 +223,26 @@ function Live() {
       ? undefined
       : { in: clock >= shipAt ? "shipped" : Math.ceil((shipAt - clock) / 1000) };
 
+  const past = useRef<readonly Place[]>([]);
+  const future = useRef<readonly Place[]>([]);
+  const remember = () => {
+    past.current = [...past.current.slice(-49), placeOf(q)];
+    future.current = [];
+  };
+  const travel = (from: { current: readonly Place[] }, to: { current: readonly Place[] }) => {
+    const place = from.current.at(-1);
+    if (place === undefined) return;
+    from.current = from.current.slice(0, -1);
+    to.current = [...to.current, placeOf(q)];
+    setToast([]);
+    setLeftOpen(undefined);
+    setState((s) => ({ ...s, queue: withPlace(s.queue, place), stopped: false }));
+  };
+  const undo = () => travel(past, future);
+  const redo = () => travel(future, past);
   const move = (to: (q: Queue) => Move) => {
     const moved = to(q);
+    if (moved.queue !== q) remember();
     // An exchange that is over goes with the remark; one whose change is still coming stays.
     const open =
       exchange?.annotation !== undefined && answerOf(q, exchange.annotation) === undefined;
@@ -239,6 +259,7 @@ function Live() {
   const settleOpen = () => {
     if (leftOpen === undefined) return;
     const moved = settleOne(q, leftOpen);
+    remember();
     setToast(moved.settled);
     setLeftOpen(undefined);
     setState((s) => ({ ...s, queue: moved.queue }));
@@ -248,10 +269,6 @@ function Live() {
     const id = setTimeout(() => setToast([]), 4000);
     return () => clearTimeout(id);
   }, [toast]);
-  const undo = () => {
-    setState((s) => ({ ...s, queue: unsettle(s.queue, toast) }));
-    setToast([]);
-  };
 
   /** What shows now, for the agent to see what he saw: the variant and the state of the
    * part, and the line the agent's cursor says, if it speaks. */
@@ -463,12 +480,23 @@ function Live() {
   };
   /** Keep a variant, or send an answer: only a click or Enter does it. */
   const choose = (value: string) => {
-    if (here !== undefined) setState((s) => ({ ...s, queue: pick(s.queue, here.id, value) }));
+    if (here !== undefined) {
+      remember();
+      setState((s) => ({ ...s, queue: pick(s.queue, here.id, value) }));
+    }
     setPeek(undefined);
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const typing =
+        e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z" && !typing) {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
       if (composer !== undefined || talk.phase === "typing" || e.metaKey || e.ctrlKey || e.altKey)
         return;
       const values = here?.variants ?? here?.options ?? [];
@@ -492,7 +520,7 @@ function Live() {
       else if (e.key === "k" || e.key === "ArrowLeft") move(back);
       else if (e.key === "t") setTree((o) => !o);
       else if (e.key === "y") move(settleNow);
-      else if (e.key === "u" && toast.length > 0) undo();
+      else if (e.key === "u") undo();
       else if (e.key === "a" && here !== undefined) open(here.target);
       else if (e.key === " ") toggleWalk();
       else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);

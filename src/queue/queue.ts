@@ -352,6 +352,17 @@ export function settleOne(q: Queue, id: string): Move {
   return { queue, settled: queue.settled.filter((x) => !q.settled.includes(x)) };
 }
 
+export type Place = Pick<Queue, "settled" | "picks" | "trail" | "at">;
+
+export const placeOf = ({ settled, picks, trail, at }: Queue): Place => ({
+  settled,
+  picks,
+  trail,
+  at,
+});
+
+export const withPlace = (q: Queue, place: Place): Queue => ({ ...q, ...place });
+
 /** Take settles back, as undo does. */
 export const unsettle = (q: Queue, ids: readonly string[]): Queue => ({
   ...q,

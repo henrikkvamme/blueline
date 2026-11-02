@@ -15,6 +15,8 @@ import {
   show,
   unsettle,
   walked,
+  placeOf,
+  withPlace,
   type Annotation,
   type Queue,
   type Remark,
@@ -178,6 +180,18 @@ describe("the queue", () => {
     expect(current(q)?.id).toBe("a");
     expect(next(walked(q, "a")).settled).toEqual(["a"]);
     expect(settleNow(go(skipped.queue, next)).settled).toEqual(["a"]);
+  });
+
+  it("goes back to where he was, the settle undone, and forward again", () => {
+    let q = start(look("a", "/a", 1), look("b", "/a", 2));
+    q = go(q, next);
+    const before = placeOf(q);
+    const moved = next(q).queue;
+    expect(moved.settled).toEqual(["a"]);
+    const back = withPlace(moved, before);
+    expect(current(back)?.id).toBe("a");
+    expect(back.settled).toEqual([]);
+    expect(current(withPlace(back, placeOf(moved)))?.id).toBe("b");
   });
 
   it("settles at once, goes on, and undo takes it back", () => {
