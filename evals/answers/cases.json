@@ -922,7 +922,7 @@
     ],
     "expect": {
       "mockup": "none",
-      "guide": "Ingrid Berg is the second approver, from Finance; she gets it once Ola Hansen approves. No mock-up."
+      "guide": "Ingrid Berg is the second approver, from Finance; Ingrid gets it once Ola Hansen approves. No mock-up."
     }
   },
   {
@@ -966,7 +966,7 @@
     ],
     "expect": {
       "mockup": "none",
-      "guide": "Ola Hansen has it first; Ingrid Berg gets it once he approves. No mock-up."
+      "guide": "Ola Hansen has it first; Ingrid Berg gets it once Ola Hansen approves. No mock-up."
     }
   },
   {

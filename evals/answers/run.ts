@@ -138,7 +138,7 @@ The made-up app is a bonus request with three pages, behind tabs: Request, Appro
 - Approvers: the same two rows with drag handles, and "Add an approver", which adds Kari Nordmann, HR.
 - Sent: "Sent for approval", and a grey line that ends "Ingrid Berg gets it once Ola Hansen approves." The app stores no send time.
 - The app has no exchange rates. A real rate in late 2026 is about 10.5 to 12.5 NOK to the euro and 9.5 to 11.5 NOK to the US dollar; a figure in that range, rounded, is right.
-The workshop: a review queue of remarks about the app, in a panel on the right. He can go next and back, settle a remark, undo, open the tree of remarks, keep a variant, and ask the agent. The agent may change the workshop's own code only when he asks for a change to the workshop; a change to the made-up app is mocked up or put in the queue, never made in code.`;
+The workshop: a review queue of remarks about the app, in a panel on the right. He can go next and back, settle a remark, undo, open the tree of remarks, keep a variant, and ask the agent. The agent may change the workshop's own code only when he asks for a change to the workshop; a change to the made-up app is mocked up or put in the queue, never made in code. A change in the queue waits there for the coding agent; in this eval its answer comes only after the case ends, so the app looks the same at the end unless the agent or he changed it through the page.`;
 
 const INIT = `
 localStorage.setItem("blueline.workshop.queue.guide", JSON.stringify({ on: false, voice: false, reduced: true }));
@@ -386,6 +386,12 @@ async function runCase(browser: Browser, c: Case, rep: number, url: string, tree
   try {
     await fetch(`${url}/__agent/forget`, { method: "POST" });
     await page.goto(`${url}/workshop.html#queue`);
+    await page.waitForSelector('aside[aria-label="Blueline"]');
+    await page.evaluate((key) => {
+      const state = JSON.parse(localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+      localStorage.setItem(key, JSON.stringify({ ...state, delay: 3600 }));
+    }, "blueline.workshop.queue.4");
+    await page.reload();
     await page.waitForSelector('aside[aria-label="Blueline"]');
     if (c.page !== "/request") await page.click(quote(`tab-${c.page.slice(1)}`));
     if (c.remark !== undefined) {
