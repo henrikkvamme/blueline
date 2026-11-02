@@ -9,11 +9,11 @@ Each case is one request to the workshop agent, with what he pointed at. `words`
 | dollars-real    | words     | /request   | amount           | Dollars                                                                        | \$\|USD\|dollar, 3[ ,.]?[6-9][0-9]{2}\|4[ ,.]?[01][0-9]{2} | Amount, input box                     |
 | ingrid-real     | words     | /request   | status           | What does the status mean here, and how would it look if it waited for Ingrid? | Ingrid                                                     | the pill's dot and shape              |
 | kr-after        | words     | /request   | amount           | What if the kroner came after the number?                                      | 40 000 kr                                                  | Amount, input box                     |
-| title-short     | words     | /request   | title            | Make this shorter, how would that look                                         | Kari Nordmann                                              | the asker line under it, heading size |
+| title-short     | words     | /request   | title            | Make this shorter, how would that look                                         | Kari                                                       | the asker line under it, heading size |
 | title-norsk     | words     | /request   | title            | How would the title look in Norwegian?                                         | Bonus til Kari Nordmann\|Bonus for Kari Nordmann           | heading size                          |
 | button-name     | words     | /request   | submit           | What if this said who it goes to?                                              | Ola Hansen                                                 | blue button, its size class           |
 | asker-date      | words     | /request   | asker            | Show the real date instead of two days ago                                     | Ola Hansen, 20[0-9]{2}\|Oct\|Nov\|okt\|\d+\.               | small grey text                       |
-| role-order      | words     | /request   | approvers        | Could the role say who approves first?                                         | first                                                      | the grey rows, names                  |
+| role-order      | words     | /request   | approvers        | Could the role say who approves first?                                         | first\|1st\|1\.\|①                                         | the grey rows, names                  |
 | status-approved | words     | /request   | status           | How does this look once it is approved?                                        | Approved                                                   | pill shape                            |
 | sent-time       | words     | /sent      | sent             | Put the time it was sent in here                                               | [0-9]{1,2}[:.][0-9]{2}                                     | grey paragraph                        |
 | tab-rename      | words     | /request   | tab-approvers    | How would it look if this tab was called People?                               | People                                                     | tab style                             |
@@ -33,7 +33,7 @@ Notes:
 - **euros-real-2**: The failure that started this eval. NOK 40 000 is about EUR 3 300 to 3 600 at a real rate; € or EUR both fit. The input box stays.
 - **dollars-real**: One word, while pointing at the amount: show it in US dollars, about USD 3 600 to 4 100 at a real rate; $ or USD both fit.
 - **ingrid-real**: Answer in one beat, then mock the pill with Ingrid's name. Same pill.
-- **title-short**: A shorter title, same heading style. Asked by stays.
+- **title-short**: A shorter title that still names Kari, in the same heading style. Asked by stays.
 - **title-norsk**: Bonus til Kari Nordmann, or similar.
 - **button-name**: e.g. Send to Ola Hansen. The button stays blue, same shape.
 - **role-order**: Director · approves first, or similar. Rows keep their grey background.

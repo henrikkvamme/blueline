@@ -90,9 +90,9 @@
     "expect": {
       "kind": "words",
       "target": "title",
-      "show": ["Kari Nordmann"],
+      "show": ["Kari"],
       "keep": ["the asker line under it", "heading size"],
-      "notes": "A shorter title, same heading style. Asked by stays."
+      "notes": "A shorter title that still names Kari, in the same heading style. Asked by stays."
     }
   },
   {
@@ -154,7 +154,7 @@
     "expect": {
       "kind": "words",
       "target": "approvers",
-      "show": ["first"],
+      "show": ["first|1st|1\\.|①"],
       "keep": ["the grey rows", "names"],
       "notes": "Director · approves first, or similar. Rows keep their grey background."
     }
