@@ -191,6 +191,8 @@ export function agent(): Plugin {
   /** Ends when the last request has started its run, so requests start one at a time. */
   let line = Promise.resolve();
   let shown = 0;
+  /** Counts the forgets, so a run that was forgotten does not bring its session back. */
+  let era = 0;
   /** The last few exchanges as they ran, for feedback on one of them. */
   const exchanges: Exchange[] = [];
 
@@ -263,6 +265,8 @@ export function agent(): Plugin {
       });
       server.middlewares.use("/__agent/forget", (_req, res) => {
         session = undefined;
+        era += 1;
+        exchanges.length = 0;
         void running?.query.interrupt().catch(() => undefined);
         res.end();
       });
@@ -416,12 +420,13 @@ export function agent(): Plugin {
               },
             });
             let finish = () => undefined as void;
+            const ofEra = era;
             running = { query: run, ended: new Promise<void>((done) => (finish = done)) };
             mine();
             send({ type: "status", text: "Thinking" });
             try {
               for await (const message of run) {
-                if (session !== message.session_id) {
+                if (era === ofEra && session !== message.session_id) {
                   session = message.session_id;
                   log.info(`workshop agent: session ${session} (claude --resume ${session})`);
                 }
