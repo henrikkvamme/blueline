@@ -131,7 +131,7 @@ export interface PanelProps {
   readonly beat?: { readonly at: number; readonly of: number } | undefined;
   /** Pause the walk, go on with it, or walk again. */
   readonly onWalk?: () => void;
-  /** He holds Space: the walk plays at double pace. */
+  /** He holds f: the walk plays at double pace. */
   readonly fast?: boolean;
   readonly voice?: boolean;
   readonly onVoice?: () => void;
@@ -570,6 +570,7 @@ const KEYS = [
   ["⇧⌘Z", "Redo"],
   ["b held", "An answer: the page as it was"],
   ["Space", "Show me, pause, go on"],
+  ["f held", "Show me at double pace"],
   ["r", "Show me again from the start"],
   ["m", "Mute the voice"],
   ["w", "Say the answer was wrong; it becomes an eval case"],
@@ -686,7 +687,7 @@ function WalkControls(props: PanelProps & { readonly phase: Phase }) {
         type="button"
         onClick={props.onWalk}
         className={control}
-        title="Space: tap to pause or go on, hold to play at double pace"
+        title="Space: pause or go on. Hold f: double pace"
       >
         {running ? (
           <>
