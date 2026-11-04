@@ -71,7 +71,7 @@ const TOOLS = [
   {
     name: "walk",
     description:
-      "Walk him through the app with the cursor, step by step, also across pages: a click opens the page that the next step is on. Each step speaks its line, then points, clicks or waits for his click.",
+      "Walk him through the app with the cursor, step by step, also across pages: a click opens the page that the next step is on. Each step speaks its line, then points, clicks or waits for his click. To point at one part, call point instead.",
     parameters: {
       type: "object",
       properties: {
