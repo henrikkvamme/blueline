@@ -5,8 +5,8 @@ import type { Plugin } from "vite";
  * OpenAI's, as the fast tier's is (ADR 0008), so Blueline speaks with one voice; the old ears
  * are ElevenLabs'. `GET /__voice?text=&voice=` sends back the words as speech, streamed as
  * OpenAI makes it, so the page plays it from the first bytes; `POST /__voice/ahead` with
- * `{ text, voice }` starts a line before the walk comes to it. Each line is kept in memory,
- * so a walk says it again at once. `POST /__hear` with the audio of
+ * `{ text, voice }` starts a line before the walk comes to it. Each line is kept in memory for
+ * a time, so a walk says it again at once. `POST /__hear` with the audio of
  * the reviewer's words sends back `{ text, words }`, each word with its time. The keys stay on
  * the server, in `OPENAI_API_KEY` and `ELEVENLABS_API_KEY`; the page never sees them. Without a
  * key its routes answer 503, and the workshop shows the words alone.
@@ -43,9 +43,15 @@ const keyFrom = (name: string) => () => {
 const keyOf = keyFrom("ELEVENLABS_API_KEY");
 const speechKey = keyFrom("OPENAI_API_KEY");
 
+/** The speech kept in memory: at most this many bytes, each line for at most this long. */
+const KEEP = { bytes: 32 * 1024 * 1024, ms: 30 * 60_000 } as const;
+
 /** A line of speech: its bytes so far, and who waits for more. */
-interface Line {
+export interface Line {
   readonly chunks: Uint8Array[];
+  /** When it was asked for. */
+  readonly made: number;
+  size: number;
   done: boolean;
   failed: boolean;
   readonly wake: Set<() => void>;
@@ -54,12 +60,32 @@ interface Line {
 const kept = new Map<string, Line>();
 const speak = limit(SPEAKING);
 
+/** Drops the oldest lines, first in first out, until the rest are young and small enough. A
+ * page that plays a dropped line still has it. */
+export function prune(lines: Map<string, Line>, now: number, keep: typeof KEEP = KEEP) {
+  let bytes = 0;
+  for (const line of lines.values()) bytes += line.size;
+  for (const [id, line] of lines) {
+    if (bytes <= keep.bytes && now - line.made < keep.ms) break;
+    lines.delete(id);
+    bytes -= line.size;
+  }
+}
+
 /** Starts the line, or finds it, and keeps its bytes as they come. */
 function lineOf(text: string, voice: string, key: string, warn: (why: string) => void) {
   const id = `${voice}\n${text}`;
+  prune(kept, Date.now());
   const found = kept.get(id);
   if (found !== undefined) return found;
-  const line: Line = { chunks: [], done: false, failed: false, wake: new Set() };
+  const line: Line = {
+    chunks: [],
+    made: Date.now(),
+    size: 0,
+    done: false,
+    failed: false,
+    wake: new Set(),
+  };
   kept.set(id, line);
   const ping = () => {
     for (const wake of line.wake) wake();
@@ -80,17 +106,19 @@ function lineOf(text: string, voice: string, key: string, warn: (why: string) =>
     if (!r.ok || r.body === null) throw new Error(`OpenAI ${String(r.status)}: ${await r.text()}`);
     for await (const chunk of r.body) {
       line.chunks.push(chunk);
+      line.size += chunk.byteLength;
       ping();
     }
   }).then(
     () => {
       line.done = true;
+      prune(kept, Date.now());
       ping();
     },
     (error: unknown) => {
       warn(String(error));
       line.failed = true;
-      kept.delete(id);
+      if (kept.get(id) === line) kept.delete(id);
       ping();
     },
   );
@@ -111,6 +139,7 @@ export function voice(): Plugin {
     name: "workshop-voice",
     apply: "serve",
     configureServer(server) {
+      server.httpServer?.once("close", () => kept.clear());
       // A single-use token for the page's realtime ears, so the key stays here.
       server.middlewares.use("/__ears/token", (req, res) => {
         const key = keyOf();
