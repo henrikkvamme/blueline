@@ -29,6 +29,11 @@ const { values: flags } = parseArgs({
   },
 });
 
+const TABS = [
+  'the Request tab [data-q="tab-request"]',
+  'the Approvers tab [data-q="tab-approvers"]',
+  'the Sent tab [data-q="tab-sent"]',
+];
 const PARTS = [
   'the title [data-q="title"]',
   'who asked [data-q="asker"]',
@@ -36,18 +41,33 @@ const PARTS = [
   'the amount [data-q="amount"]',
   'the approvers [data-q="approvers"]',
   'the send button [data-q="submit"]',
-  'the Request tab [data-q="tab-request"]',
-  'the Approvers tab [data-q="tab-approvers"]',
-  'the Sent tab [data-q="tab-sent"]',
+  ...TABS,
 ].join("; ");
+const JOURNEY =
+  "The open remark: “Try it: let me click a journey”, a look. Ask the agent to show a journey. It says each click, then makes it.";
 
 /** The page as the workshop describes it to the voice model, before his words. */
 const PAGES = {
   journey: [
     "The page: /request.",
-    "The open remark: “Try it: let me click a journey”, a look. Ask the agent to show a journey. It says each click, then makes it.",
+    JOURNEY,
     "He pointed at, while he spoke: nothing.",
     `Parts of the page: ${PARTS}.`,
+    "Remarks after this one: 6.",
+  ],
+  sent: [
+    "The page: /sent.",
+    JOURNEY,
+    "He pointed at, while he spoke: nothing.",
+    `Parts of the page: ${['the sent message [data-q="sent"]', ...TABS].join("; ")}.`,
+    "Remarks after this one: 6.",
+  ],
+  approvers: [
+    "The page: /approvers.",
+    JOURNEY,
+    "He pointed at, while he spoke: nothing.",
+    `Parts of the page: ${['the approver list [data-q="approver-list"]', 'the grip [data-q="grip"]', 'the add button [data-q="add"]', ...TABS].join("; ")}.`,
+    "The approver list: 1 Ola Hansen, Director; 2 Ingrid Berg, Finance; 3 Kari Nordmann, HR.",
     "Remarks after this one: 6.",
   ],
   status: [
@@ -67,6 +87,19 @@ interface Call {
   readonly args: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * Where a walk ends, from the made-up app's own rules below, not from the agent's map: the
+ * page, whether Kari Nordmann was added, the parts clicked and pointed at, and the first step
+ * that went wrong.
+ */
+interface End {
+  readonly path: string;
+  readonly added: boolean;
+  readonly clicked: readonly string[];
+  readonly pointed: readonly string[];
+  readonly wrong?: string;
+}
+
 interface Case {
   readonly id: string;
   readonly page: keyof typeof PAGES;
@@ -74,6 +107,11 @@ interface Case {
   readonly tool: string;
   /** What the arguments must hold, in words, and the check. */
   readonly holds?: readonly [string, (args: Call["args"]) => boolean];
+  /**
+   * A journey: where the walk must end, in words, and the check. A walk or a point that ends
+   * there passes; a hand-off to the deep agent is safe, but slow; anything else is wrong.
+   */
+  readonly goal?: readonly [string, (end: End) => boolean];
 }
 
 interface Step {
@@ -83,20 +121,54 @@ interface Step {
 
 const steps = (args: Call["args"]): readonly Step[] =>
   Array.isArray(args["steps"]) ? (args["steps"] as Step[]) : [];
-const visits = (args: Call["args"], ...parts: readonly string[]) => {
-  const order = steps(args).map((s) => s.part);
-  let at = 0;
-  for (const part of parts) {
-    at = order.indexOf(part, at);
-    if (at < 0) return false;
-  }
-  return true;
+
+/** The made-up app (src/workshop/queue/app.tsx): the parts of each page, and what a click does. */
+const APP: Readonly<Record<string, readonly string[]>> = {
+  "/request": ["title", "asker", "status", "amount", "approvers", "submit"],
+  "/approvers": ["approver-list", "grip", "add"],
+  "/sent": ["sent"],
 };
-/** The steps on these parts are all of one kind: his clicks, or the walk's own. */
-const all = (args: Call["args"], how: string, ...parts: readonly string[]) =>
-  steps(args)
-    .filter((s) => typeof s.part === "string" && parts.includes(s.part))
-    .every((s) => s.do === how);
+const EVERYWHERE = ["tab-request", "tab-approvers", "tab-sent", "page"];
+const CLICKS: Readonly<Record<string, string>> = {
+  "tab-request": "/request",
+  "tab-approvers": "/approvers",
+  "tab-sent": "/sent",
+  submit: "/sent",
+};
+const START: Readonly<Record<keyof typeof PAGES, { path: string; added: boolean }>> = {
+  journey: { path: "/request", added: false },
+  status: { path: "/request", added: false },
+  sent: { path: "/sent", added: false },
+  approvers: { path: "/approvers", added: true },
+};
+
+/** Runs the steps on the made-up app, from the case's page. */
+function walk(page: keyof typeof PAGES, all: readonly Step[]): End {
+  let { path, added } = START[page];
+  const clicked: string[] = [];
+  const pointed: string[] = [];
+  for (const step of all) {
+    const part = String(step.part);
+    const on = [...(APP[path] ?? []), ...EVERYWHERE];
+    const end = { path, added, clicked, pointed };
+    if (!on.includes(part)) return { ...end, wrong: `${part} is not on ${path}` };
+    if (step.do === "point") {
+      pointed.push(part);
+      continue;
+    }
+    // The workshop leaves out a click on the tab of the page the walk is on.
+    if (CLICKS[part] === path && part.startsWith("tab-")) continue;
+    if (part !== "add" && CLICKS[part] === undefined)
+      return { ...end, wrong: `a click on ${part} does nothing` };
+    clicked.push(part);
+    if (part === "add") added = true;
+    path = CLICKS[part] ?? path;
+  }
+  return { path, added, clicked, pointed };
+}
+
+const ends = (end: End, part: string, ...not: readonly string[]) =>
+  end.clicked.at(-1) === part && !not.some((p) => end.clicked.includes(p));
 
 const CASES: readonly Case[] = [
   { id: "next", page: "journey", said: "Go to the next one.", tool: "next" },
@@ -139,9 +211,9 @@ const CASES: readonly Case[] = [
     page: "journey",
     said: "Show me how I add an approver and send this.",
     tool: "walk",
-    holds: [
-      "visits add, then submit; he clicks both",
-      (a) => visits(a, "add", "submit") && all(a, "turn", "add", "submit"),
+    goal: [
+      "he adds, then sends, by his own clicks",
+      (e) => e.added && ends(e, "submit") && e.clicked.indexOf("add") < e.clicked.indexOf("submit"),
     ],
   },
   {
@@ -149,10 +221,78 @@ const CASES: readonly Case[] = [
     page: "journey",
     said: "Click through adding an approver and sending it for me.",
     tool: "walk",
-    holds: [
-      "visits add, then submit; the walk clicks both",
-      (a) => visits(a, "add", "submit") && all(a, "click", "add", "submit"),
+    goal: [
+      "it adds, then sends",
+      (e) => e.added && ends(e, "submit") && e.clicked.indexOf("add") < e.clicked.indexOf("submit"),
     ],
+  },
+  {
+    id: "send-from-sent",
+    page: "sent",
+    said: "Show me how I send this.",
+    tool: "walk",
+    goal: ["it ends on a click on the send button", (e) => ends(e, "submit", "add")],
+  },
+  {
+    id: "add-from-sent",
+    page: "sent",
+    said: "Where do I add another approver?",
+    tool: "walk",
+    goal: [
+      "it ends at the add button, and sends nothing",
+      (e) =>
+        (e.pointed.includes("add") || e.clicked.at(-1) === "add") && !e.clicked.includes("submit"),
+    ],
+  },
+  {
+    id: "send-from-approvers",
+    page: "approvers",
+    said: "Now show me how I send it.",
+    tool: "walk",
+    goal: ["it ends on a click on the send button", (e) => ends(e, "submit")],
+  },
+  {
+    id: "see-sent",
+    page: "journey",
+    said: "Show me where I can see that it went out, without sending it.",
+    tool: "walk",
+    goal: [
+      "it ends on the sent page, by its tab",
+      (e) => e.path === "/sent" && !e.clicked.includes("submit"),
+    ],
+  },
+  {
+    id: "first-approver",
+    page: "approvers",
+    said: "Show me the one who approves first.",
+    tool: "walk",
+    goal: [
+      "it points at the approver list, and clicks nothing",
+      (e) => e.pointed.includes("approver-list") && e.clicked.length === 0,
+    ],
+  },
+  {
+    id: "reorder",
+    page: "journey",
+    said: "Show me how to change the order of the approvers.",
+    tool: "walk",
+    goal: [
+      "it points at the grip, which he drags",
+      (e) => e.pointed.includes("grip") && !e.clicked.includes("grip"),
+    ],
+  },
+  { id: "remove", page: "journey", said: "Show me how I remove Ingrid.", tool: "ask_deep_agent" },
+  {
+    id: "edit-amount",
+    page: "journey",
+    said: "Show me how I change the amount.",
+    tool: "ask_deep_agent",
+  },
+  {
+    id: "approve",
+    page: "journey",
+    said: "Click through how Ola approves it.",
+    tool: "ask_deep_agent",
   },
   {
     id: "ask-page",
@@ -212,6 +352,8 @@ interface Result {
   /** From the release to the tool call, in ms. */
   readonly ms?: number;
   readonly pass: boolean;
+  /** For a journey: it walked, handed it to the deep agent, or showed a wrong one. */
+  readonly kind?: "walked" | "handed" | "wrong";
   readonly why?: string;
 }
 
@@ -282,18 +424,32 @@ async function run(c: Case): Promise<Result> {
   send({ type: "response.create" });
   await done;
   ws.close();
-  // Without the app's map the session has no walk, so a journey goes to the deep agent.
-  const want = !mapped && c.tool === "walk" ? "ask_deep_agent" : c.tool;
-  const base = { id: c.id, said: c.said, want, ...(heard === undefined ? {} : { heard }) };
+  const base = { id: c.id, said: c.said, want: c.tool, ...(heard === undefined ? {} : { heard }) };
   if (got === undefined) return { ...base, pass: false, why: error ?? "no tool" };
   const call = got;
-  const right = call.tool === want;
-  const holds = c.holds === undefined || want !== c.tool || (right && c.holds[1](call.args));
+  const timed = { ...base, got: call, ...(ms === undefined ? {} : { ms }) };
+  if (c.goal !== undefined) {
+    if (call.tool === "ask_deep_agent") return { ...timed, pass: true, kind: "handed" };
+    const all =
+      call.tool === "point"
+        ? [{ part: /data-q="([^"]+)"/.exec(String(call.args["target"]))?.[1], do: "point" }]
+        : call.tool === "walk"
+          ? steps(call.args)
+          : undefined;
+    if (all === undefined)
+      return { ...timed, pass: false, kind: "wrong", why: `called ${call.tool}` };
+    const end = walk(c.page, all);
+    const why = end.wrong ?? (c.goal[1](end) ? undefined : `not: ${c.goal[0]}`);
+    return why === undefined
+      ? { ...timed, pass: true, kind: "walked" }
+      : { ...timed, pass: false, kind: "wrong", why };
+  }
+  const right = call.tool === c.tool;
+  const holds = c.holds === undefined || (right && c.holds[1](call.args));
   return {
-    ...base,
-    got: call,
-    ...(ms === undefined ? {} : { ms }),
+    ...timed,
     pass: right && holds,
+    ...(call.tool === "walk" && c.tool !== "walk" ? { kind: "wrong" as const } : {}),
     ...(right
       ? holds
         ? {}
@@ -335,16 +491,29 @@ const results = await inParallel(
 );
 
 for (const r of results) {
-  const args = r.got === undefined ? "" : JSON.stringify(r.got.args).slice(0, 70);
+  const args =
+    r.got?.tool === "walk"
+      ? steps(r.got.args)
+          .map((s) => `${String(s.part)}:${String(s.do)}`)
+          .join(" > ")
+      : r.got === undefined
+        ? ""
+        : JSON.stringify(r.got.args).slice(0, 70);
   console.log(
-    `${r.pass ? "ok  " : "FAIL"} ${r.id.padEnd(14)} ${(r.got?.tool ?? "-").padEnd(15)} ${String(r.ms ?? "-").padStart(5)} ms  ${r.why ?? args}`,
+    `${r.pass ? "ok  " : "FAIL"} ${r.id.padEnd(19)} ${(r.got?.tool ?? "-").padEnd(15)} ${String(r.ms ?? "-").padStart(5)} ms  ${r.why ?? args}`,
   );
   if (!r.pass && r.heard !== undefined) console.log(`     heard: ${r.heard}`);
+  if (!r.pass && r.why !== undefined && r.got?.tool === "walk") console.log(`     ${args}`);
 }
 const times = results.flatMap((r) => (r.ms === undefined ? [] : [r.ms])).sort((a, b) => a - b);
 const median = times[Math.floor(times.length / 2)] ?? 0;
 const passed = results.filter((r) => r.pass).length;
 console.log(`\n${String(passed)}/${String(results.length)} right, median ${String(median)} ms`);
+const kinds = (kind: Result["kind"]) => String(results.filter((r) => r.kind === kind).length);
+if (results.some((r) => r.kind !== undefined))
+  console.log(
+    `Journeys: ${kinds("walked")} walked, ${kinds("handed")} handed to the deep agent, ${kinds("wrong")} wrong`,
+  );
 mkdirSync(RUNS, { recursive: true });
 const file = path.join(RUNS, `route-${new Date().toISOString().replaceAll(":", "-")}.json`);
 writeFileSync(file, JSON.stringify(results, null, 2));

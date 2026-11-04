@@ -132,13 +132,22 @@ function load(): State {
   }
 }
 
-/** The fast tier's walk steps as beats. The session holds its parts to the app's map. */
-function beatsOf(steps: unknown): readonly Beat[] {
+/**
+ * The fast tier's walk steps as beats. The session holds its parts to the app's map. A click on
+ * the tab of the page that the walk is on does nothing, so it is left out.
+ */
+function beatsOf(steps: unknown, page: string): readonly Beat[] {
   if (!Array.isArray(steps)) return [];
+  let on: string | undefined = page;
   return steps.flatMap((step: unknown): Beat[] => {
     if (typeof step !== "object" || step === null) return [];
     const { part, do: how, say } = step as Record<string, unknown>;
     if (typeof part !== "string" || part === "" || typeof say !== "string") return [];
+    if (how === "click" || how === "turn") {
+      const tab = part.startsWith("tab-") ? `/${part.slice(4)}` : undefined;
+      if (tab !== undefined && tab === on) return [];
+      on = tab;
+    }
     return [
       {
         target: selectorOf(part),
@@ -632,7 +641,7 @@ function Live() {
         break;
       }
       case "walk": {
-        walked = beatsOf(call.args["steps"]);
+        walked = beatsOf(call.args["steps"], pageNow.current);
         did = walked.length === 0 ? "No steps to walk" : `Walking ${String(walked.length)} steps`;
         if (walked.length > 0) {
           walker.start(walked, pageNow.current);
