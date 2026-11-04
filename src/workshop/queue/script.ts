@@ -8,11 +8,16 @@ import { arrive, empty } from "../../queue/queue";
 
 export const JOURNEY = "Bonus request";
 
-/** The made-up app's pages. */
+/** The app's pages, each with the `data-q` names of its parts. Every page also has the tabs
+ * `tab-request`, `tab-approvers` and `tab-sent`. */
 export const PAGES = [
-  { path: "/request", title: "Request" },
-  { path: "/approvers", title: "Approvers" },
-  { path: "/sent", title: "Sent" },
+  {
+    path: "/request",
+    title: "Request",
+    parts: ["title", "asker", "status", "amount", "approvers", "submit"],
+  },
+  { path: "/approvers", title: "Approvers", parts: ["approver-list", "grip", "add"] },
+  { path: "/sent", title: "Sent", parts: ["sent"] },
 ] as const;
 
 export type Path = (typeof PAGES)[number]["path"];

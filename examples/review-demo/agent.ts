@@ -158,7 +158,7 @@ How to show:
 - Say only what answers him. Leave out reasons, comparisons and side remarks he did not ask for, such as why a shorter title still works or what the rest of the page looks like: each extra claim is one more that can be wrong. When your words name who gets, has or approves something, and the page does not show it, read the app's code for it. A label on a control names what that click does now: who gets it at that moment, not everyone who gets it later.
 - Draw: circle a thing, underline words, box a region, strike what should go. Add shapes when they help: an arrow from one element to another, a text label, an ellipse. Shape coordinates are px from the target's top left, from the elements' boxes.
 - Mock up a change in place with replace before you make it, so he judges it by eye. Change only what he asked about: when he names one part, such as the title, change that part only, even when its element holds more; every other word, label and field stays as it is. A translation, a new currency, name, date, label, figure or wording is a change of words: use replace.swap, never html, and swap only the words he asked about. Use replace.html only when the change needs new parts or a new layout; build it from the element's html in the elements list and keep the rest: copy each element you keep with its tag and class attribute exactly, so it keeps its size. It shows in the page in the element's place. Only classes already on the page have styles, so reuse classes from the elements' html, and give anything new an inline style. When he says what a part should tell ("say who it goes to", "show who approves first"), fill in the real content from the page, such as "Send to Ola Hansen", never his description as a label; speech to text may put quote marks round such words. Say only what the page or the code shows: never make up who did what, or what the app has, lacks or does; say nothing about what it lacks. A made-up value, such as a time, is fine when you call it an example. Get figures right: convert with a real rate, round to a plain figure and call it about that much; never call it today's rate or the app's rate. Never call a person he, she, him or her, not Kari, Ola, Ingrid nor anyone in the app: say their name, or they. Speak of a mock-up as a preview ("this is how it would look"), never as what the page now has. A value the app does not store, such as a date the page only gives as "2 days ago", is an example: call it an example, and say what it comes from, even when he asks for the real one. A state the page does not show now, such as approved or sent back, has its own look in the app's code, src/workshop/queue/app.tsx: read it before you mock that state up, and say nothing about the app's states you have not read. Show one mock-up, your best read, not options. A change of length or size, such as shorter or bigger, shows at a glance: a shorter text drops words, not only reorders them. Shorten in steps, so a follow-up can go further: the first drops the words that matter least, and each step keeps whom and what the text is about, such as a person's name and the word bonus; a first name can stand for a full one. Never call a version the shortest or the best; say only what changed. A follow-up such as "even shorter" or "bigger" goes on from your last mock-up: make it clearly more so, by a measure he sees, such as fewer words for shorter, and keep what the part must still tell him, such as what a title says the page is about. When the element he points at holds smaller marked parts, change only the part under his mouse. To move a part, mock up the page element that holds both places, with the part in its new place, so it leaves its old one. To swap words, such as two names, swap both pairs in one replace.swap; it swaps them at once. To take a part away, mock it up with replace.html set to nothing.
-- Teach with turn: the walk waits for his own click. When he asks how he would do something ("show me how I send this"), teach: point at each control with turn and let him click. Click yourself only when he asks you to do it for him ("click through it", "run it for me"); say what you click before you click it. The app's tabs and the send button change the page: end the walk with that click. The show tool's result lists the elements of the page as it is now, so go on with the next walk from there.
+- Teach with turn: the walk waits for his own click. When he asks how he would do something ("show me how I send this"), teach: point at each control with turn and let him click. Click yourself only when he asks you to do it for him ("click through it", "run it for me"); say what you click before you click it. A journey goes in one show, every step in order, also across pages: after a click, yours or his on a turn, the next beat may point at a part of the page that click opens. The context's pages list the parts of each page, by their data-q names, as [data-q="add"]; every page has the tabs [data-q="tab-request"], [data-q="tab-approvers"] and [data-q="tab-sent"]. Act only after the walk: an act that moves the queue changes the page.
 - peek and state show a variant or a state of the current remark's choice.
 - Use only selectors from the elements list.
 
@@ -274,9 +274,16 @@ export function agent(): Plugin {
         });
         return { id, how };
       };
-      /** The page's tools, for one run. */
-      const tools = () =>
-        createSdkMcpServer({
+      /** The page's tools, for one run. They take turns: an act waits for the walk before it
+       * to end, so a settle never takes the page away from a walk that still plays. */
+      const tools = () => {
+        let inLine: Promise<unknown> = Promise.resolve();
+        const inTurn = <T>(work: () => Promise<T>) => {
+          const run = inLine.then(work);
+          inLine = run.catch(() => undefined);
+          return run;
+        };
+        return createSdkMcpServer({
           name: "page",
           alwaysLoad: true,
           tools: [
@@ -284,23 +291,25 @@ export function agent(): Plugin {
               "show",
               "Show Henrik on the page: the cursor walks the beats, draws and speaks each line. Returns how the walk went.",
               { beats: z.array(beat).min(1) },
-              async ({ beats }) => {
-                const { id, how } = await_();
-                out.mark("sent");
-                out.send({ type: "show", id, beats });
-                return { content: [{ type: "text", text: await how }] };
-              },
+              async ({ beats }) =>
+                inTurn(async () => {
+                  const { id, how } = await_();
+                  out.mark("sent");
+                  out.send({ type: "show", id, beats });
+                  return { content: [{ type: "text" as const, text: await how }] };
+                }),
             ),
             tool(
               "act",
               "Do what he can do in the workshop, and more, in order: go through the queue, settle, undo, keep, preview, change the settings, design variants, add states, write remarks. Returns what each act did and where the review is now.",
               { acts: z.array(act).min(1) },
-              async ({ acts }) => {
-                const { id, how } = await_();
-                out.mark("sent");
-                out.send({ type: "act", id, acts });
-                return { content: [{ type: "text", text: await how }] };
-              },
+              async ({ acts }) =>
+                inTurn(async () => {
+                  const { id, how } = await_();
+                  out.mark("sent");
+                  out.send({ type: "act", id, acts });
+                  return { content: [{ type: "text" as const, text: await how }] };
+                }),
             ),
             tool(
               "feedback",
@@ -348,6 +357,7 @@ export function agent(): Plugin {
             ),
           ],
         });
+      };
       /** The options of a run that goes on with `resume`, or starts a new session. */
       const options = (resume: string | undefined): Options => ({
         model: MODEL,

@@ -537,7 +537,8 @@ export class Walker {
         await sleep(60);
         if (!live()) return;
       }
-      let element = this.find(beat);
+      let element = await this.found(beat, live);
+      if (!live()) return;
       if (element === undefined) return this.lose(this.goneWords(beat));
       if (!this.inView(element)) {
         element.scrollIntoView({
@@ -675,6 +676,19 @@ export class Walker {
       placed.undo();
     };
     return placed.framed;
+  }
+
+  /** The beat's element. After a click of the walk's own, or his on a turn, the page that
+   * the click opens may draw it a moment later. */
+  private async found(beat: Beat, live: () => boolean) {
+    let element = this.find(beat);
+    const since = Date.now();
+    while (element === undefined && live() && since - this.clicked < 2500) {
+      if (Date.now() - since > 1500) break;
+      await sleep(50);
+      element = this.find(beat);
+    }
+    return element;
   }
 
   private find(beat: Beat): Element | undefined {
