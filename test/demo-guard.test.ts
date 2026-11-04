@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { ownRequest } from "../examples/review-demo/guard.ts";
+import { ours, ownRequest } from "../examples/review-demo/guard.ts";
 
 /* The demo's routes answer the page itself and tools on the machine, never another site. */
 
 const from = (headers: Record<string, string>) => ownRequest({ headers });
+
+describe("ours", () => {
+  it("takes each path that Connect sends to a route, in any case and after a dot", () => {
+    expect(ours("/__agent")).toBe(true);
+    expect(ours("/__AGENT")).toBe(true);
+    expect(ours("/__agent.anything?x=1")).toBe(true);
+    expect(ours("/__realtime/token")).toBe(true);
+    expect(ours("/workshop.html")).toBe(false);
+  });
+});
 
 describe("ownRequest", () => {
   it("takes the page's own requests, also behind a proxy that changes the host", () => {

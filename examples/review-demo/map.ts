@@ -101,8 +101,8 @@ async function make(log: (line: string) => void): Promise<void> {
       settingSources: [],
       tools: ["Read", "Glob", "Grep"],
       outputFormat: { type: "json_schema", schema: jsonSchema },
-      canUseTool: async (_name, input) =>
-        inputInside(ROOT, input)
+      canUseTool: async (name, input) =>
+        inputInside(ROOT, name, input)
           ? { behavior: "allow", updatedInput: input }
           : { behavior: "deny", message: "Only files in this repository." },
     },

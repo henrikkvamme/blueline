@@ -16,11 +16,20 @@ export function inside(root: string, path: string): boolean {
   return !rel.startsWith("..") && !isAbsolute(rel) && !/(^|\/)(node_modules|\.git)(\/|$)/.test(rel);
 }
 
-/** Whether a tool's input stays in the folder: its path, and a glob that names no other. */
-export function inputInside(root: string, input: Readonly<Record<string, unknown>>): boolean {
+/** A glob that names a file outside: an absolute one, or one that goes up. */
+const out = (glob: unknown) =>
+  typeof glob === "string" && (isAbsolute(glob) || glob.split("/").includes(".."));
+
+/**
+ * Whether a tool's input stays in the folder: its path, and a glob that names no other. Glob's
+ * pattern is a glob of files; Grep's is a regex of text, so only its glob filter is one.
+ */
+export function inputInside(
+  root: string,
+  tool: string,
+  input: Readonly<Record<string, unknown>>,
+): boolean {
   const path = input["file_path"] ?? input["path"] ?? input["notebook_path"];
-  const pattern = input["pattern"];
-  if (typeof pattern === "string" && (isAbsolute(pattern) || pattern.split("/").includes("..")))
-    return false;
+  if (out(input["glob"]) || (tool === "Glob" && out(input["pattern"]))) return false;
   return typeof path !== "string" || inside(root, path);
 }

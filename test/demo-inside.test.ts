@@ -40,8 +40,15 @@ describe("inside", () => {
 
   it("refuses a glob that names another folder", () => {
     const { root } = folders();
-    expect(inputInside(root, { pattern: "/etc/*" })).toBe(false);
-    expect(inputInside(root, { pattern: "../**/*.ts" })).toBe(false);
-    expect(inputInside(root, { pattern: "src/**/*.ts" })).toBe(true);
+    expect(inputInside(root, "Glob", { pattern: "/etc/*" })).toBe(false);
+    expect(inputInside(root, "Glob", { pattern: "../**/*.ts" })).toBe(false);
+    expect(inputInside(root, "Glob", { pattern: "src/**/*.ts" })).toBe(true);
+    expect(inputInside(root, "Grep", { pattern: "x", glob: "../**/*" })).toBe(false);
+  });
+
+  it("takes any text that Grep looks for", () => {
+    const { root } = folders();
+    expect(inputInside(root, "Grep", { pattern: "/__agent", path: "." })).toBe(true);
+    expect(inputInside(root, "Grep", { pattern: "\\.\\./x" })).toBe(true);
   });
 });

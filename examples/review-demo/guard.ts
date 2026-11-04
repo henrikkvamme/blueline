@@ -7,10 +7,13 @@ import { fromPage } from "@henrikkvamme/blueline/vite";
  * said. Only the page itself, or a tool on the machine, may call them: a page on another site
  * could otherwise post to them from his browser. The browser says where a request comes from
  * in `Sec-Fetch-Site`, also behind a proxy that changes the host; a tool sends no such header
- * and no `Origin`.
+ * and no `Origin`. Connect matches a route without case and up to a `/` or a `.`, so the guard
+ * takes every path that starts with `/__`, in any case.
  */
 
-const ROUTES = ["/__agent", "/__take", "/__timing", "/__realtime", "/__voice"];
+/** Whether a request's path is one of the dev server's own routes, as Connect matches them. */
+export const ours = (url: string | undefined) =>
+  (url ?? "").split("?")[0]?.toLowerCase().startsWith("/__") === true;
 
 /** Whether the request comes from the page's own origin, or from a tool. */
 export function ownRequest(request: Pick<IncomingMessage, "headers">): boolean {
@@ -25,9 +28,7 @@ export function guard(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        const path = (request.url ?? "").split("?")[0] ?? "";
-        const ours = ROUTES.some((route) => path === route || path.startsWith(`${route}/`));
-        if (!ours || ownRequest(request)) return next();
+        if (!ours(request.url) || ownRequest(request)) return next();
         response.statusCode = 403;
         response.end();
       });

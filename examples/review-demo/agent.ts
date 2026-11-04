@@ -358,7 +358,8 @@ export function agent(): Plugin {
         // Each token as it comes, for the timing of each step.
         includePartialMessages: true,
         canUseTool: async (name, input) =>
-          name.startsWith("mcp__page__") || (ALLOWED.includes(name) && inputInside(ROOT, input))
+          name.startsWith("mcp__page__") ||
+          (ALLOWED.includes(name) && inputInside(ROOT, name, input))
             ? { behavior: "allow", updatedInput: input }
             : { behavior: "deny", message: "Only files in this repository, and no commands." },
         ...(resume === undefined ? {} : { resume }),
