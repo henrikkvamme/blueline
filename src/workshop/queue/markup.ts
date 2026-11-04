@@ -62,9 +62,16 @@ const image = (value: string) =>
   // oxlint-disable-next-line no-control-regex -- the controls are what the browser drops
   /^(https?:|data:image\/(png|jpeg|gif|webp)[;,])/i.test(value.replace(/[\u0000-\u0020]/g, ""));
 
+/** The parts that belong to a form, and send it. */
+const FIELDS = "button, input, select, textarea, fieldset, output";
+
+/** A form ID that no page has: a field that names it belongs to no form. */
+const NO_FORM = "blueline-no-form";
+
 /**
  * Markup from the agent, inert: it only shows. No scripts, frames, handlers or links, and no
- * form that sends; an image keeps a web or still source.
+ * form that sends; an image keeps a web or still source. Its fields belong to no form, also
+ * when the page puts the markup inside one, and its buttons submit nothing.
  */
 export function clean(html: string) {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -78,9 +85,15 @@ export function clean(html: string) {
       const lower = name.toLowerCase();
       const kept = URLS.has(lower)
         ? media && lower === "src" && image(value)
-        : !lower.startsWith("on");
+        : !lower.startsWith("on") && !lower.startsWith("form");
       if (!kept) element.removeAttribute(name);
     }
+  }
+  for (const field of doc.body.querySelectorAll(FIELDS)) {
+    field.setAttribute("form", NO_FORM);
+    const type = field.getAttribute("type")?.toLowerCase();
+    if (field.tagName === "BUTTON" || type === "submit" || type === "image" || type === "reset")
+      field.setAttribute("type", "button");
   }
   return doc.body.innerHTML;
 }
