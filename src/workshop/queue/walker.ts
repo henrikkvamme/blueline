@@ -271,6 +271,8 @@ export class Walker {
   private unlisten: (() => void) | undefined;
   /** Resolves a turn: the reviewer clicked, or skipped it. */
   private turned: (() => void) | undefined;
+  /** Ends a turn that the walk no longer waits for: its listener goes, and its wait ends. */
+  private unturn: (() => void) | undefined;
   /** Shows the element that a mock-up hid. */
   private unhide: (() => void) | undefined;
   /** When the cursor last clicked: a page that changes after it is the click's doing. */
@@ -492,6 +494,7 @@ export class Walker {
     this.holding = undefined;
     hush();
     this.turned = undefined;
+    this.unturn?.();
     this.untrack?.();
     this.untrack = undefined;
     // A mock-up stays with a pause, as a preview does: he may speak about it.
@@ -712,17 +715,22 @@ export class Walker {
    * as any click does. */
   private turn(element: Element) {
     return new Promise<void>((resolve) => {
-      const done = () => {
+      const end = () => {
         element.removeEventListener("click", done, true);
+        this.unturn = undefined;
+        resolve();
+      };
+      const done = () => {
+        end();
         // His click may change the page, as the turn asked.
         this.clicked = Date.now();
         this.turned = undefined;
         // The turn is his no more, though its line may still be spoken.
         this.set({ ...this.snap });
-        resolve();
       };
       element.addEventListener("click", done, true);
       this.turned = done;
+      this.unturn = end;
     });
   }
 
