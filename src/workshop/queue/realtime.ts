@@ -78,6 +78,8 @@ export function fast(voice: () => string, on: Handlers): Fast {
   let waiting: number[] = [];
   let answering: number | undefined;
   let hush = 0;
+  /** The session his voice streams to since the keys went down; -1 when none was ready. */
+  let pressedIn = -1;
   let commits: number[] = [];
   /** The version of the app's map that the session knows. */
   let version = "";
@@ -340,6 +342,7 @@ export function fast(voice: () => string, on: Handlers): Fast {
     warm: () => void connect(),
     press: (stream) => {
       flush?.();
+      pressedIn = state === "ready" ? generation : -1;
       hush = turns + 1;
       sound();
       send({ type: "input_audio_buffer.clear" });
@@ -349,6 +352,8 @@ export function fast(voice: () => string, on: Handlers): Fast {
     release: (page) => {
       flush?.();
       const turn = ++turns;
+      // The session dropped while he spoke: the new one heard none of it.
+      if (pressedIn !== generation) return { turn, answered: Promise.resolve(false) };
       const done = new Promise<boolean>((resolve) => {
         answers.set(turn, resolve);
         window.setTimeout(() => giveUp(turn), LONGEST);

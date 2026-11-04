@@ -50,7 +50,7 @@ async function connected(mapAfter: number) {
   vi.stubGlobal("RTCPeerConnection", Peer);
   const real = window.fetch.bind(window);
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+    const url = input instanceof Request ? input.url : input.toString();
     if (url.startsWith("/__realtime/token")) return Response.json({ value: "key", version: "" });
     if (url.startsWith("https://api.openai.com")) return new Response("answer");
     if (url.startsWith("/__realtime/session")) {
@@ -92,6 +92,20 @@ describe("the fast tier", () => {
     channel.receive({ type: "response.created", response });
     channel.receive({ type: "response.done", response: { ...response, status: "failed" } });
     expect(await answered).toBe(false);
+    tier.close();
+  });
+
+  it("fails a press that the session dropped and sends the new one nothing", async () => {
+    const tier = await connected(0);
+    tier.press(new MediaStream());
+    const old = channel;
+    old.dispatchEvent(new Event("close"));
+    for (let i = 0; i < 100 && (channel === old || tier.state() !== "ready"); i++) await wait(10);
+    expect(tier.state()).toBe("ready");
+    const { answered } = tier.release("The page.");
+    expect(await answered).toBe(false);
+    await wait(300);
+    expect(channel.sent.map((e) => e.type)).not.toContain("input_audio_buffer.commit");
     tier.close();
   });
 

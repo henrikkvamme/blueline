@@ -391,7 +391,7 @@ export function usePointAndTalk({
           .then((answered) => {
             if (held || mine !== releases) return;
             if (answered) setTalk(IDLE);
-            else fail("No answer came");
+            else fail("No answer came. Say it again");
           });
       };
       meter();
