@@ -196,11 +196,9 @@ export function Panel(props: PanelProps) {
         ) : props.tree === true ? (
           <Tree
             queue={q}
-            onShow={(id) => {
-              props.onShow?.(id);
-              props.onTree?.(false);
-            }}
+            onShow={(id) => props.onShow?.(id)}
             onClose={() => props.onTree?.(false)}
+            active={here === undefined ? undefined : <RemarkView {...props} remark={here} inline />}
           />
         ) : here === undefined ? (
           <Idle queue={q} eta={props.eta} />
@@ -431,11 +429,14 @@ function Tree({
   queue: q,
   onShow,
   onClose,
+  active,
 }: {
   readonly queue: Queue;
   readonly onShow: (id: string) => void;
   readonly onClose: () => void;
+  readonly active: ReactNode;
 }) {
+  const here = current(q)?.id;
   const ids = [
     ...q.settled,
     ...q.trail,
@@ -450,7 +451,9 @@ function Tree({
     remarks: ranked.filter((r) => r.page === page.path),
   })).filter((g) => g.remarks.length > 0);
   const [folded, setFolded] = useState<readonly string[]>([]);
-  const rows = groups.flatMap((g) => (folded.includes(g.page.path) ? [] : g.remarks));
+  const shownOf = (g: (typeof groups)[number]) =>
+    folded.includes(g.page.path) ? g.remarks.filter((r) => r.id === here) : g.remarks;
+  const rows = groups.flatMap(shownOf);
   const [picked, setPicked] = useState(() => current(q)?.id ?? rows[0]?.id);
   const at = Math.max(
     0,
@@ -497,9 +500,9 @@ function Tree({
                 {done}/{remarks.length}
               </span>
             </button>
-            {open && (
+            {shownOf({ page, remarks }).length > 0 && (
               <ul className="relative ml-[13px] flex flex-col border-l border-dt-line pl-1.5">
-                {remarks.map((r) => {
+                {shownOf({ page, remarks }).map((r) => {
                   const mark = markOf(q, r);
                   const kind = KIND[r.kind];
                   return (
@@ -526,6 +529,7 @@ function Tree({
                           <kind.Icon className="size-3.5 shrink-0 text-dt-faint" aria-hidden />
                         )}
                       </button>
+                      {r.id === here && active}
                     </li>
                   );
                 })}
@@ -590,12 +594,17 @@ function Keys() {
   );
 }
 
-function RemarkView(props: PanelProps & { readonly remark: Remark }) {
+function RemarkView(props: PanelProps & { readonly remark: Remark; readonly inline?: boolean }) {
   const { queue: q, remark: r } = props;
   const kind = KIND[r.kind];
   const settled = isSettled(q, r.id);
   return (
-    <section className="flex animate-dt-arrive flex-col gap-4 px-4 pt-2 pb-5">
+    <section
+      className={cx(
+        "flex animate-dt-arrive flex-col gap-4",
+        props.inline === true ? "px-2 pt-1 pb-3" : "px-4 pt-2 pb-5",
+      )}
+    >
       <div className="flex flex-col gap-1.5">
         <span className="flex items-center gap-1.5 text-[11px] font-medium text-dt-faint">
           <kind.Icon className="size-3.5" aria-hidden />
@@ -612,9 +621,11 @@ function RemarkView(props: PanelProps & { readonly remark: Remark }) {
             props.walk !== undefined && <WalkControls {...props} phase={props.walk} />
           )}
         </span>
-        <h2 className="text-[17px] leading-6 font-semibold tracking-[-0.01em] text-balance">
-          {r.title}
-        </h2>
+        {props.inline !== true && (
+          <h2 className="text-[17px] leading-6 font-semibold tracking-[-0.01em] text-balance">
+            {r.title}
+          </h2>
+        )}
         {r.text !== undefined && r.kind !== "answer" && (
           <p className="text-[13px] leading-5 text-pretty text-dt-muted">{r.text}</p>
         )}
