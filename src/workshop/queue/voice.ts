@@ -77,31 +77,3 @@ export async function say(text: string, voice: string): Promise<boolean> {
     audio.play().catch(end);
   });
 }
-
-/** A word that he said, and when in the audio, in s. */
-export interface Word {
-  readonly text: string;
-  readonly start: number;
-  readonly end: number;
-}
-
-/** The reviewer's spoken words as text, each word with its time, from the dev server's
- * `/__hear` route; undefined when it has no ears or heard nothing. */
-export async function hear(
-  audio: Blob,
-): Promise<{ readonly text: string; readonly words: readonly Word[] } | undefined> {
-  try {
-    const r = await fetch("/__hear", {
-      method: "POST",
-      headers: { "Content-Type": audio.type },
-      body: audio,
-    });
-    if (!r.ok) return undefined;
-    const { text, words } = (await r.json()) as { text: string; words?: readonly Word[] };
-    // A tag in brackets is a sound, not a word: with only tags, he said nothing.
-    const said = text.replace(/[[(][^\])]*[\])]/g, "").trim();
-    return said === "" ? undefined : { text: said, words: words ?? [] };
-  } catch {
-    return undefined;
-  }
-}

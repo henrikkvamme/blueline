@@ -11,8 +11,6 @@ import type { Act } from "./acts";
 
 export type AgentEvent =
   | { readonly type: "status"; readonly text: string }
-  /** What a fast model heard him ask for, in one line, before the agent answers. */
-  | { readonly type: "heard"; readonly text: string; readonly ear: string }
   | { readonly type: "show"; readonly id: string; readonly beats: readonly Beat[] }
   /** A change for the queue; one that revises takes the place of the last waiting request on
    * the same element. */

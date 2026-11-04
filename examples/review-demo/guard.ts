@@ -10,15 +10,7 @@ import { fromPage } from "@henrikkvamme/blueline/vite";
  * and no `Origin`.
  */
 
-const ROUTES = [
-  "/__agent",
-  "/__take",
-  "/__timing",
-  "/__realtime",
-  "/__ears",
-  "/__hear",
-  "/__voice",
-];
+const ROUTES = ["/__agent", "/__take", "/__timing", "/__realtime", "/__voice"];
 
 /** Whether the request comes from the page's own origin, or from a tool. */
 export function ownRequest(request: Pick<IncomingMessage, "headers">): boolean {

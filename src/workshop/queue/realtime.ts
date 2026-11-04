@@ -12,7 +12,8 @@
  * Each press asks the dev server whether the app's map is newer than the session's. When it
  * is, the session gets the map's instructions and tools before his words reach it.
  *
- * With no route or no key, `ready` stays false and the workshop hears him the old way.
+ * A session that drops connects again at once, so his next press finds it ready. With no route
+ * or no key, the state is unavailable, and the workshop can only take typed words.
  */
 
 export interface Call {
@@ -31,8 +32,8 @@ export interface Released {
 }
 
 export interface Fast {
-  /** Connected, so a press goes to the realtime model. */
-  readonly ready: () => boolean;
+  /** Ready: connected, so a press goes to the realtime model. */
+  readonly state: () => "ready" | "connecting" | "unavailable";
   /** Connects ahead of his first press. */
   readonly warm: () => void;
   /** The keys went down: his voice streams, and the model's voice goes quiet. */
@@ -227,6 +228,15 @@ export function fast(voice: () => string, on: Handlers): Fast {
     }
   };
 
+  /** The session dropped: it connects again soon, unless the page closes it first. */
+  const lost = () => {
+    close();
+    const mine = generation;
+    window.setTimeout(() => {
+      if (mine === generation) void connect();
+    }, 500);
+  };
+
   const connect = async () => {
     if (state !== "off") return;
     state = "connecting";
@@ -265,13 +275,13 @@ export function fast(voice: () => string, on: Handlers): Fast {
       dc.addEventListener("close", () => {
         if (peer !== pc) return;
         console.warn("Realtime: the session closed");
-        close();
+        lost();
       });
       pc.addEventListener("connectionstatechange", () => {
         if (peer !== pc) return;
         if (pc.connectionState === "failed" || pc.connectionState === "closed") {
           console.warn(`Realtime: the connection ${pc.connectionState}`);
-          close();
+          lost();
         }
       });
       const offer = await pc.createOffer();
@@ -310,7 +320,7 @@ export function fast(voice: () => string, on: Handlers): Fast {
   };
 
   return {
-    ready: () => state === "ready",
+    state: () => (state === "off" ? "connecting" : state),
     warm: () => void connect(),
     press: (stream) => {
       flush?.();

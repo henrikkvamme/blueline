@@ -95,7 +95,7 @@ export interface Snapshot {
 }
 
 export interface Settings {
-  /** The ElevenLabs voice, or none for the words alone. */
+  /** The OpenAI voice, or none for the words alone. */
   readonly voice: string | undefined;
   readonly reduced: boolean;
 }
@@ -398,14 +398,6 @@ export class Walker {
         this.showHold(boxOf(element.getBoundingClientRect()));
         this.track(beat, element, generation, (box) => this.showHold(box));
       });
-  }
-
-  /** The fast line came: the held note says it. */
-  hearing(words: string) {
-    if (this.holding === undefined) return;
-    this.holding = { ...this.holding, words };
-    const box = this.snap.mark?.box;
-    if (box !== undefined) this.showHold(box);
   }
 
   /** The agent ended with no walk of its own: the held cursor goes. */

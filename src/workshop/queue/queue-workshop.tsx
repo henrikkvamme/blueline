@@ -550,11 +550,10 @@ function Live() {
   };
 
   const fastEars: FastEars = {
-    ready: () => {
-      if (realtime.ready()) return true;
-      console.warn("Realtime: not ready, so the old ears hear this");
-      realtime.warm();
-      return false;
+    state: () => {
+      const state = realtime.state();
+      if (state === "connecting") realtime.warm();
+      return state;
     },
     press: (stream) => realtime.press(stream),
     drop: () => realtime.drop(),
@@ -797,16 +796,10 @@ function Live() {
         (event) => {
           if (asking.current !== control) return;
           if (event.type === "timing") return timing.note({ server: event });
-          if (event.type !== "status" && event.type !== "heard") timing.mark("agent");
+          if (event.type !== "status") timing.mark("agent");
           switch (event.type) {
             case "status":
               update((x) => ({ ...x, tone: "busy", status: event.text }));
-              break;
-            case "heard":
-              walker.hearing(event.text);
-              timing.mark("heard");
-              timing.note({ line: event.text, ear: event.ear });
-              update((x) => ({ ...x, heard: event.text }));
               break;
             case "show":
               update((x) => ({ ...x, tone: "showing", walk: event.beats }));
@@ -892,7 +885,7 @@ function Live() {
   /** What the panel's line says about the exchange: his words, and the agent's answer. */
   const line = (() => {
     if (talk.phase === "listening")
-      return { said: talk.words, tone: "listening", status: "Listening" } as const;
+      return { said: undefined, tone: "listening", status: "Listening" } as const;
     if (talk.phase === "thinking")
       return { said: undefined, tone: "busy", status: "Hearing you" } as const;
     if (exchange === undefined) return undefined;

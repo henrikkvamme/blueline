@@ -4,7 +4,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { envOf } from "./hearing.ts";
+import { envOf } from "./message.ts";
 import { inputInside } from "./inside.ts";
 
 /*

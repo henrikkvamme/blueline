@@ -3,10 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { cx } from "../../ui/cx";
 import { selectorOf } from "./script";
 import type { Drawn, Pointed } from "../../queue/queue";
-import { elements } from "./agent";
-import * as ears from "./ears";
 import * as timing from "./timing";
-import { hear, type Word } from "./voice";
 
 /*
  * Point and talk, as Clicky's push-to-talk: hold ⌃⌘, point and say what should change. Escape
@@ -21,8 +18,9 @@ import { hear, type Word } from "./voice";
  * secure page (https).
  *
  * He may point at more than one element while he speaks: "this one should look like that
- * one". Each word has its time in the audio, so each goes with the element under the mouse
- * when he said it, and the agent knows which "this" is which.
+ * one". The fast tier gets each element he pointed at, in order, so it knows which "this" is
+ * which. His words go to the fast tier only (ADR 0008): while it connects, or with no key, a
+ * press says so, and he can still type.
  */
 
 export interface Box {
@@ -46,8 +44,6 @@ export type Talk =
    * speaks, 0 to 1. */
   | {
       readonly phase: "listening";
-      /** His words so far, from the realtime ears. */
-      readonly words?: string | undefined;
       readonly ink: readonly Ink[];
       readonly strokes: readonly string[];
       readonly level: number;
@@ -84,29 +80,6 @@ const IDLE: Talk = { phase: "idle" };
 
 /** Where the mouse was while he spoke: each element, from when, in ms of the audio. */
 export type Trail = readonly { readonly target: string | undefined; readonly at: number }[];
-
-/**
- * His words, each with the element under the mouse when he said it, as runs of words on one
- * element. Words said off any element go with the element before them, or else the next.
- */
-export function pointedWhile(words: readonly Word[], trail: Trail): readonly Pointed[] {
-  const on = (seconds: number) =>
-    trail.filter((t) => t.at <= seconds * 1000).at(-1)?.target ?? trail[0]?.target;
-  const runs: { target: string | undefined; words: string[] }[] = [];
-  for (const word of words) {
-    const target = on((word.start + word.end) / 2) ?? runs.at(-1)?.target;
-    const last = runs.at(-1);
-    if (last !== undefined && (last.target === target || target === undefined))
-      last.words.push(word.text);
-    else if (last !== undefined && last.target === undefined) {
-      last.target = target;
-      last.words.push(word.text);
-    } else runs.push({ target, words: [word.text] });
-  }
-  return runs.flatMap((r) =>
-    r.target === undefined ? [] : [{ target: r.target, words: r.words.join(" ") }],
-  );
-}
 
 /** A stroke as an SVG path, in page coordinates. */
 const pathOf = (points: readonly Point[]) =>
@@ -262,7 +235,7 @@ function closed<T extends Point>(points: readonly T[]): readonly T[] | undefined
 /** Where his words go when the fast tier is on (ADR 0008): the realtime model hears them
  * itself, so the page sends only what he pointed at and drew. */
 export interface FastEars {
-  readonly ready: () => boolean;
+  readonly state: () => "ready" | "connecting" | "unavailable";
   readonly press: (stream: MediaStream) => void;
   readonly release: (said: {
     readonly target: string | undefined;
@@ -296,7 +269,6 @@ export function usePointAndTalk({
   calls.current = { onStart, onWords, fast };
 
   useEffect(() => {
-    ears.warm();
     let mouse: Point = { x: innerWidth / 2, y: innerHeight / 2 };
     let held = false;
     let since = 0;
@@ -338,14 +310,10 @@ export function usePointAndTalk({
       window.clearTimeout(failing);
       failing = window.setTimeout(() => setTalk(IDLE), 2400);
     };
-    let partial: string | undefined;
-    let listening: ears.Listening | undefined;
-    let final: ReturnType<ears.Listening["finish"]> | undefined;
     const show = () => {
       if (held)
         setTalk({
           phase: "listening",
-          words: partial,
           ink: pieces(),
           strokes: strokes(),
           level,
@@ -371,8 +339,6 @@ export function usePointAndTalk({
         held = false;
         return fail("The microphone needs https");
       }
-      partial = undefined;
-      final = undefined;
       let stream: MediaStream;
       try {
         stream = await warmMicrophone();
@@ -384,123 +350,57 @@ export function usePointAndTalk({
       // He let go, or pressed again, while the microphone opened: this press is over.
       if (press !== presses || !held) return rest(stream);
       const quick = calls.current.fast;
-      if (quick?.ready() === true) {
-        quick.press(stream);
-        timing.mark("mic");
-        heardFrom = Date.now();
-        const audio = new AudioContext();
-        const analyser = audio.createAnalyser();
-        analyser.fftSize = 512;
-        audio.createMediaStreamSource(stream).connect(analyser);
-        const samples = new Float32Array(analyser.fftSize);
-        const meter = () => {
-          analyser.getFloatTimeDomainData(samples);
-          const rms = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length);
-          level = level * 0.6 + Math.min(1, rms * 6) * 0.4;
-          show();
-          frame = requestAnimationFrame(meter);
-        };
-        end = () => {
-          cancelAnimationFrame(frame);
-          rest(stream);
-          void audio.close();
-          const slip = Date.now() - since < SHORTEST;
-          if (dropped || slip) {
-            dropped = false;
-            quick.drop();
-            return setTalk(IDLE);
-          }
-          const drawn = loops.map((l) => ({ path: pathOf(l.points), target: l.target }));
-          setTalk({ phase: "thinking", strokes: strokes(), at: mouse });
-          const mine = ++releases;
-          void quick
-            .release({ target: drawn.at(-1)?.target ?? target, trail, drawn, at: mouse })
-            .then((answered) => {
-              if (held || mine !== releases) return;
-              if (answered) setTalk(IDLE);
-              else fail("No answer came");
-            });
-        };
-        meter();
-        return;
+      const state = quick?.state() ?? "unavailable";
+      if (quick === undefined || state !== "ready") {
+        held = false;
+        rest(stream);
+        return fail(
+          state === "connecting" ? "The voice is connecting. Say it again" : "No voice key",
+        );
       }
-      listening = ears.listen(
-        stream,
-        (words) => {
-          partial = words;
-          show();
-        },
-        ears.keytermsOf(elements().flatMap((e) => (e.where === "page" ? [e.text] : []))),
-      );
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => chunks.push(e.data);
+      quick.press(stream);
+      timing.mark("mic");
+      heardFrom = Date.now();
       const audio = new AudioContext();
       const analyser = audio.createAnalyser();
       analyser.fftSize = 512;
       audio.createMediaStreamSource(stream).connect(analyser);
       const samples = new Float32Array(analyser.fftSize);
-      const listen = () => {
+      const meter = () => {
         analyser.getFloatTimeDomainData(samples);
         const rms = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length);
-        // Speech sits near 0.02 to 0.2; the meter eases toward it.
         level = level * 0.6 + Math.min(1, rms * 6) * 0.4;
         show();
-        frame = requestAnimationFrame(listen);
+        frame = requestAnimationFrame(meter);
       };
-      const release = () => {
+      end = () => {
         cancelAnimationFrame(frame);
         rest(stream);
         void audio.close();
-      };
-      recorder.onstop = () => {
-        release();
-        if (dropped) {
+        const slip = Date.now() - since < SHORTEST;
+        if (dropped || slip) {
           dropped = false;
-          listening?.cancel();
+          quick.drop();
           return setTalk(IDLE);
         }
         const drawn = loops.map((l) => ({ path: pathOf(l.points), target: l.target }));
-        if (Date.now() - since < SHORTEST) return setTalk(IDLE);
         setTalk({ phase: "thinking", strokes: strokes(), at: mouse });
-        const blob = new Blob(chunks, { type: recorder.mimeType });
-        timing.recorded(blob);
-        // The realtime words, else the recording sent whole.
-        const words = final ?? Promise.resolve(undefined);
-        void words
-          .then((live) => live ?? hear(blob))
-          .then((heard) => {
-            timing.mark("words");
-            if (heard === undefined) return fail("I heard nothing");
-            timing.note({ said: heard.text });
-            setTalk(IDLE);
-            const pointed = pointedWhile(heard.words, trail);
-            const most = [...pointed].sort(
-              (a, b) => b.words.split(" ").length - a.words.split(" ").length,
-            )[0];
-            // What he circled wins: it is what he meant. Else what he spoke most about.
-            calls.current.onWords(
-              drawn.at(-1)?.target ?? most?.target ?? target,
-              heard.text,
-              pointed,
-              drawn,
-              mouse,
-            );
+        const mine = ++releases;
+        void quick
+          .release({ target: drawn.at(-1)?.target ?? target, trail, drawn, at: mouse })
+          .then((answered) => {
+            if (held || mine !== releases) return;
+            if (answered) setTalk(IDLE);
+            else fail("No answer came");
           });
       };
-      end = () => recorder.stop();
-      recorder.start();
-      timing.mark("mic");
-      heardFrom = Date.now();
-      listen();
+      meter();
     };
 
     const stop = () => {
       if (!held) return;
       timing.mark("release");
       held = false;
-      final = listening?.finish();
-      listening = undefined;
       if (end === undefined) return setTalk(IDLE);
       end();
       end = undefined;
@@ -651,11 +551,6 @@ export function TalkView({ talk, reduced }: { readonly talk: Talk; readonly redu
           aria-label="Listening"
         >
           <Level level={talk.level} />
-          {talk.words !== undefined && (
-            <span className="max-w-[320px] truncate rounded-full bg-dt-panel px-2.5 py-1 text-[12px] text-dt-text shadow-dt-float [direction:rtl]">
-              <bdi>{talk.words}</bdi>
-            </span>
-          )}
         </span>
       )}
       {talk.phase === "thinking" && (

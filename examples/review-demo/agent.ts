@@ -14,7 +14,7 @@ import type { Plugin } from "vite";
 import { z } from "zod";
 import { type Exchange, keepFeedback } from "./feedback.ts";
 import { inputInside } from "./inside.ts";
-import { ears as makeEars, envOf, words } from "./hearing.ts";
+import { envOf, words } from "./message.ts";
 import { speakAhead } from "./voice.ts";
 
 /*
@@ -31,11 +31,8 @@ import { speakAhead } from "./voice.ts";
  * commands. `POST /__agent/played` tells it how a walk went; `POST /__agent/forget` starts a
  * new session.
  *
- * A fast model hears him first. While Opus starts, GPT-6.1 Terra with no reasoning says in one
- * line what he asks for, so a wrong hearing shows at once. On a warm Codex thread its first
- * word came in 1.4 to 2.0 s on fry, with a screenshot, close to Haiku 5.5's 1.2 to 1.9 s, and
- * Terra reads the page better. Haiku hears when Codex cannot. Opus does the work, where the
- * design matters. See terra.ts.
+ * The fast tier hears him first (ADR 0008): it acts on a command itself, and hands the rest
+ * here with his words. Opus does the work, where the design matters.
  *
  * The next run starts ahead: after each run, and when the dev server starts, a Claude Code
  * process starts and resumes the session, so his next words do not wait for it to start. It
@@ -183,7 +180,6 @@ The show tool returns how the walk went: whether he watched it to the end, stopp
 
 type Event =
   | { readonly type: "status"; readonly text: string }
-  | { readonly type: "heard"; readonly text: string; readonly ear: string }
   | { readonly type: "show"; readonly id: string; readonly beats: unknown }
   | {
       readonly type: "annotate";
@@ -249,10 +245,6 @@ export function agent(): Plugin {
     apply: "serve",
     configureServer(server) {
       const log = server.config.logger;
-      const ears = makeEars({
-        warn: (why) => log.warn(`workshop agent: ${why}`),
-      });
-      ears.ready();
       /** The request that the page's tools send to. */
       const out: Out = {
         send: () => undefined,
@@ -411,7 +403,6 @@ export function agent(): Plugin {
       };
       ahead();
       server.httpServer?.once("close", () => {
-        ears.close();
         void next?.warm.then((w) => w.close()).catch(() => undefined);
         next = undefined;
       });
@@ -514,28 +505,13 @@ export function agent(): Plugin {
               open = false;
               gone.abort();
             });
-            // The fast model hears him at once, and does not wait for the old work to stop.
             const asked = Date.now();
             const header = req.headers["x-blueline-voice"];
             const voice = typeof header === "string" && header !== "" ? header : undefined;
-            let first = true;
             const request =
               typeof record.request === "object" && record.request !== null ? record.request : {};
-            const fast = "heardBy" in request;
             const effort: EffortLevel =
               "effort" in request && request.effort === "medium" ? "medium" : EFFORT;
-            const heard = fast
-              ? Promise.resolve()
-              : ears
-                  .hear(text, gone.signal, (line, ear) => {
-                    if (first)
-                      log.info(`workshop agent: ${ear} heard in ${String(Date.now() - asked)} ms`);
-                    first = false;
-                    send({ type: "heard", text: line, ear });
-                  })
-                  .catch((error: unknown) => {
-                    if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
-                  });
             // New words stop the work on the old ones, and the session goes on from there.
             // Words that come while the old work stops wait in line behind it.
             const before = line;
@@ -648,8 +624,6 @@ export function agent(): Plugin {
               // The next run starts now, so his next words do not wait for it.
               ahead();
               finish();
-              // A quick agent can end before the hearing: the line still says what it heard.
-              await Promise.race([heard, new Promise((done) => setTimeout(done, 8_000))]);
               res.end();
             }
           })

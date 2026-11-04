@@ -14,11 +14,12 @@
  *   node examples/review-demo/evals/browser.ts [--url http://localhost:4314] [--only id,id]
  *     [--no-judge]
  *
- * The dev server must run with ELEVENLABS_API_KEY, and the audio must exist: run
- * evals/hearing.ts once first, which speaks each case.
+ * The dev server must run with OPENAI_API_KEY, for the fast tier. Each case is spoken once by
+ * ElevenLabs and kept under evals/hearing/audio/ (ADR 0008: ElevenLabs is the evals' voice
+ * only), so only a new case needs ELEVENLABS_API_KEY.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -128,10 +129,29 @@ const all = JSON.parse(readFileSync(join(HERE, "cases.json"), "utf8")) as Case[]
 const only = args.only?.split(",");
 const cases = only === undefined ? all : all.filter((c) => only.includes(c.id));
 
-/** The case's audio as wav, and how long it is, in s. */
-function audioOf(id: string) {
+/** ElevenLabs' George, the voice of the evals. */
+const VOICE = "JBFqnCBsd6RMkjVDRZzb";
+
+/** The case's audio as wav, and how long it is, in s. It is spoken the first time. */
+async function audioOf({ id, said }: Case) {
   const webm = join(HERE, "audio", `${id}.webm`);
-  if (!existsSync(webm)) return undefined;
+  if (!existsSync(webm)) {
+    const key = process.env["ELEVENLABS_API_KEY"] ?? "";
+    if (key === "") return undefined;
+    const r = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: { "xi-api-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify({ text: said, model_id: "eleven_v4" }),
+      },
+    );
+    if (!r.ok) throw new Error(`Text to speech ${String(r.status)}: ${await r.text()}`);
+    mkdirSync(join(HERE, "audio"), { recursive: true });
+    const mp3 = `${webm}.mp3`;
+    writeFileSync(mp3, new Uint8Array(await r.arrayBuffer()));
+    execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", mp3, "-c:a", "libopus", webm]);
+  }
   const wav = join(HERE, "audio", `${id}.wav`);
   if (!existsSync(wav))
     execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", webm, "-ar", "48000", wav]);
@@ -148,9 +168,9 @@ const verdicts: boolean[] = [];
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
 try {
   for (const c of cases) {
-    const audio = audioOf(c.id);
+    const audio = await audioOf(c);
     if (audio === undefined) {
-      console.warn(`${c.id}: no audio; run evals/hearing.ts first`);
+      console.warn(`${c.id}: no audio; set ELEVENLABS_API_KEY to speak it`);
       continue;
     }
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -195,11 +215,15 @@ try {
       { wav: readFileSync(audio.wav).toString("base64"), pause: PAUSE },
     );
     try {
+      const ready = page.waitForEvent("console", {
+        predicate: (m) => m.text() === "Realtime: ready",
+        timeout: 15_000,
+      });
       await page.goto(`${args.url}/workshop.html#queue`);
       const target = page.locator(c.context.pointedWhileSaying[0]?.target ?? "body").first();
       await target.waitFor();
-      // Let the page fetch its first token, as it does before he speaks.
-      await page.waitForTimeout(1000);
+      // The fast tier connects before he speaks, as it does when he opens the page.
+      await ready;
       const trace = page.evaluate(
         () =>
           new Promise<Trace>((done) =>
