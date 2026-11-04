@@ -330,6 +330,7 @@ export class Walker {
    * beat previews stays on the page, as he may speak about it. */
   pause() {
     if (!this.active()) return;
+    const moving = this.snap.phase === "moving";
     this.halt(true);
     this.set({
       ...this.snap,
@@ -341,9 +342,10 @@ export class Walker {
           : { ...this.snap.note, tone: "paused", line: undefined, key: "paused" },
     });
     // The element may still change while the walk waits: the cursor and the note follow it,
-    // so they never cover it.
+    // so they never cover it. A cursor still on its way has no note, and its element is the
+    // beat's before.
     const beat = this.walk[this.at];
-    if (beat !== undefined && this.element?.isConnected === true)
+    if (!moving && beat !== undefined && this.element?.isConnected === true)
       this.track(beat, this.element, this.generation, (box) => {
         const note = this.snap.note;
         if (note !== undefined)
@@ -678,13 +680,12 @@ export class Walker {
     return placed.framed;
   }
 
-  /** The beat's element. After a click of the walk's own, or his on a turn, the page that
-   * the click opens may draw it a moment later. */
+  /** The beat's element. The page may draw it a moment later: after a click of the walk's
+   * own, or his on a turn, or when a new remark opens its page. */
   private async found(beat: Beat, live: () => boolean) {
-    let element = this.find(beat);
     const since = Date.now();
-    while (element === undefined && live() && since - this.clicked < 2500) {
-      if (Date.now() - since > 1500) break;
+    let element = this.find(beat);
+    while (element === undefined && live() && Date.now() - since < 1500) {
       await sleep(50);
       element = this.find(beat);
     }

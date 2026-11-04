@@ -143,8 +143,9 @@ function Live() {
   // An answer's element as it was, while he holds b or hovers Was.
   const [before, setBefore] = useState(false);
   const [guidePeek, setGuidePeek] = useState<Preview | undefined>(undefined);
-  // A page of the app that he, or the agent's cursor, went to by a click.
-  const [visit, setVisit] = useState<Path | undefined>(undefined);
+  // A page of the app that he, or the agent's cursor, went to by a click, on that remark. It
+  // ends with the remark in the same render, so a new remark's walk starts on its own page.
+  const [visit, setVisit] = useState<{ readonly id: string | undefined; readonly path: Path }>();
   const [exchange, setExchange] = useState<Exchange | undefined>(undefined);
   const asking = useRef<AbortController | undefined>(undefined);
   // In state, not a memo, so a hot update of this file keeps the walk that plays.
@@ -167,7 +168,10 @@ function Live() {
   );
   const q = state.queue;
   const here = current(q);
-  const page: Path = visit ?? (here?.page as Path | undefined) ?? "/request";
+  const page: Path =
+    visit !== undefined && visit.id === here?.id
+      ? visit.path
+      : ((here?.page as Path | undefined) ?? "/request");
   const pageNow = useRef(page);
   pageNow.current = page;
   const remarkRun = useRef<{ readonly run: number; readonly id: string } | undefined>(undefined);
@@ -308,6 +312,7 @@ function Live() {
   const lastSettled = useRef<readonly string[]>([]);
   const queueNow = useRef(q);
   queueNow.current = q;
+  const go = (path: Path) => setVisit({ id: current(queueNow.current)?.id, path });
 
   /** What only shows of the agent's acts, as his keys would show it. */
   const showAct = (act: Shows, queue: Queue) => {
@@ -318,7 +323,7 @@ function Live() {
         break;
       case "go": {
         const to = PAGES.find((p) => p.path === act.page || p.title === act.page);
-        if (to !== undefined) setVisit(to.path);
+        if (to !== undefined) go(to.path);
         break;
       }
       case "seen":
@@ -942,10 +947,10 @@ function Live() {
         className="min-h-screen bg-[#fbfbfc] px-8 py-20 text-[#16161a]"
       >
         <div className="mx-auto flex max-w-xl flex-col gap-4">
-          <AppNav path={page} onGo={setVisit} />
+          <AppNav path={page} onGo={go} />
           <AppPage
             path={page}
-            onGo={setVisit}
+            onGo={go}
             changed={changed}
             status={
               [
