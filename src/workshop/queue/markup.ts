@@ -32,16 +32,56 @@ export const lookOf = (element: Element): Readonly<Record<string, string>> => {
   );
 };
 
-/** Markup from the agent, with no scripts, frames or handlers: it only shows. */
+/** What can run code, load a page or change one: it goes, with what it holds. */
+const DROP =
+  "script, iframe, frame, frameset, object, embed, applet, link, style, meta, base, template, noscript, foreignObject, use, animate, animateMotion, animateTransform, set";
+
+/** The attributes that hold a URL. Only an image's own source keeps one. */
+const URLS = new Set([
+  "href",
+  "xlink:href",
+  "src",
+  "srcset",
+  "action",
+  "formaction",
+  "poster",
+  "background",
+  "data",
+  "ping",
+  "srcdoc",
+  "codebase",
+  "cite",
+  "longdesc",
+  "usemap",
+  "manifest",
+]);
+
+/** An image from the web or a still in the markup. The browser drops tabs and spaces in a URL,
+ * so they go before the check, as `java\tscript:` is `javascript:`. */
+const image = (value: string) =>
+  // oxlint-disable-next-line no-control-regex -- the controls are what the browser drops
+  /^(https?:|data:image\/(png|jpeg|gif|webp)[;,])/i.test(value.replace(/[\u0000-\u0020]/g, ""));
+
+/**
+ * Markup from the agent, inert: it only shows. No scripts, frames, handlers or links, and no
+ * form that sends; an image keeps a web or still source.
+ */
 export function clean(html: string) {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  for (const bad of doc.body.querySelectorAll("script, iframe, object, embed, link, style, meta"))
-    bad.remove();
-  for (const element of doc.body.querySelectorAll("*"))
+  for (const bad of doc.body.querySelectorAll(DROP)) bad.remove();
+  for (const form of doc.body.querySelectorAll("form")) form.replaceWith(...form.childNodes);
+  for (const element of doc.body.querySelectorAll("*")) {
+    const media = element.tagName === "IMG" || element.tagName === "SOURCE";
     // A copy of the names: removing from the live list as it is read would skip some.
-    for (const name of element.getAttributeNames())
-      if (/^on/i.test(name) || /javascript:/i.test(element.getAttribute(name) ?? ""))
-        element.removeAttribute(name);
+    for (const name of element.getAttributeNames()) {
+      const value = element.getAttribute(name) ?? "";
+      const lower = name.toLowerCase();
+      const kept = URLS.has(lower)
+        ? media && lower === "src" && image(value)
+        : !lower.startsWith("on");
+      if (!kept) element.removeAttribute(name);
+    }
+  }
   return doc.body.innerHTML;
 }
 
