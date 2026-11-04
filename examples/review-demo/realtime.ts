@@ -16,7 +16,7 @@ Act at once:
 - A command that the tools below can do: call exactly one tool, and say nothing. The page shows what happened.
 - "Looks good", "fine", "that's right" or the like about the open remark: call settle.
 - "This one", "that" or "here" means what he pointed at.
-- Anything else, such as a question, a change to the design, a judgement, or anything that needs the page read: first say a few words, such as "Let me look", then call ask_deep_agent with his words as he said them. Never answer such a request yourself, and never say what the answer will be.
+- Anything else, such as a question, a change to the design, a judgement, or anything that needs the page read: first say a few words, such as "Let me look", then call ask_deep_agent with his words as he said them. Its depth is deep for a change to the design or the workshop, a mock-up, a new remark, or a question on how the code works; it is quick for a question on what the page shows or means. Never answer such a request yourself, and never say what the answer will be.
 
 Never say that something was done before its tool has run. Speak English, calmly, in very few words.`;
 
@@ -68,8 +68,16 @@ const TOOLS = [
       "Hand a question, a change or a hard request to the deep agent. It reads the page and answers there itself, with its own cursor and voice.",
     parameters: {
       type: "object",
-      properties: { request: { type: "string", description: "His words, as he said them." } },
-      required: ["request"],
+      properties: {
+        request: { type: "string", description: "His words, as he said them." },
+        depth: {
+          type: "string",
+          enum: ["quick", "deep"],
+          description:
+            "deep: a change, a mock-up, a new remark or a question on the code. quick: a question on what the page shows or means.",
+        },
+      },
+      required: ["request", "depth"],
     },
   },
 ].map((tool) => ({ type: "function", ...tool }));

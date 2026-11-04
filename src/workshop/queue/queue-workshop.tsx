@@ -583,7 +583,7 @@ function Live() {
           held?.drawn ?? [],
           held?.at ?? { x: innerWidth / 2, y: innerHeight / 2 },
           (words) => realtime.tell(`The deep agent answered on the page: ${words}`),
-          "gpt-realtime-2.1",
+          { by: "gpt-realtime-2.1", deep: call.args["depth"] === "deep" },
         );
         realtime.answer(
           call.id,
@@ -621,7 +621,7 @@ function Live() {
     drawn: readonly Drawn[],
     at: { readonly x: number; readonly y: number },
     done?: (words: string) => void,
-    heardBy?: string,
+    via?: { readonly by: string; readonly deep: boolean },
   ) => {
     {
       const target = spoken ?? here?.target ?? selectorOf("title");
@@ -661,7 +661,8 @@ function Live() {
       walker.from({ x: at.x + 16, y: at.y + 14 });
       walker.hold(target, `“${text}”`);
       const context = {
-        ...(heardBy === undefined ? {} : { heardBy }),
+        ...(via === undefined ? {} : { heardBy: via.by }),
+        ...(via?.deep === true ? { effort: "medium" } : {}),
         said: text,
         pointedWhileSaying: pointed,
         circled: drawn.flatMap((d) => (d.target === undefined ? [] : [d.target])),

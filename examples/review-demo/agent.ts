@@ -2,6 +2,7 @@ import { basename, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createSdkMcpServer,
+  type EffortLevel,
   type Options,
   type Query,
   query,
@@ -42,6 +43,13 @@ import { speakAhead } from "./voice.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const MODEL = "claude-opus-5-5";
+
+/**
+ * Low, so his words get an answer soon. A request the fast tier calls deep, such as a change
+ * or a mock-up, runs at medium. A change of effort keeps the session's cache: on Opus 5.5
+ * Claude Code sends it with the turn, and the cached turns before it stay the same.
+ */
+const EFFORT: EffortLevel = "low";
 
 /** How long a walk may take before the agent goes on without hearing how it went. */
 const WATCH = 120_000;
@@ -343,7 +351,7 @@ export function agent(): Plugin {
       /** The options of a run that goes on with `resume`, or starts a new session. */
       const options = (resume: string | undefined): Options => ({
         model: MODEL,
-        effort: "low",
+        effort: EFFORT,
         cwd: ROOT,
         env: envOf(),
         settingSources: [],
@@ -371,17 +379,31 @@ export function agent(): Plugin {
         next = { session, warm };
       };
       /** A run on the session: the one started ahead, if it is on the same session. */
-      const take = async (prompt: ReturnType<typeof words>): Promise<Query> => {
+      const take = async (text: string, effort: EffortLevel): Promise<Query> => {
         const ready = next;
         next = undefined;
         if (ready !== undefined && ready.session === session) {
           try {
-            return (await ready.warm).query(prompt);
+            const warm = await ready.warm;
+            if (effort === EFFORT) return warm.query(words(text));
+            let set = () => undefined as void;
+            const effortSet = new Promise<void>((done) => (set = done));
+            const run = warm.query(
+              (async function* () {
+                await effortSet;
+                yield* words(text);
+              })(),
+            );
+            await run
+              .applyFlagSettings({ effortLevel: effort })
+              .catch((error: unknown) => log.warn(`workshop agent, effort: ${String(error)}`))
+              .finally(set);
+            return run;
           } catch (error) {
             log.warn(`workshop agent: the run started ahead failed: ${String(error)}`);
           }
         } else void ready?.warm.then((w) => w.close()).catch(() => undefined);
-        return query({ prompt, options: options(session) });
+        return query({ prompt: words(text), options: { ...options(session), effort } });
       };
       ahead();
       server.httpServer?.once("close", () => {
@@ -493,10 +515,11 @@ export function agent(): Plugin {
             const header = req.headers["x-blueline-voice"];
             const voice = typeof header === "string" && header !== "" ? header : undefined;
             let first = true;
-            const fast =
-              typeof record.request === "object" &&
-              record.request !== null &&
-              "heardBy" in record.request;
+            const request =
+              typeof record.request === "object" && record.request !== null ? record.request : {};
+            const fast = "heardBy" in request;
+            const effort: EffortLevel =
+              "effort" in request && request.effort === "medium" ? "medium" : EFFORT;
             const heard = fast
               ? Promise.resolve()
               : ears
@@ -542,7 +565,7 @@ export function agent(): Plugin {
             out.before = before_;
             out.request = record.request;
             out.mark = mark;
-            const run = await take(words(text));
+            const run = await take(text, effort);
             mark("taken");
             let finish = () => undefined as void;
             const ofEra = era;
