@@ -8,6 +8,9 @@ import { arrive, empty } from "../../queue/queue";
 
 export const JOURNEY = "Bonus request";
 
+/** The "Try it" remark that asks him to let the agent click a journey. */
+export const TRY_JOURNEY = "r-try-journey";
+
 /** The app's pages, each with the `data-q` names of its parts. Every page also has the tabs
  * `tab-request`, `tab-approvers` and `tab-sent`. */
 export const PAGES = [
@@ -128,7 +131,7 @@ const REMARKS: readonly Remark[] = [
       ),
     ],
   }),
-  remark("r-try-journey", "/request", "tab-approvers", "Try it: let me click a journey", {
+  remark(TRY_JOURNEY, "/request", "tab-approvers", "Try it: let me click a journey", {
     text: "Ask the agent to show a journey. It says each click, then makes it.",
     walk: [
       beat(

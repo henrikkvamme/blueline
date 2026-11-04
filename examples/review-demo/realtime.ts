@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { TARGETS } from "../../src/workshop/queue/script";
 
 /*
  * The fast tier's key (ADR 0008), on the dev server only. `POST /__realtime/token?voice=`
@@ -16,7 +17,14 @@ Act at once:
 - A command that the tools below can do: call exactly one tool, and say nothing. The page shows what happened.
 - "Looks good", "fine", "that's right" or the like about the open remark: call settle.
 - "This one", "that" or "here" means what he pointed at.
+- He asks you to show him how to do something in the app, or to click through it for him: call walk with every step in order, and say nothing; each step speaks its own line. Use turn when he asks how he would do it, so he clicks himself; use click only when he asks you to do it for him. When you are not sure which parts or in what order, call ask_deep_agent instead.
 - Anything else, such as a question, a change to the design, a judgement, or anything that needs the page read: first say a few words, such as "Let me look", then call ask_deep_agent with his words as he said them. Its depth is deep for a change to the design or the workshop, a mock-up, a new remark, or a question on how the code works; it is quick for a question on what the page shows or means. Never answer such a request yourself, and never say what the answer will be.
+
+The app on the page has three pages, each with its tab at the top: tab-request, tab-approvers and tab-sent.
+- Request: title, asker, status, amount, approvers (who approves this request, in order) and submit, the send button, which sends the request and opens Sent.
+- Approvers: approver-list, grip (drag an approver to change the order) and add, which adds an approver to the list.
+- Sent: sent, the message that the request went for approval.
+To add an approver: tab-approvers, then add. To send the request: tab-request, then submit. A step after a click that opens a page points at a part of that page, not at its tab.
 
 Never say that something was done before its tool has run. Speak English, calmly, in very few words.`;
 
@@ -58,6 +66,38 @@ const TOOLS = [
         target: { type: "string", description: "The part's selector from the page list." },
       },
       required: ["target"],
+    },
+  },
+  {
+    name: "walk",
+    description:
+      "Walk him through the app with the cursor, step by step, also across pages: a click opens the page that the next step is on. Each step speaks its line, then points, clicks or waits for his click.",
+    parameters: {
+      type: "object",
+      properties: {
+        steps: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              part: { type: "string", enum: Object.keys(TARGETS).filter((t) => t !== "page") },
+              do: {
+                type: "string",
+                enum: ["point", "click", "turn"],
+                description:
+                  "point: show where it is. click: click it for him. turn: wait for his own click.",
+              },
+              say: {
+                type: "string",
+                description:
+                  'One short spoken sentence for this step, such as "Open the Approvers tab."',
+              },
+            },
+            required: ["part", "do", "say"],
+          },
+        },
+      },
+      required: ["steps"],
     },
   },
   { name: "play", description: "Play the walk of the open remark.", parameters: none },

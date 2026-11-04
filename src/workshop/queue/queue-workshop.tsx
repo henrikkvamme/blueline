@@ -39,7 +39,17 @@ import { VOICES } from "./voice";
 import { Walker, type Preview } from "./walker";
 import { Strokes, TalkView, usePointAndTalk, type FastEars, type Trail } from "./talk";
 import { fast, type Call } from "./realtime";
-import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
+import {
+  answerTo,
+  heard,
+  PAGES,
+  selectorOf,
+  start,
+  TARGETS,
+  targetOf,
+  TRY_JOURNEY,
+  type Path,
+} from "./script";
 import { ask, elements, forget, played } from "./agent";
 import { perform, type Act, type Shows } from "./acts";
 import { DesignPreview, Designs, type Shown } from "./design";
@@ -120,6 +130,25 @@ function load(): State {
   } catch {
     return fresh();
   }
+}
+
+/** The fast tier's walk steps as beats; a step on a part the app does not have is left out. */
+function beatsOf(steps: unknown): readonly Beat[] {
+  if (!Array.isArray(steps)) return [];
+  return steps.flatMap((step: unknown): Beat[] => {
+    if (typeof step !== "object" || step === null) return [];
+    const { part, do: how, say } = step as Record<string, unknown>;
+    const name = typeof part === "string" ? TARGETS[part] : undefined;
+    if (typeof part !== "string" || name === undefined || typeof say !== "string") return [];
+    return [
+      {
+        target: selectorOf(part),
+        name,
+        say,
+        ...(how === "click" ? { click: true } : how === "turn" ? { turn: true } : {}),
+      },
+    ];
+  });
 }
 
 export function QueueWorkshop({ hash }: { readonly hash: string }) {
@@ -528,6 +557,7 @@ function Live() {
     },
   };
 
+  const walkedNow = useRef(() => {});
   /** What the fast tier asked for, done as his own keys would do it. */
   const runCall = (call: Call) => {
     timing.mark("heard");
@@ -540,6 +570,7 @@ function Live() {
       current(to(q).queue)?.title ?? "nothing left to see";
     if (call.name !== "ask_deep_agent") asking.current?.abort();
     let did: string;
+    let walked: readonly Beat[] | undefined;
     switch (call.name) {
       case "next":
         did = `Next: “${titleAfter(next)}”`;
@@ -572,14 +603,39 @@ function Live() {
       case "point": {
         const asked = call.args["target"];
         const wanted = typeof asked === "string" ? asked : "";
-        const found = elements().find(
-          (e) => e.selector === wanted || e.name === wanted || e.text.includes(wanted),
-        );
+        const words = wanted.toLowerCase();
+        const parts = elements();
+        // A part by its selector, its data-q name or its name first; else the innermost part
+        // whose words hold his.
+        const found =
+          parts.find(
+            (e) => e.selector === wanted || e.selector === selectorOf(wanted) || e.name === wanted,
+          ) ??
+          (words === ""
+            ? undefined
+            : [...parts].reverse().find((e) => e.text.toLowerCase().includes(words)));
         did =
           found === undefined
             ? `No “${wanted}” on the page`
             : `Pointing at ${found.name ?? wanted}`;
         if (found !== undefined) walker.hold(found.selector, found.name ?? wanted);
+        break;
+      }
+      case "walk": {
+        walked = beatsOf(call.args["steps"]);
+        did = walked.length === 0 ? "No steps to walk" : `Walking ${String(walked.length)} steps`;
+        if (walked.length > 0) {
+          walker.start(walked, pageNow.current);
+          const run = walker.snapshot().run;
+          const off = walker.subscribe(() => {
+            const now = walker.snapshot();
+            if (now.run !== run) off();
+            else if (now.phase === "done") {
+              off();
+              walkedNow.current();
+            }
+          });
+        }
         break;
       }
       case "play":
@@ -617,11 +673,15 @@ function Live() {
     setExchange({
       said: held?.heard ?? "",
       heard: undefined,
-      tone: "done",
+      tone: walked === undefined || walked.length === 0 ? "done" : "showing",
       status: did,
-      walk: undefined,
+      walk: walked,
       annotation: undefined,
     });
+  };
+  // A journey that the fast tier walked does what the "Try it" journey remark asks.
+  walkedNow.current = () => {
+    if (current(q)?.id === TRY_JOURNEY) move(settleNow);
   };
   fastCalls.current = {
     onCall: runCall,

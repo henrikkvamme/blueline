@@ -11,13 +11,26 @@ We add a fast tier in front of the agent. On Henrik's decision of 2026-11-04:
 - Push-to-talk stays on ⌃⌘. The mic streams while he holds the keys. At the release the page
   commits the audio and asks for a response. Turn detection is off, so a pause while he
   points does not end his turn.
-- Its tools are `next`, `back`, `settle`, `preview` (n), `keep`, `point` (target), `play`,
-  `pause` and `ask_deep_agent` (request). Before each response the page adds what he points
-  at, so `point` and `ask_deep_agent` know the part he means.
+- Its tools are `next`, `back`, `settle`, `preview` (n), `keep`, `point` (target), `walk`
+  (steps), `play`, `pause` and `ask_deep_agent` (request). Before each response the page adds
+  what he points at, so `point` and `ask_deep_agent` know the part he means.
 - `ask_deep_agent` hands the request to the Opus agent server that answers today. Its answer
   comes back as the tool's result.
 - Every line Blueline speaks uses OpenAI's voice, also Opus's answers. Blueline keeps one
   voice.
+
+## Journeys
+
+On Henrik's decision of 2026-11-04, the fast tier also walks a journey through the app, such as
+"show me how I send this" or "click through it for me". Its `walk` tool takes the steps in
+order. Each step names a part from a fixed list of the app's parts, says one line, and then
+points at the part, clicks it, or waits for his own click. Its instructions hold a short map of
+the app, because it cannot read the code. It hands a journey to Opus when it is not sure of the
+parts or their order. The walker speaks each line in the same voice as Opus's lines.
+
+A journey spoken to the fast tier started its walk 1.6 s after he let go of the keys. The same
+journey typed to Opus started 3.4 s after Enter, and a spoken one also waits for the fast tier
+first. The lines of the walk take the same time either way.
 
 ## What we measured
 
