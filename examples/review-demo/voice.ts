@@ -1,17 +1,18 @@
 import type { Plugin } from "vite";
 
 /*
- * The agent cursor's voice and ears for the workshop, on the dev server only, both from
- * ElevenLabs. `GET /__voice?text=&voice=` sends back the words as speech, streamed as
- * ElevenLabs makes it, so the page plays it from the first bytes; `POST /__voice/ahead` with
+ * The agent cursor's voice and ears for the workshop, on the dev server only. The voice is
+ * OpenAI's, as the fast tier's is (ADR 0008), so Blueline speaks with one voice; the old ears
+ * are ElevenLabs'. `GET /__voice?text=&voice=` sends back the words as speech, streamed as
+ * OpenAI makes it, so the page plays it from the first bytes; `POST /__voice/ahead` with
  * `{ text, voice }` starts a line before the walk comes to it. Each line is kept in memory,
  * so a walk says it again at once. `POST /__hear` with the audio of
- * the reviewer's words sends back `{ text, words }`, each word with its time. The key stays on the server, in
- * `ELEVENLABS_API_KEY`; the page never sees it. Without a key both routes answer 503, and the
- * workshop shows the words alone.
+ * the reviewer's words sends back `{ text, words }`, each word with its time. The keys stay on
+ * the server, in `OPENAI_API_KEY` and `ELEVENLABS_API_KEY`; the page never sees them. Without a
+ * key its routes answer 503, and the workshop shows the words alone.
  */
 
-const MODEL = "eleven_v4";
+const MODEL = "gpt-4o-mini-tts";
 const EARS = "scribe_v2";
 
 /**
@@ -35,10 +36,12 @@ function limit(most: number) {
   };
 }
 
-const keyOf = () => {
-  const key = process.env["ELEVENLABS_API_KEY"];
+const keyFrom = (name: string) => () => {
+  const key = process.env[name];
   return key === undefined || key === "" ? undefined : key;
 };
+const keyOf = keyFrom("ELEVENLABS_API_KEY");
+const speechKey = keyFrom("OPENAI_API_KEY");
 
 /** A line of speech: its bytes so far, and who waits for more. */
 interface Line {
@@ -62,17 +65,19 @@ function lineOf(text: string, voice: string, key: string, warn: (why: string) =>
     for (const wake of line.wake) wake();
   };
   speak(async () => {
-    // Streamed: the first bytes come in about 0.8 s, the whole line in about 1.8 s.
-    const r = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: { "xi-api-key": key, "Content-Type": "application/json" },
-        body: JSON.stringify({ text, model_id: MODEL }),
-      },
-    );
-    if (!r.ok || r.body === null)
-      throw new Error(`ElevenLabs ${String(r.status)}: ${await r.text()}`);
+    // Streamed: the first bytes came in about 1.6 s on fry, the whole line in about 2.3 s.
+    const r = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        voice,
+        input: text,
+        instructions: "Speak calmly and evenly, as a colleague beside him.",
+        response_format: "mp3",
+      }),
+    });
+    if (!r.ok || r.body === null) throw new Error(`OpenAI ${String(r.status)}: ${await r.text()}`);
     for await (const chunk of r.body) {
       line.chunks.push(chunk);
       ping();
@@ -97,7 +102,7 @@ function lineOf(text: string, voice: string, key: string, warn: (why: string) =>
  * model has written a walk's first line, while it still writes the rest.
  */
 export function speakAhead(text: string, voice: string, warn: (why: string) => void) {
-  const key = keyOf();
+  const key = speechKey();
   if (key !== undefined) lineOf(text, voice, key, warn);
 }
 
@@ -179,7 +184,7 @@ export function voice(): Plugin {
       });
       // Starts a line ahead, so it plays at once when the walk comes to it.
       server.middlewares.use("/__voice/ahead", (req, res) => {
-        const key = keyOf();
+        const key = speechKey();
         if (req.method !== "POST" || key === undefined) {
           res.statusCode = key === undefined ? 503 : 405;
           res.end();
@@ -196,7 +201,7 @@ export function voice(): Plugin {
       });
       // The line as speech, sent on as it comes, so the page plays it from the first bytes.
       server.middlewares.use("/__voice", (req, res) => {
-        const key = keyOf();
+        const key = speechKey();
         const query = new URL(req.url ?? "/", "http://here").searchParams;
         const text = query.get("text");
         const voice = query.get("voice");

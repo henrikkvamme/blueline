@@ -114,7 +114,7 @@ const act = z.union([
     do: z.literal("settings"),
     voice: z.boolean().optional(),
     walks: z.boolean().optional(),
-    speaker: z.enum(["Alice", "River", "Eric"]).optional(),
+    speaker: z.enum(["Marin", "Cedar"]).optional(),
     delay: z.number().optional(),
     lessMotion: z.boolean().optional(),
   }),
@@ -493,16 +493,22 @@ export function agent(): Plugin {
             const header = req.headers["x-blueline-voice"];
             const voice = typeof header === "string" && header !== "" ? header : undefined;
             let first = true;
-            const heard = ears
-              .hear(text, gone.signal, (line, ear) => {
-                if (first)
-                  log.info(`workshop agent: ${ear} heard in ${String(Date.now() - asked)} ms`);
-                first = false;
-                send({ type: "heard", text: line, ear });
-              })
-              .catch((error: unknown) => {
-                if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
-              });
+            const fast =
+              typeof record.request === "object" &&
+              record.request !== null &&
+              "heardBy" in record.request;
+            const heard = fast
+              ? Promise.resolve()
+              : ears
+                  .hear(text, gone.signal, (line, ear) => {
+                    if (first)
+                      log.info(`workshop agent: ${ear} heard in ${String(Date.now() - asked)} ms`);
+                    first = false;
+                    send({ type: "heard", text: line, ear });
+                  })
+                  .catch((error: unknown) => {
+                    if (!gone.signal.aborted) log.warn(`workshop agent, hearing: ${String(error)}`);
+                  });
             // New words stop the work on the old ones, and the session goes on from there.
             // Words that come while the old work stops wait in line behind it.
             const before = line;

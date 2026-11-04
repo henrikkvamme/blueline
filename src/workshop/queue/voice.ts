@@ -1,21 +1,20 @@
 /*
  * The agent cursor's voice: each line comes from the dev server's `/__voice` route, as
- * ElevenLabs speech, and plays from its first bytes. A walk asks for all of its lines when it
+ * OpenAI speech in the fast tier's voice (ADR 0008), and plays from its first bytes. A walk asks for all of its lines when it
  * starts, so each one is ready or on its way when the walk comes to it. With no route, or no key behind it, the walk shows its words alone.
  */
 
-/** The voices to choose from, ElevenLabs' own. */
+/** The voices to choose from: OpenAI's, which both its speech and its realtime model speak. */
 export const VOICES = [
-  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice" },
-  { id: "SAz9YHcvj6GT2YYXdXww", name: "River" },
-  { id: "cjVigY5qzO86Huf0OWal", name: "Eric" },
+  { id: "marin", name: "Marin" },
+  { id: "cedar", name: "Cedar" },
 ] as const;
 
 import * as timing from "./timing";
 
 const asked = new Set<string>();
 
-/** Where the line plays from: the dev server streams it as ElevenLabs makes it. */
+/** Where the line plays from: the dev server streams it as OpenAI makes it. */
 const urlOf = (text: string, voice: string) =>
   `/__voice?${new URLSearchParams({ voice, text }).toString()}`;
 

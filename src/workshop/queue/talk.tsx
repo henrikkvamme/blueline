@@ -83,7 +83,7 @@ const LOOP = { near: 36, length: 140 } as const;
 const IDLE: Talk = { phase: "idle" };
 
 /** Where the mouse was while he spoke: each element, from when, in ms of the audio. */
-type Trail = readonly { readonly target: string | undefined; readonly at: number }[];
+export type Trail = readonly { readonly target: string | undefined; readonly at: number }[];
 
 /**
  * His words, each with the element under the mouse when he said it, as runs of words on one
@@ -259,9 +259,24 @@ function closed<T extends Point>(points: readonly T[]): readonly T[] | undefined
   return undefined;
 }
 
+/** Where his words go when the fast tier is on (ADR 0008): the realtime model hears them
+ * itself, so the page sends only what he pointed at and drew. */
+export interface FastEars {
+  readonly ready: () => boolean;
+  readonly press: (stream: MediaStream) => void;
+  readonly release: (said: {
+    readonly target: string | undefined;
+    readonly trail: Trail;
+    readonly drawn: readonly Drawn[];
+    readonly at: Point;
+  }) => Promise<void>;
+  readonly drop: () => void;
+}
+
 export function usePointAndTalk({
   onStart,
   onWords,
+  fast,
 }: {
   /** The keys are pressed: the walk and its voice stop. */
   readonly onStart: () => void;
@@ -274,10 +289,11 @@ export function usePointAndTalk({
     drawn: readonly Drawn[],
     at: Point,
   ) => void;
+  readonly fast?: FastEars | undefined;
 }): Talk {
   const [talk, setTalk] = useState<Talk>(IDLE);
-  const calls = useRef({ onStart, onWords });
-  calls.current = { onStart, onWords };
+  const calls = useRef({ onStart, onWords, fast });
+  calls.current = { onStart, onWords, fast };
 
   useEffect(() => {
     ears.warm();
@@ -360,6 +376,43 @@ export function usePointAndTalk({
       } catch {
         held = false;
         return fail("No microphone");
+      }
+      const quick = calls.current.fast;
+      if (quick?.ready() === true) {
+        quick.press(stream);
+        timing.mark("mic");
+        heardFrom = Date.now();
+        const audio = new AudioContext();
+        const analyser = audio.createAnalyser();
+        analyser.fftSize = 512;
+        audio.createMediaStreamSource(stream).connect(analyser);
+        const samples = new Float32Array(analyser.fftSize);
+        const meter = () => {
+          analyser.getFloatTimeDomainData(samples);
+          const rms = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length);
+          level = level * 0.6 + Math.min(1, rms * 6) * 0.4;
+          show();
+          frame = requestAnimationFrame(meter);
+        };
+        end = () => {
+          cancelAnimationFrame(frame);
+          rest(stream);
+          void audio.close();
+          const slip = Date.now() - since < SHORTEST;
+          if (dropped || slip) {
+            dropped = false;
+            quick.drop();
+            return setTalk(IDLE);
+          }
+          const drawn = loops.map((l) => ({ path: pathOf(l.points), target: l.target }));
+          setTalk({ phase: "thinking", strokes: strokes(), at: mouse });
+          void quick
+            .release({ target: drawn.at(-1)?.target ?? target, trail, drawn, at: mouse })
+            .then(() => setTalk(IDLE));
+        };
+        if (!held) return end();
+        meter();
+        return;
       }
       listening = ears.listen(
         stream,

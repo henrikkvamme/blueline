@@ -25,6 +25,9 @@ import {
   type Move,
   type Queue,
   type Remark,
+  settleNow,
+  type Drawn,
+  type Pointed,
 } from "../../queue/queue";
 import { CornerDownRight, PenLine } from "lucide-react";
 import { cx } from "../../ui/cx";
@@ -34,7 +37,8 @@ import { AppNav, AppPage, Board } from "./app";
 import { Guide, GuideToggle } from "./guide";
 import { VOICES } from "./voice";
 import { Walker, type Preview } from "./walker";
-import { Strokes, TalkView, usePointAndTalk } from "./talk";
+import { Strokes, TalkView, usePointAndTalk, type FastEars, type Trail } from "./talk";
+import { fast, type Call } from "./realtime";
 import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
 import { ask, elements, forget, played } from "./agent";
 import { perform, type Act, type Shows } from "./acts";
@@ -86,7 +90,7 @@ interface GuideSettings {
   /** Whether each remark walks when it shows. */
   readonly on: boolean;
   readonly voice: boolean;
-  /** The ElevenLabs voice that speaks. */
+  /** The OpenAI voice that speaks. */
   readonly speaker: string;
   readonly reduced: boolean;
 }
@@ -100,7 +104,10 @@ function loadGuide(): GuideSettings {
   };
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(GUIDE) ?? "null");
-    return typeof raw === "object" && raw !== null ? { ...start, ...raw } : start;
+    const kept: GuideSettings =
+      typeof raw === "object" && raw !== null ? { ...start, ...raw } : start;
+    // A voice from before OpenAI's took over is gone: the first one speaks.
+    return VOICES.some((v) => v.id === kept.speaker) ? kept : { ...kept, speaker: start.speaker };
   } catch {
     return start;
   }
@@ -415,12 +422,208 @@ function Live() {
   // Point and talk: ⌃⌘ held, or ⌃⌃ to type, stops the walk. His words go to the agent, with what he pointed
   // at and what the page shows, and the agent answers on the page with its cursor. With no
   // agent, the script puts his words in the queue and says it is on it.
-  const talk = usePointAndTalk({
-    onStart: () => {
-      moment.current = momentNow();
-      walker.attend();
+  // The fast tier (ADR 0008): the realtime model hears him and calls these tools at once.
+  const fastCalls = useRef<{ onCall: (c: Call) => void; onHeard: (w: string) => void }>({
+    onCall: () => undefined,
+    onHeard: () => undefined,
+  });
+  const speakerNow = useRef(guide.speaker);
+  speakerNow.current = guide.speaker;
+  const realtime = useMemo(
+    () =>
+      fast(() => speakerNow.current, {
+        onCall: (c) => fastCalls.current.onCall(c),
+        onHeard: (w) => fastCalls.current.onHeard(w),
+      }),
+    [],
+  );
+  useEffect(() => {
+    realtime.warm();
+    return () => realtime.close();
+  }, [realtime]);
+  useEffect(() => realtime.mute(!guide.voice), [realtime, guide.voice]);
+  // Its voice is fixed once it has spoken, so a new voice needs a new session.
+  const sessionVoice = useRef(guide.speaker);
+  useEffect(() => {
+    if (sessionVoice.current === guide.speaker) return;
+    sessionVoice.current = guide.speaker;
+    realtime.close();
+    realtime.warm();
+  }, [realtime, guide.speaker]);
+  const hold = useRef<
+    | {
+        readonly target: string | undefined;
+        readonly trail: Trail;
+        readonly drawn: readonly Drawn[];
+        readonly at: { readonly x: number; readonly y: number };
+        heard: string | undefined;
+      }
+    | undefined
+  >(undefined);
+
+  /** The page as he sees it, for the fast tier, in a few lines. */
+  const pageFor = (said: { readonly trail: Trail; readonly drawn: readonly Drawn[] }) => {
+    const seen = elements();
+    const nameOf = (selector: string) =>
+      seen.find((e) => e.selector === selector)?.name ?? selector;
+    const values = here?.variants ?? here?.options ?? [];
+    const kept = here === undefined ? undefined : q.picks[here.id];
+    const pointedAt = said.trail.flatMap((t) =>
+      t.target === undefined ? [] : [`${nameOf(t.target)} ${t.target}`],
+    );
+    const circled = said.drawn.flatMap((d) => (d.target === undefined ? [] : [nameOf(d.target)]));
+    return [
+      `The page: ${page}.`,
+      here === undefined
+        ? "No remark is open."
+        : `The open remark: “${here.title}”, a ${here.kind}. ${here.text ?? ""}`,
+      values.length === 0
+        ? ""
+        : `Its ${here?.variants === undefined ? "options" : "variants"}: ${values.map((v, i) => `${String(i + 1)} “${v}”`).join(", ")}.`,
+      kept === undefined ? "" : `Kept: “${kept}”.`,
+      peek === undefined ? "" : `Shown now: “${peek}”.`,
+      `He pointed at, while he spoke: ${pointedAt.length === 0 ? "nothing" : pointedAt.join(", then ")}.`,
+      circled.length === 0 ? "" : `He circled: ${circled.join(", ")}.`,
+      `Parts of the page: ${seen.map((e) => `${e.name ?? e.text.slice(0, 40)} ${e.selector}`).join("; ")}.`,
+      `Remarks after this one: ${String(ahead(q).length)}.`,
+    ]
+      .filter((line) => line !== "")
+      .join("\n");
+  };
+
+  const fastEars: FastEars = {
+    ready: () => {
+      if (realtime.ready()) return true;
+      console.warn("Realtime: not ready, so the old ears hear this");
+      realtime.warm();
+      return false;
     },
-    onWords: (spoken, text, pointed, drawn, at) => {
+    press: (stream) => realtime.press(stream),
+    drop: () => realtime.drop(),
+    release: (said) => {
+      hold.current = { ...said, heard: undefined };
+      const text = pageFor(said);
+      timing.asked({ fast: text });
+      timing.mark("sent");
+      return realtime.release(text);
+    },
+  };
+
+  /** What the fast tier asked for, done as his own keys would do it. */
+  const runCall = (call: Call) => {
+    timing.mark("heard");
+    timing.mark("agent");
+    timing.note({ line: `${call.name} ${JSON.stringify(call.args)}`, ear: "gpt-realtime-2.1" });
+    const held = hold.current;
+    const values = here?.variants ?? here?.options ?? [];
+    const nth = (n: unknown) => (typeof n === "number" ? values[n - 1] : undefined);
+    const titleAfter = (to: (x: Queue) => Move) =>
+      current(to(q).queue)?.title ?? "nothing left to see";
+    if (call.name !== "ask_deep_agent") asking.current?.abort();
+    let did: string;
+    switch (call.name) {
+      case "next":
+        did = `Next: “${titleAfter(next)}”`;
+        move(next);
+        break;
+      case "back":
+        did = `Back: “${titleAfter(back)}”`;
+        move(back);
+        break;
+      case "settle":
+        did = here === undefined ? "Nothing to settle" : `Settled “${here.title}”`;
+        move(settleNow);
+        break;
+      case "undo":
+        did = "Undone";
+        undo();
+        break;
+      case "preview": {
+        const value = nth(call.args["n"]);
+        did = value === undefined ? "No such option" : `Showing “${value}”`;
+        if (value !== undefined) setPeek(value);
+        break;
+      }
+      case "keep": {
+        const value = nth(call.args["n"]) ?? peek;
+        did = value === undefined ? "Nothing to keep" : `Kept “${value}”`;
+        if (value !== undefined) choose(value);
+        break;
+      }
+      case "point": {
+        const asked = call.args["target"];
+        const wanted = typeof asked === "string" ? asked : "";
+        const found = elements().find(
+          (e) => e.selector === wanted || e.name === wanted || e.text.includes(wanted),
+        );
+        did =
+          found === undefined
+            ? `No “${wanted}” on the page`
+            : `Pointing at ${found.name ?? wanted}`;
+        if (found !== undefined) walker.hold(found.selector, found.name ?? wanted);
+        break;
+      }
+      case "play":
+        did = "Playing the walk";
+        if (walk.phase === "paused" || walk.phase === "lost") walker.resume();
+        else if (here?.walk !== undefined) walkRemark(here.id, here.walk, page);
+        break;
+      case "pause":
+        did = "Paused";
+        walker.pause();
+        break;
+      case "ask_deep_agent": {
+        const asked = call.args["request"];
+        const request = typeof asked === "string" && asked !== "" ? asked : (held?.heard ?? "");
+        const on = held?.target;
+        askAgent(
+          on,
+          request,
+          on === undefined ? [] : [{ target: on, words: request }],
+          held?.drawn ?? [],
+          held?.at ?? { x: innerWidth / 2, y: innerHeight / 2 },
+          (words) => realtime.tell(`The deep agent answered on the page: ${words}`),
+          "gpt-realtime-2.1",
+        );
+        realtime.answer(
+          call.id,
+          "The deep agent has it and answers on the page itself. Do not answer for it.",
+        );
+        return;
+      }
+      default:
+        did = `No tool ${call.name}`;
+    }
+    realtime.answer(call.id, did);
+    setExchange({
+      said: held?.heard ?? "",
+      heard: undefined,
+      tone: "done",
+      status: did,
+      walk: undefined,
+      annotation: undefined,
+    });
+  };
+  fastCalls.current = {
+    onCall: runCall,
+    onHeard: (words) => {
+      if (hold.current !== undefined) hold.current.heard = words;
+      timing.note({ said: words });
+      setExchange((x) => (x !== undefined && x.said === "" ? { ...x, said: words } : x));
+    },
+  };
+
+  /** His words go to the deep agent, and it answers on the page; `done` gets its last words. */
+  const askAgent = (
+    spoken: string | undefined,
+    text: string,
+    pointed: readonly Pointed[],
+    drawn: readonly Drawn[],
+    at: { readonly x: number; readonly y: number },
+    done?: (words: string) => void,
+    heardBy?: string,
+  ) => {
+    {
       const target = spoken ?? here?.target ?? selectorOf("title");
       const seenThen = moment.current;
       const note = (on: string, words: string) => {
@@ -458,6 +661,7 @@ function Live() {
       walker.from({ x: at.x + 16, y: at.y + 14 });
       walker.hold(target, `“${text}”`);
       const context = {
+        ...(heardBy === undefined ? {} : { heardBy }),
         said: text,
         pointedWhileSaying: pointed,
         circled: drawn.flatMap((d) => (d.target === undefined ? [] : [d.target])),
@@ -537,6 +741,7 @@ function Live() {
               break;
             }
             case "done":
+              done?.(event.text);
               walker.unhold();
               update((x) => ({
                 ...x,
@@ -558,7 +763,16 @@ function Live() {
         walker.start([heard(target, state.delay)], page);
         update((x) => ({ ...x, tone: "done", status: "In the queue", annotation: id }));
       });
+    }
+  };
+
+  const talk = usePointAndTalk({
+    onStart: () => {
+      moment.current = momentNow();
+      walker.attend();
     },
+    onWords: (spoken, text, pointed, drawn, at) => askAgent(spoken, text, pointed, drawn, at),
+    fast: fastEars,
   });
 
   /** He says why the answer was wrong; the dev server keeps it for a new eval case. */
@@ -591,7 +805,7 @@ function Live() {
         ? undefined
         : Math.max(0, Math.ceil((due.at + state.delay * 1000 - clock) / 1000));
     return {
-      said: exchange.said,
+      said: exchange.said === "" ? undefined : exchange.said,
       heard: exchange.heard,
       wrong: answered_
         ? {

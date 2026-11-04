@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { agent } from "./agent";
+import { realtime } from "./realtime";
 import { takes } from "./takes";
 import { voice } from "./voice";
 
@@ -14,6 +15,14 @@ import { voice } from "./voice";
  */
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), devtoolsChannel({ overlay: false }), voice(), agent(), takes()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    devtoolsChannel({ overlay: false }),
+    voice(),
+    realtime(),
+    agent(),
+    takes(),
+  ],
   server: { host: "0.0.0.0", port: 4310, strictPort: true, allowedHosts: ["fry"] },
 });
