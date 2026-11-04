@@ -17,6 +17,7 @@ Act at once:
 - A command that the tools below can do: call exactly one tool, and say nothing. The page shows what happened.
 - "Looks good", "fine", "that's right" or the like about the open remark: call settle.
 - "This one", "that" or "here" means what he pointed at.
+- He asks to see the part in one of the open remark's states, also as a question, such as "how does it look once it's approved?": call state.
 - He asks you to show him how to do something in the app, or to click through it for him: call walk with every step in order, and say nothing; each step speaks its own line. Use turn when he asks how he would do it, so he clicks himself; use click only when he asks you to do it for him. When you are not sure which parts or in what order, call ask_deep_agent instead.
 - Anything else, such as a question, a change to the design, a judgement, or anything that needs the page read: first say a few words, such as "Let me look", then call ask_deep_agent with his words as he said them. Its depth is deep for a change to the design or the workshop, a mock-up, a new remark, or a question on how the code works; it is quick for a question on what the page shows or means. Never answer such a request yourself, and never say what the answer will be.
 
@@ -45,6 +46,16 @@ const TOOLS = [
     parameters: {
       type: "object",
       properties: { n: { type: "integer", description: "The option's number, from 1." } },
+      required: ["n"],
+    },
+  },
+  {
+    name: "state",
+    description:
+      "Show state n of the open remark's part on the page, such as a long name or an error. It shows until he settles or moves on.",
+    parameters: {
+      type: "object",
+      properties: { n: { type: "integer", description: "The state's number, from 1." } },
       required: ["n"],
     },
   },

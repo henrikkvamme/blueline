@@ -112,6 +112,20 @@ const CASES: readonly Case[] = [
   },
   { id: "keep", page: "status", said: "Keep this one.", tool: "keep" },
   {
+    id: "state",
+    page: "status",
+    said: "Show it when it's sent back.",
+    tool: "state",
+    holds: ["n is 4", (a) => a["n"] === 4],
+  },
+  {
+    id: "state-approved",
+    page: "status",
+    said: "What would it look like after Ingrid approves it?",
+    tool: "state",
+    holds: ["n is 3", (a) => a["n"] === 3],
+  },
+  {
     id: "point",
     page: "journey",
     said: "Point at the amount.",

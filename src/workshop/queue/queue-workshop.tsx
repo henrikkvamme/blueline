@@ -526,8 +526,12 @@ function Live() {
       values.length === 0
         ? ""
         : `Its ${here?.variants === undefined ? "options" : "variants"}: ${values.map((v, i) => `${String(i + 1)} “${v}”`).join(", ")}.`,
+      here?.states === undefined
+        ? ""
+        : `Its states: ${here.states.map((v, i) => `${String(i + 1)} “${v}”`).join(", ")}.`,
       kept === undefined ? "" : `Kept: “${kept}”.`,
       peek === undefined ? "" : `Shown now: “${peek}”.`,
+      shown === undefined ? "" : `State shown: “${shown}”.`,
       `He pointed at, while he spoke: ${pointedAt.length === 0 ? "nothing" : pointedAt.join(", then ")}.`,
       circled.length === 0 ? "" : `He circled: ${circled.join(", ")}.`,
       `Parts of the page: ${seen.map((e) => `${e.name ?? e.text.slice(0, 40)} ${e.selector}`).join("; ")}.`,
@@ -592,6 +596,13 @@ function Live() {
         const value = nth(call.args["n"]);
         did = value === undefined ? "No such option" : `Showing “${value}”`;
         if (value !== undefined) setPeek(value);
+        break;
+      }
+      case "state": {
+        const n = call.args["n"];
+        const value = typeof n === "number" ? here?.states?.[n - 1] : undefined;
+        did = value === undefined ? "No such state" : `Showing the state “${value}”`;
+        if (value !== undefined) setShown(value);
         break;
       }
       case "keep": {
