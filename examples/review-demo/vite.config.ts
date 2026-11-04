@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { agent } from "./agent";
+import { guard } from "./guard";
 import { realtime } from "./realtime";
 import { takes } from "./takes";
 import { voice } from "./voice";
@@ -16,6 +17,8 @@ import { voice } from "./voice";
 
 export default defineConfig({
   plugins: [
+    // First, so it stands before every route of the demo.
+    guard(),
     react(),
     tailwindcss(),
     devtoolsChannel({ overlay: false }),
