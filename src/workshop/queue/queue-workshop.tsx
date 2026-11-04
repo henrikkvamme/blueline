@@ -12,7 +12,6 @@ import {
   next,
   pick,
   remarkOf,
-  settleNow,
   show,
   waiting,
   type Beat,
@@ -33,7 +32,7 @@ import { PANEL } from "../../ui/geometry";
 import { Panel, SHIP_SECONDS, type Composer, type Ship } from "./panel";
 import { AppNav, AppPage, Board } from "./app";
 import { Guide, GuideToggle } from "./guide";
-import { setRate, VOICES } from "./voice";
+import { VOICES } from "./voice";
 import { Walker, type Preview } from "./walker";
 import { Strokes, TalkView, usePointAndTalk } from "./talk";
 import { answerTo, heard, PAGES, selectorOf, start, targetOf, type Path } from "./script";
@@ -205,29 +204,6 @@ function Live() {
     root["walk"] = walk.phase;
     root["walkTurn"] = walker.turnTarget() ?? "";
   }, [walker, walk]);
-  /** He holds f: the walk plays at double pace, the voice and the cursor both. */
-  const [fast, setFast] = useState(false);
-  useEffect(() => {
-    const go = (to: boolean) => {
-      setRate(to ? 2 : 1);
-      setFast(to);
-    };
-    const down = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLElement && e.target.closest("input, textarea");
-      if (e.key === "f" && !e.repeat && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) go(true);
-    };
-    const up = (e: KeyboardEvent) => e.key === "f" && go(false);
-    const away = () => go(false);
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    window.addEventListener("blur", away);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", away);
-    };
-  }, []);
-
   /** A variant that the agent designed as markup, by its remark and name. */
   const designOf = (id: string, value: string) => remarkOf(q, id)?.designs?.[value];
   // The designs that show on this page: the one he or the guide previews on the remark that
@@ -693,38 +669,14 @@ function Live() {
         return;
       const values = here?.variants ?? here?.options ?? [];
       const n = Number(e.key);
-      // The arrows go through a choice's variants, in a row, and its states, in a column, as
-      // the lift does. On another remark, ← and → are Back and Next.
-      const states = here?.states ?? [];
-      const along = (d: number) => {
-        const from = values.indexOf(peek ?? q.picks[here?.id ?? ""] ?? "");
-        setPeek(values[(Math.max(from, d > 0 ? -1 : 0) + d + values.length) % values.length]);
-      };
-      const down = (d: number) => {
-        const n = (Math.max(0, states.indexOf(shown ?? "")) + d + states.length) % states.length;
-        setShown(n === 0 ? undefined : states[n]);
-      };
-      if (values.length > 0 && e.key === "ArrowRight") along(1);
-      else if (values.length > 0 && e.key === "ArrowLeft") along(-1);
-      else if (states.length > 0 && e.key === "ArrowDown") down(1);
-      else if (states.length > 0 && e.key === "ArrowUp") down(-1);
-      else if (e.key === "j" || e.key === "ArrowRight") move(next);
-      else if (e.key === "k" || e.key === "ArrowLeft") move(back);
-      else if (e.key === "t") setTree((o) => !o);
-      else if (e.key === "y") move(settleNow);
-      else if (e.key === "u") undo();
-      else if (e.key === "a" && here !== undefined) open(here.target);
+      if (e.key === "ArrowRight" || e.key === "j") move(next);
+      else if (e.key === "ArrowLeft" || e.key === "k") move(back);
       else if (e.key === " ") toggleWalk();
-      else if (e.key === "r" && here?.walk !== undefined) walkRemark(here.id, here.walk, page);
-      else if (e.key === "m") setGuide((g) => ({ ...g, voice: !g.voice }));
-      else if (e.key === "w" && answered_ && exchange.wrong === undefined) {
-        e.preventDefault();
-        askWrong(true);
-      }
-      // A number previews; Enter keeps what it previews.
       else if (n >= 1 && n <= values.length) setPeek(values[n - 1]);
       else if (e.key === "Enter" && peek !== undefined) choose(peek);
+      else if (e.key === "Escape" && walk.phase !== "idle" && walk.phase !== "done") walker.stop();
       else if (e.key === "Escape" && peek !== undefined) setPeek(undefined);
+      else if (e.key === "Escape" && tree) setTree(false);
       else return;
       e.preventDefault();
     };
@@ -738,19 +690,6 @@ function Live() {
       .map((a) => targetOf(a.target))
       .filter((t) => !(before && here?.kind === "answer" && t === targetOf(here.target))),
   );
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === "b" && !e.repeat && composer === undefined && here?.kind === "answer")
-        setBefore(true);
-    };
-    const up = (e: KeyboardEvent) => e.key === "b" && setBefore(false);
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-    };
-  }, [composer, here?.kind]);
 
   return (
     <>
@@ -811,7 +750,6 @@ function Live() {
         before={before}
         onBefore={setBefore}
         onWalk={toggleWalk}
-        fast={fast}
         voice={guide.voice}
         onVoice={() => setGuide((g) => ({ ...g, voice: !g.voice }))}
         queue={q}

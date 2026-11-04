@@ -400,7 +400,7 @@ async function runCase(browser: Browser, c: Case, rep: number, url: string, tree
     await page.waitForSelector('aside[aria-label="Blueline"]');
     if (c.page !== "/request") await page.click(quote(`tab-${c.page.slice(1)}`));
     if (c.remark !== undefined) {
-      await page.keyboard.press("t");
+      await page.click('aside[aria-label="Blueline"] header button[aria-expanded]');
       await page.getByText(c.remark).first().click();
       await sleep(400);
     }

@@ -18,7 +18,7 @@ import {
   RotateCcw,
   Shuffle,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ahead,
   annotationsOn,
@@ -131,8 +131,6 @@ export interface PanelProps {
   readonly beat?: { readonly at: number; readonly of: number } | undefined;
   /** Pause the walk, go on with it, or walk again. */
   readonly onWalk?: () => void;
-  /** He holds f: the walk plays at double pace. */
-  readonly fast?: boolean;
   readonly voice?: boolean;
   readonly onVoice?: () => void;
   /** Docked at the page's right edge, as the real panel is, or in the flow of the states
@@ -197,7 +195,6 @@ export function Panel(props: PanelProps) {
           <Tree
             queue={q}
             onShow={(id) => props.onShow?.(id)}
-            onClose={() => props.onTree?.(false)}
             active={here === undefined ? undefined : <RemarkView {...props} remark={here} inline />}
           />
         ) : here === undefined ? (
@@ -428,12 +425,10 @@ function RowMarkView({ mark }: { readonly mark: RowMark }) {
 function Tree({
   queue: q,
   onShow,
-  onClose,
   active,
 }: {
   readonly queue: Queue;
   readonly onShow: (id: string) => void;
-  readonly onClose: () => void;
   readonly active: ReactNode;
 }) {
   const here = current(q)?.id;
@@ -453,27 +448,6 @@ function Tree({
   const [folded, setFolded] = useState<readonly string[]>([]);
   const shownOf = (g: (typeof groups)[number]) =>
     folded.includes(g.page.path) ? g.remarks.filter((r) => r.id === here) : g.remarks;
-  const rows = groups.flatMap(shownOf);
-  const [picked, setPicked] = useState(() => current(q)?.id ?? rows[0]?.id);
-  const at = Math.max(
-    0,
-    rows.findIndex((r) => r.id === picked),
-  );
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const go = (d: number) => setPicked(rows[Math.min(rows.length - 1, Math.max(0, at + d))]?.id);
-      if (e.key === "j" || e.key === "ArrowDown") go(1);
-      else if (e.key === "k" || e.key === "ArrowUp") go(-1);
-      else if ((e.key === "Enter" || e.key === "l") && rows[at] !== undefined) onShow(rows[at].id);
-      else if (e.key === "Escape" || e.key === "t") onClose();
-      else return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  });
   return (
     <nav aria-label="Remarks" className="flex animate-dt-arrive flex-col gap-1 px-2.5 pt-1 pb-5">
       {groups.map(({ page, remarks }) => {
@@ -510,10 +484,10 @@ function Tree({
                       <button
                         type="button"
                         onClick={() => onShow(r.id)}
-                        onPointerEnter={() => setPicked(r.id)}
+                        aria-current={r.id === here ? "true" : undefined}
                         className={cx(
-                          "flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2 text-left text-[13px] transition-colors",
-                          r.id === rows[at]?.id ? "bg-dt-raised" : "",
+                          "flex h-8 w-full items-center gap-2.5 rounded-[8px] px-2 text-left text-[13px] transition-colors hover:bg-dt-raised",
+                          r.id === here && "bg-dt-raised",
                           mark === "here"
                             ? "font-medium text-dt-text"
                             : mark === "settled"
@@ -559,26 +533,13 @@ function Agent({ count, eta }: { readonly count: number; readonly eta: number | 
 }
 
 const KEYS = [
-  ["j", "Next"],
-  ["k", "Back"],
-  ["t", "The tree of remarks"],
-  ["←  →", "The variant before, after"],
-  ["↑  ↓", "The state before, after"],
-  ["a", "Annotate what shows"],
-  ["⌃⌘ held", "Point, draw and talk"],
-  ["⌃⌃", "Type to the agent about what you point at"],
-  ["1–9", "Preview a variant or an answer"],
-  ["Enter", "Keep what the preview shows"],
-  ["y", "Settle now and go on"],
-  ["⌘Z", "Undo: a settle, a pick or a move"],
-  ["⇧⌘Z", "Redo"],
-  ["b held", "An answer: the page as it was"],
-  ["Space", "Show me, pause, go on"],
-  ["f held", "Show me at double pace"],
-  ["r", "Show me again from the start"],
-  ["m", "Mute the voice"],
-  ["w", "Say the answer was wrong; it becomes an eval case"],
-  ["Esc", "Pause the cursor; again, stop it"],
+  ["←  →", "Back, Next"],
+  ["Space", "Play or pause the agent's walk"],
+  ["1–9", "Preview an option or a variant"],
+  ["Enter", "Keep the preview"],
+  ["Esc", "Stop or close"],
+  ["⌃⌘ held", "Point and talk to the agent"],
+  ["⌘Z  ⇧⌘Z", "Undo, redo"],
 ] as const;
 
 function Keys() {
@@ -689,17 +650,7 @@ function WalkControls(props: PanelProps & { readonly phase: Phase }) {
           ))}
         </span>
       )}
-      {props.fast === true && running && (
-        <span className="animate-dt-fade text-[11px] font-semibold text-dt-accent tabular-nums">
-          2×
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={props.onWalk}
-        className={control}
-        title="Space: pause or go on. Hold f: double pace"
-      >
+      <button type="button" onClick={props.onWalk} className={control} title="Space: play or pause">
         {running ? (
           <>
             <Pause className="size-3.5" aria-hidden />

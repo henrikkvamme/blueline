@@ -764,26 +764,18 @@ export class Walker {
     };
   }
 
-  /** Escape, one level at a time: a walk that runs pauses, and one that waits stops. A change
-   * of page loses the walk. */
+  /** A change of page loses the walk. */
   private listen() {
     if (this.unlisten !== undefined) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (this.active()) this.pause();
-      else this.stop();
-    };
     // The mouse is only noted, for the cursor to come back to.
     const onMove = (e: PointerEvent) => {
       this.mouse = { x: e.clientX, y: e.clientY };
     };
     const onPage = () => this.stop();
-    window.addEventListener("keydown", onKey, true);
     window.addEventListener("pointermove", onMove, true);
     window.addEventListener("popstate", onPage);
     window.addEventListener("hashchange", onPage);
     this.unlisten = () => {
-      window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("pointermove", onMove, true);
       window.removeEventListener("popstate", onPage);
       window.removeEventListener("hashchange", onPage);
