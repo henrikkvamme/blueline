@@ -290,11 +290,16 @@ export class Walker {
 
   readonly snapshot = () => this.snap;
 
-  /** The canvas that the cursor is drawn on; it comes in from the panel's edge. */
+  /** The canvas that the cursor is drawn on; it comes in from the panel's edge. A walk that
+   * moved on the cursor before, which never ends its move once it is gone, moves again. */
   attach(canvas: HTMLCanvasElement, fill: string) {
     const player = new MotionPlayer(canvas, { fill });
     player.place({ x: this.view().width - 40, y: this.view().height * 0.4 });
     this.player = player;
+    if (this.snap.phase === "moving" && this.at < this.walk.length) {
+      this.halt(true);
+      void this.play(this.generation);
+    }
     return () => {
       player.destroy();
       this.player = undefined;

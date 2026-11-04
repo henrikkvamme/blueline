@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ahead,
   annotate,
@@ -147,16 +147,15 @@ function Live() {
   const [visit, setVisit] = useState<Path | undefined>(undefined);
   const [exchange, setExchange] = useState<Exchange | undefined>(undefined);
   const asking = useRef<AbortController | undefined>(undefined);
-  const walker = useMemo(
+  // In state, not a memo, so a hot update of this file keeps the walk that plays.
+  const [walker] = useState(
     () =>
       new Walker(
         () => ({ width: window.innerWidth - PANEL, height: window.innerHeight }),
         setGuidePeek,
       ),
-    [],
   );
   const walk = useSyncExternalStore(walker.subscribe, walker.snapshot);
-  useEffect(() => () => walker.destroy(), [walker]);
   useEffect(() => localStorage.setItem(GUIDE, JSON.stringify(guide)), [guide]);
   useEffect(
     () =>
@@ -429,18 +428,25 @@ function Live() {
   });
   const speakerNow = useRef(guide.speaker);
   speakerNow.current = guide.speaker;
-  const realtime = useMemo(
-    () =>
-      fast(() => speakerNow.current, {
-        onCall: (c) => fastCalls.current.onCall(c),
-        onHeard: (w) => fastCalls.current.onHeard(w),
-      }),
-    [],
+  const [realtime] = useState(() =>
+    fast(() => speakerNow.current, {
+      onCall: (c) => fastCalls.current.onCall(c),
+      onHeard: (w) => fastCalls.current.onHeard(w),
+    }),
   );
+  // A hot update runs the cleanup and the effect again at once: only a real unmount ends
+  // the walk and the session.
+  const parting = useRef(0);
   useEffect(() => {
+    window.clearTimeout(parting.current);
     realtime.warm();
-    return () => realtime.close();
-  }, [realtime]);
+    return () => {
+      parting.current = window.setTimeout(() => {
+        walker.destroy();
+        realtime.close();
+      });
+    };
+  }, [walker, realtime]);
   useEffect(() => realtime.mute(!guide.voice), [realtime, guide.voice]);
   // Its voice is fixed once it has spoken, so a new voice needs a new session.
   const sessionVoice = useRef(guide.speaker);
