@@ -17,6 +17,7 @@ import {
   PenLine,
   RotateCcw,
   Shuffle,
+  ThumbsDown,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
@@ -1134,7 +1135,6 @@ function ExchangeLine({ line }: { readonly line: Line }) {
           </span>
         </span>
       )}
-      {line.wrong?.state === "asking" && <WrongBox wrong={line.wrong} />}
       <span className="flex min-h-5 items-center gap-2.5" role="status">
         {line.tone === "listening" ? (
           <Mic className="size-3.5 shrink-0 animate-pulse text-dt-accent" aria-hidden />
@@ -1175,41 +1175,50 @@ function ExchangeLine({ line }: { readonly line: Line }) {
         {line.change !== undefined && (
           <span className="shrink-0 text-dt-faint tabular-nums">{line.change}</span>
         )}
-        {line.wrong?.state === "idle" && (
-          <button
-            type="button"
-            data-guide-ui=""
-            onClick={line.wrong.onOpen}
-            title="Say what it should have done; it becomes an eval case"
-            className="-my-1 shrink-0 rounded-full px-2 py-1 text-dt-faint hover:bg-dt-raised hover:text-dt-text"
-          >
-            Wrong
-          </button>
-        )}
-        {line.wrong !== undefined && ["saving", "saved", "failed"].includes(line.wrong.state) && (
-          <span className="shrink-0 text-dt-faint">
-            {line.wrong.state === "saving"
-              ? "Saving"
-              : line.wrong.state === "saved"
-                ? "Saved as a case"
-                : "Not saved"}
-          </span>
-        )}
-        {line.onAgain !== undefined && (
-          <button
-            type="button"
-            data-guide-ui=""
-            onClick={line.onAgain}
-            className="-my-1 -mr-2 flex shrink-0 items-center gap-1 rounded-full px-2 py-1 font-medium text-dt-muted hover:bg-dt-raised hover:text-dt-text"
-          >
-            <RotateCcw className="size-3" aria-hidden />
-            Again
-          </button>
-        )}
       </span>
+      {(line.wrong !== undefined || line.onAgain !== undefined) && (
+        <span className="-mb-1 flex items-center gap-0.5 pl-5">
+          {line.wrong !== undefined && (
+            <button
+              type="button"
+              data-guide-ui=""
+              aria-label="Bad answer"
+              title="Bad answer: say what it should have done, and it becomes an eval case"
+              disabled={line.wrong.state !== "idle"}
+              onClick={line.wrong.onOpen}
+              className={action}
+            >
+              <ThumbsDown
+                className={cx(
+                  "size-3.5",
+                  line.wrong.state !== "idle" && line.wrong.state !== "failed" && "fill-current",
+                )}
+                aria-hidden
+              />
+            </button>
+          )}
+          {line.onAgain !== undefined && (
+            <button
+              type="button"
+              data-guide-ui=""
+              aria-label="Try again"
+              title="Try again"
+              onClick={line.onAgain}
+              className={action}
+            >
+              <RotateCcw className="size-3.5" aria-hidden />
+            </button>
+          )}
+          {line.wrong?.state === "failed" && <span className="pl-1 text-dt-warn">Not saved</span>}
+        </span>
+      )}
+      {line.wrong?.state === "asking" && <WrongBox wrong={line.wrong} />}
     </div>
   );
 }
+
+const action =
+  "grid size-6 place-items-center rounded-[6px] text-dt-faint enabled:hover:bg-dt-raised enabled:hover:text-dt-text disabled:text-dt-muted";
 
 /** The settle that just happened, in the place of the next remark's line, with undo. */
 function Toast({ count, onUndo }: { readonly count: number; readonly onUndo: () => void }) {
