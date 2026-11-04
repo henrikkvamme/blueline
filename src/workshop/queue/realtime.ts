@@ -10,7 +10,7 @@
  * carries its turn, so a turn that took too long is cancelled, and its late answer does nothing.
  *
  * Each press asks the dev server whether the app's map is newer than the session's. When it
- * is, the session gets the map's instructions and tools before his words reach it.
+ * is, the session gets the map's instructions and tools, and no answer starts until it has.
  *
  * A session that drops connects again at once, so his next press finds it ready. With no route
  * or no key, the state is unavailable, and the workshop can only take typed words.
@@ -81,6 +81,8 @@ export function fast(voice: () => string, on: Handlers): Fast {
   let commits: number[] = [];
   /** The version of the app's map that the session knows. */
   let version = "";
+  /** Asks for a newer map: no answer starts until it ends. */
+  let refreshing: Promise<void> | undefined;
   const items = new Map<string, number>();
   /** The turn of each response, by its id. */
   const responses = new Map<string, number>();
@@ -101,6 +103,10 @@ export function fast(voice: () => string, on: Handlers): Fast {
 
   const respond = () => {
     if (answering !== undefined) return;
+    if (refreshing !== undefined) {
+      void refreshing.then(respond);
+      return;
+    }
     const turn = waiting.shift();
     if (turn === undefined) return;
     answering = turn;
@@ -115,8 +121,9 @@ export function fast(voice: () => string, on: Handlers): Fast {
     });
   };
 
-  const answered = () => {
-    answer(answering);
+  /** The response for the turn ended: answered, or false when it failed. */
+  const answered = (ok = true) => {
+    answer(answering, ok);
     answering = undefined;
     respond();
   };
@@ -174,7 +181,8 @@ export function fast(voice: () => string, on: Handlers): Fast {
         const turn = turnOf(response);
         // The end of a cancelled response, after the next turn's started.
         if (turn !== undefined && turn !== answering) break;
-        answered();
+        // A response that failed or stopped, with no call before, answered nothing.
+        answered((response as { status?: unknown } | undefined)?.status === "completed");
         break;
       }
       case "input_audio_buffer.committed": {
@@ -220,7 +228,7 @@ export function fast(voice: () => string, on: Handlers): Fast {
       case "error": {
         console.warn("Realtime:", event["error"]);
         const cause = (event["error"] as { event_id?: unknown } | undefined)?.event_id;
-        if (cause === `respond${String(answering)}`) answered();
+        if (cause === `respond${String(answering)}`) answered(false);
         if (typeof cause === "string" && cause.startsWith("commit"))
           commits = commits.filter((turn) => cause !== `commit${String(turn)}`);
         break;
@@ -301,22 +309,30 @@ export function fast(voice: () => string, on: Handlers): Fast {
     }
   };
 
-  /** Sends the session a newer map, when there is one. */
-  const refresh = async () => {
+  /** Sends the session a newer map, when there is one, one ask at a time. A slow dev server
+   * holds the answer back for at most 2 s. */
+  const refresh = () => {
+    if (refreshing !== undefined) return;
     const mine = generation;
-    try {
-      const r = await fetch(`/__realtime/session?${new URLSearchParams({ have: version })}`);
-      if (r.status !== 200 || mine !== generation) return;
-      const next = (await r.json()) as { version: string; instructions: string; tools: unknown };
-      if (mine !== generation || next.version === version) return;
-      send({
-        type: "session.update",
-        session: { type: "realtime", instructions: next.instructions, tools: next.tools },
-      });
-      version = next.version;
-    } catch (error) {
-      console.warn("Realtime: no new map", error);
-    }
+    refreshing = (async () => {
+      try {
+        const r = await fetch(`/__realtime/session?${new URLSearchParams({ have: version })}`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (r.status !== 200 || mine !== generation) return;
+        const next = (await r.json()) as { version: string; instructions: string; tools: unknown };
+        if (mine !== generation || next.version === version) return;
+        send({
+          type: "session.update",
+          session: { type: "realtime", instructions: next.instructions, tools: next.tools },
+        });
+        version = next.version;
+      } catch (error) {
+        console.warn("Realtime: no new map", error);
+      }
+    })().finally(() => {
+      refreshing = undefined;
+    });
   };
 
   return {
@@ -328,7 +344,7 @@ export function fast(voice: () => string, on: Handlers): Fast {
       sound();
       send({ type: "input_audio_buffer.clear" });
       void sender?.replaceTrack(stream.getAudioTracks()[0] ?? null);
-      void refresh();
+      refresh();
     },
     release: (page) => {
       flush?.();
