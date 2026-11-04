@@ -6,7 +6,11 @@
  * audio flows only while the keys are held, and the release commits it.
  *
  * He may speak again before it answers. Each release is a turn: the turns wait in line for
- * their answers, one at a time, and a press never throws away a turn before it.
+ * their answers, one at a time, and a press never throws away a turn before it. Each response
+ * carries its turn, so a turn that took too long is cancelled, and its late answer does nothing.
+ *
+ * Each press asks the dev server whether the app's map is newer than the session's. When it
+ * is, the session gets the map's instructions and tools before his words reach it.
  *
  * With no route or no key, `ready` stays false and the workshop hears him the old way.
  */
@@ -21,8 +25,9 @@ export interface Call {
 
 export interface Released {
   readonly turn: number;
-  /** Resolves when the model calls a tool for this turn or ends its answer. */
-  readonly answered: Promise<void>;
+  /** Resolves when the model calls a tool for this turn or ends its answer: true, or false
+   * when no answer came in time or the session closed. */
+  readonly answered: Promise<boolean>;
 }
 
 export interface Fast {
@@ -52,7 +57,7 @@ interface Handlers {
 /** After the keys come up, his last syllable is still on its way. */
 const TAIL = 150;
 
-/** The longest the page waits for an answer before it stops showing that it hears him. */
+/** The longest a turn waits for its answer. Then it fails, and its response is cancelled. */
 const LONGEST = 8000;
 
 type Event = { readonly type: string } & Record<string, unknown>;
@@ -73,11 +78,15 @@ export function fast(voice: () => string, on: Handlers): Fast {
   let answering: number | undefined;
   let hush = 0;
   let commits: number[] = [];
+  /** The version of the app's map that the session knows. */
+  let version = "";
   const items = new Map<string, number>();
-  const answers = new Map<number, () => void>();
-  const answer = (turn: number | undefined) => {
+  /** The turn of each response, by its id. */
+  const responses = new Map<string, number>();
+  const answers = new Map<number, (answered: boolean) => void>();
+  const answer = (turn: number | undefined, answered = true) => {
     if (turn === undefined) return;
-    answers.get(turn)?.();
+    answers.get(turn)?.(answered);
     answers.delete(turn);
   };
 
@@ -98,13 +107,34 @@ export function fast(voice: () => string, on: Handlers): Fast {
       send({ type: "conversation.item.delete", item_id: `page${String(old)}` });
     pages = pages.filter((p) => p >= turn);
     sound();
-    send({ type: "response.create", event_id: `respond${String(turn)}` });
+    send({
+      type: "response.create",
+      event_id: `respond${String(turn)}`,
+      response: { metadata: { turn: String(turn) } },
+    });
   };
 
   const answered = () => {
     answer(answering);
     answering = undefined;
     respond();
+  };
+
+  /** No answer came in time: the turn fails, and the next one in line is answered. */
+  const giveUp = (turn: number) => {
+    answer(turn, false);
+    waiting = waiting.filter((t) => t !== turn);
+    if (answering !== turn) return;
+    send({ type: "response.cancel" });
+    answering = undefined;
+    respond();
+  };
+
+  const turnOf = (response: unknown) => {
+    const turn = Number(
+      (response as { metadata?: { turn?: unknown } } | undefined)?.metadata?.turn,
+    );
+    return Number.isInteger(turn) ? turn : undefined;
   };
 
   const close = () => {
@@ -117,8 +147,9 @@ export function fast(voice: () => string, on: Handlers): Fast {
     sender = undefined;
     window.clearTimeout(tail);
     flush = undefined;
-    for (const done of answers.values()) done();
+    for (const done of answers.values()) done(false);
     answers.clear();
+    responses.clear();
     pages = [];
     waiting = [];
     answering = undefined;
@@ -129,9 +160,22 @@ export function fast(voice: () => string, on: Handlers): Fast {
 
   const receive = (event: Event) => {
     switch (event.type) {
-      case "response.done":
+      case "response.created": {
+        const response = event["response"] as { id?: unknown } | undefined;
+        const turn = turnOf(response);
+        if (typeof response?.id === "string" && turn !== undefined)
+          responses.set(response.id, turn);
+        break;
+      }
+      case "response.done": {
+        const response = event["response"] as { id?: unknown } | undefined;
+        if (typeof response?.id === "string") responses.delete(response.id);
+        const turn = turnOf(response);
+        // The end of a cancelled response, after the next turn's started.
+        if (turn !== undefined && turn !== answering) break;
         answered();
         break;
+      }
       case "input_audio_buffer.committed": {
         const turn = commits.shift();
         if (turn !== undefined && typeof event["item_id"] === "string")
@@ -150,6 +194,12 @@ export function fast(voice: () => string, on: Handlers): Fast {
         } catch {
           // A call with broken arguments acts with none.
         }
+        const of =
+          typeof event["response_id"] === "string"
+            ? responses.get(event["response_id"])
+            : undefined;
+        // A call from a cancelled response does nothing.
+        if (of !== undefined && of !== answering) break;
         const turn = answering ?? turns;
         answer(turn);
         on.onCall({ name: item.name, args, id: item.call_id, turn });
@@ -191,7 +241,9 @@ export function fast(voice: () => string, on: Handlers): Fast {
         return;
       }
       if (!r.ok) throw new Error(`Token ${String(r.status)}`);
-      const { value } = (await r.json()) as { value: string };
+      const token = (await r.json()) as { value: string; version?: string };
+      const { value } = token;
+      version = token.version ?? "";
       if (stale()) return;
       const pc = new RTCPeerConnection();
       peer = pc;
@@ -239,6 +291,24 @@ export function fast(voice: () => string, on: Handlers): Fast {
     }
   };
 
+  /** Sends the session a newer map, when there is one. */
+  const refresh = async () => {
+    const mine = generation;
+    try {
+      const r = await fetch(`/__realtime/session?${new URLSearchParams({ have: version })}`);
+      if (r.status !== 200 || mine !== generation) return;
+      const next = (await r.json()) as { version: string; instructions: string; tools: unknown };
+      if (mine !== generation || next.version === version) return;
+      send({
+        type: "session.update",
+        session: { type: "realtime", instructions: next.instructions, tools: next.tools },
+      });
+      version = next.version;
+    } catch (error) {
+      console.warn("Realtime: no new map", error);
+    }
+  };
+
   return {
     ready: () => state === "ready",
     warm: () => void connect(),
@@ -248,13 +318,14 @@ export function fast(voice: () => string, on: Handlers): Fast {
       sound();
       send({ type: "input_audio_buffer.clear" });
       void sender?.replaceTrack(stream.getAudioTracks()[0] ?? null);
+      void refresh();
     },
     release: (page) => {
       flush?.();
       const turn = ++turns;
-      const done = new Promise<void>((resolve) => {
+      const done = new Promise<boolean>((resolve) => {
         answers.set(turn, resolve);
-        window.setTimeout(() => answer(turn), LONGEST);
+        window.setTimeout(() => giveUp(turn), LONGEST);
       });
       flush = () => {
         flush = undefined;

@@ -269,7 +269,7 @@ export interface FastEars {
     readonly trail: Trail;
     readonly drawn: readonly Drawn[];
     readonly at: Point;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   readonly drop: () => void;
 }
 
@@ -313,6 +313,7 @@ export function usePointAndTalk({
     let trail: { target: string | undefined; at: number }[] = [];
     let heardFrom = 0;
     let releases = 0;
+    let presses = 0;
     // The ink, in the viewport, with when each point came; the loops, in the page.
     let ink: { x: number; y: number; t: number }[] = [];
     let loops: { points: Point[]; target: string | undefined }[] = [];
@@ -354,6 +355,7 @@ export function usePointAndTalk({
 
     const start = async () => {
       timing.begin(false);
+      const press = ++presses;
       held = true;
       dropped = false;
       since = Date.now();
@@ -375,9 +377,12 @@ export function usePointAndTalk({
       try {
         stream = await warmMicrophone();
       } catch {
+        if (press !== presses) return;
         held = false;
         return fail("No microphone");
       }
+      // He let go, or pressed again, while the microphone opened: this press is over.
+      if (press !== presses || !held) return rest(stream);
       const quick = calls.current.fast;
       if (quick?.ready() === true) {
         quick.press(stream);
@@ -410,11 +415,12 @@ export function usePointAndTalk({
           const mine = ++releases;
           void quick
             .release({ target: drawn.at(-1)?.target ?? target, trail, drawn, at: mouse })
-            .then(() => {
-              if (!held && mine === releases) setTalk(IDLE);
+            .then((answered) => {
+              if (held || mine !== releases) return;
+              if (answered) setTalk(IDLE);
+              else fail("No answer came");
             });
         };
-        if (!held) return end();
         meter();
         return;
       }
@@ -483,8 +489,6 @@ export function usePointAndTalk({
           });
       };
       end = () => recorder.stop();
-      // He let go before the microphone was ready.
-      if (!held) return end();
       recorder.start();
       timing.mark("mic");
       heardFrom = Date.now();

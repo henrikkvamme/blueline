@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Plugin } from "vite";
 import { type AppMap, appMap, mapText, partsOf } from "./map.ts";
 
@@ -6,7 +7,9 @@ import { type AppMap, appMap, mapText, partsOf } from "./map.ts";
  * sends back a short-lived key for one OpenAI realtime session, with its model, voice,
  * instructions and tools set here, so the page connects to OpenAI over WebRTC and never sees
  * `OPENAI_API_KEY`. Without the key the route answers 503, and the workshop hears him the old
- * way. The app's map, which the agent writes (map.ts), goes into each new session.
+ * way. The app's map, which the agent writes (map.ts), goes into each new session. A session
+ * keeps the map's version: `GET /__realtime/session?have=` sends back the instructions and
+ * tools of a newer map, so a session that began before the map, or with an older one, gets it.
  */
 
 const MODEL = "gpt-realtime-2.1";
@@ -137,6 +140,12 @@ const tools = (map: AppMap | undefined) =>
     .filter((tool) => map !== undefined || tool.name !== "walk")
     .map((tool) => ({ type: "function", ...tool }));
 
+/** Which map a session knows: none is "". */
+const versionOf = (map: AppMap | undefined) =>
+  map === undefined
+    ? ""
+    : createHash("sha256").update(JSON.stringify(map)).digest("hex").slice(0, 16);
+
 export function realtime(): Plugin {
   return {
     name: "workshop-realtime",
@@ -150,6 +159,24 @@ export function realtime(): Plugin {
         res.statusCode = map === undefined ? 404 : 200;
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(map ?? null));
+      });
+      server.middlewares.use("/__realtime/session", (req, res) => {
+        const map = appMap(log);
+        const version = versionOf(map);
+        if (new URL(req.url ?? "/", "http://here").searchParams.get("have") === version) {
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(
+          JSON.stringify({
+            version,
+            instructions: `${INSTRUCTIONS}\n\n${knowledge(map)}`,
+            tools: tools(map),
+          }),
+        );
       });
       server.middlewares.use("/__realtime/token", (req, res) => {
         const key = process.env["OPENAI_API_KEY"];
@@ -186,7 +213,7 @@ export function realtime(): Plugin {
             const { value } = (await r.json()) as { value: string };
             res.setHeader("Content-Type", "application/json");
             res.setHeader("Cache-Control", "no-store");
-            res.end(JSON.stringify({ value, model: MODEL }));
+            res.end(JSON.stringify({ value, model: MODEL, version: versionOf(map) }));
           })
           .catch((error: unknown) => {
             server.config.logger.warn(String(error));
