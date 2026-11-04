@@ -184,10 +184,11 @@ The order keeps his context and keeps little work open at a time:
 1. **Finish where he is.** The remarks on the page and the area that show come first.
 2. **Finish before starting.** Remarks that answer his earlier annotations come next, the
    oldest first.
-3. **Then new remarks**, but only while fewer than a limit of his annotations wait on the
-   agent. The limit starts at 2; the prototype finds the right number.
-4. When the limit is reached and nothing has come back, the queue says so: "2 annotations
-   wait on the agent, about 40 s". It never shows a remark he cannot act on.
+3. **Then new remarks**, the oldest first.
+4. A remark that he annotated leaves the queue while the agent works, and comes back at the
+   place of its answer. The queue's bar shows that place, and says how long the agent needs.
+   It never shows a remark he cannot act on. (The prototype tried a limit of waiting
+   annotations that held new remarks back. It did not help him decide, so it is gone.)
 
 A remark that comes back while he looks at another one does not move him. The queue counts
 it, and Next takes him there when it is its turn.
@@ -206,6 +207,44 @@ or a variant by its number.
   what it understood, and it can show a preview on the page, a change of CSS or words only.
   The journey's agent then does the real change. Henrik corrects a wrong understanding at
   once, not a minute later.
+
+  **Which model does what** (measured on fry on 2026-11-02, through the subscriptions, with
+  no API key; the queue workshop has the first answer):
+  - The first answer is GPT-6.1 Terra with no reasoning, through a Codex app-server on the
+    ChatGPT plan, on a warm thread (a new thread's first turn is about 1 s slower). In the
+    hearing evals Terra was right in 100% of cases and Haiku 5.5 in 81 to 88%, and Haiku
+    was slower, so Haiku only answers when Codex fails. On the OpenAI API, Terra would be
+    about 1 s.
+  - Two Terras race for each line, each on its own warm thread, and the first word wins.
+    Codex runs bare for them: no tools, skills, permissions or repository, so a hearing
+    sends about 7,400 input tokens, not 13,700. Against the one Terra before, over 32
+    hearings each, interleaved: 1.49 s typical against 1.62 s, and 2.1 s at worst against
+    3.0 s. Still right in 100% of cases.
+  - His words stream to ElevenLabs' realtime speech to text while he speaks, with the
+    names on the page as keyterms. The words come 0.22 s after he lets go, where sending
+    the recording after took 0.4 to 0.8 s.
+  - Measured in the browser on 2026-11-02, from release: words 0.22 s, the line on screen
+    1.6 s typical and 3.1 s at worst, the agent's first act 2.8 s. The evals are in
+    `evals/hearing/` and `examples/review-demo/evals/`.
+  - The agent's next run starts ahead: after each run, a Claude Code process starts and
+    resumes the session, with the same prompt and tools, so his next words do not wait for
+    it. The browser eval also checks the agent's work, with Opus as the judge. Over its 16
+    cases the agent was right in 16 both before and after, and its first act came 2.1 s
+    after release typical and 4.0 s at worst, against 3.0 s and 6.5 s.
+  - The voice streams. The dev server sends ElevenLabs' speech on as it comes, and it starts
+    a walk's first line as soon as Opus has written that line, while it still writes the
+    rest of the call. Measured over the 16 cases, two rounds each: the voice played 1.9 s
+    after the walk asked for it with whole lines, 1.3 s streamed, and 0.7 s streamed from
+    Opus's own stream. The agent stayed right in 15 and 16 of 16; the one miss was its own
+    choice on "not sure about this colour", which the voice does not touch.
+  - The journey's agent, its variants and the orchestrator use Claude Opus 5.5. It leads
+    Arena WebDev (1810, against Terra's 1673), and design is where the quality shows.
+    Henrik does not wait on it, because the first answer covers the first seconds.
+  - The agent that drives the browser to check a journey can use Terra (74.2% on OSWorld
+    2.1, at a low cost per task).
+  - No model router, such as Jev. Every note gets the fast answer and goes to the agent too,
+    so there is nothing to choose between.
+
 - **Ready before he arrives.** While he looks at one remark, Blueline makes the next remark's
   stills and variants, so Next is instant.
 - **The size of the session.** The queue shows how much is left: "6 items, about 4 min".
@@ -245,6 +284,14 @@ The agent shows where it means, as [Clicky](https://heyclicky.com) does: a curso
 moves to the element, a frame draws around it, and a caption says the words. A remark can
 play this as a walk of a few seconds, and any key stops it. A still screen and words stay
 the default, so nothing moves without a reason.
+
+Henrik answers in the same way. He holds ⌃⌘, points or draws a loop, and speaks, or presses ⌃ twice and types. A real
+agent answers on the page: it points, draws marks and arrows, mocks a change up in the
+element's place, waits for his click, or clicks a journey itself after it says each click.
+It speaks each line. A line at the panel's foot shows what it heard and what it does now.
+In the queue workshop the agent is Claude Code through the Agent SDK, on the dev server,
+with the Claude Code subscription and no API key. Its session persists across his remarks.
+It can change the workshop's code, so he shapes Blueline through Blueline.
 
 ## Routing and threads
 
@@ -309,7 +356,7 @@ agent from a script, with a set delay, so it runs in seconds and shows the same 
 time. They can live in the workshop (`src/workshop`).
 
 1. **The queue.** Next and Back over a fake journey, remarks that come back after a set
-   delay, and the limit of open annotations as a setting. It answers the order and the limit.
+   delay as a setting. It answers the order.
 2. **Remarks on the page.** The agent's remarks pinned beside Henrik's annotations, the brief
    in the panel, and a reference from the brief to a pin. It answers how a remark and an annotation look side by side.
 3. **The agent points.** Its cursor, frame and caption, still and as a walk. It answers if

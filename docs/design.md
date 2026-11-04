@@ -1654,6 +1654,119 @@ proofs.
       stays a dependency.
     - Case 5 runs in `test/deliver-run.test.ts` with the fake agent killed by `SIGKILL`.
 
+## Live: the vision in the approval matrix
+
+Decided with Henrik on 2026-11-04. All of `docs/vision.md` goes live, and the approval
+matrix in zug-web is the first app. The order builds the loop first: once Henrik can talk to
+Blueline inside the approval matrix and have it change both the app and Blueline, the rest is
+built through that loop. Each phase leaves the tool working.
+
+Henrik's choices:
+
+- **All of the vision**, not only the workshop loop.
+- **One agent, both repositories.** The deep agent works in the app's repository and may also
+  edit Blueline. It decides from his words and what he pointed at, such as Blueline's own
+  panel, whether a note is about the app or about Blueline. There is no handoff.
+- **A live worktree.** Blueline changes from his notes land in a Blueline worktree on the
+  branch `live`. The approval matrix loads Blueline from source in dev (`BLUELINE_SOURCE` in
+  its `.env.local`, which git ignores), so a change shows in seconds. A change that he settles
+  is committed there, and goes on to main and npm with the ship steps.
+- **OpenAI and Claude only.** The fast tier and the voice are OpenAI's (`gpt-realtime-2.1`,
+  `gpt-4o-mini-tts`). The deep agent is Claude Opus 5.5 through the Agent SDK. The ElevenLabs
+  ears, and the Terra and Haiku first answer, go: the fast tier replaces them.
+- **Two new dependencies.** `@anthropic-ai/claude-agent-sdk` and `zod` become runtime
+  dependencies of the package, pinned exactly, for the deep agent in `blueline serve`.
+- **Evals on the approval matrix** prove each phase in practice before the next starts.
+- **Every future session uses the new version** once phase 1 passes its evals (L6).
+
+### Rules for the whole build
+
+- **End to end.** Each slice ends with a proof in the real approval matrix, in a browser, by
+  the path that Henrik uses: his voice or his keys in, and the page, the code and the commit
+  out. A unit test alone does not finish a slice.
+- **One writer for each checkout.** The agent never edits a checkout that a person or another
+  agent works in. App changes go to a zug-web task worktree with its own dev server. The
+  `live` Blueline worktree has one writer at a time: the project session that holds its lock.
+  Commits take only the writer's own paths.
+- **Work data stays private.** OpenAI gets his voice and the page as text: the path, the
+  names of the parts that show and their words, never a screenshot, and never the value of a
+  field marked secret, such as a password or a token. Claude gets the screenshots. Transcripts,
+  stills and logs stay in Blueline's state folder on the machine. Before a Blueline change is
+  pushed or published, a check reads the diff and the PR body for words from the app, by a
+  list that each app's config gives, and stops it.
+
+### Phase 1: the loop in the overlay
+
+The workshop's loop moves into the real overlay. Today's steps and notes keep working.
+
+| Slice | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L0    | Prepare. Fix the bug scan's findings. Merge `prototype/queue` into `main`; the workshop stays for quick design changes. Make the `live` worktree. Make the update loop work from source, which it does not now: the overlay's CSS is a generated file with no watcher, and `ensureServer` keeps a running server of the same version. In dev from source, a watcher makes the CSS again, and the overlay reloads. A change to the server's own code does not restart it at once: the server waits for a turn boundary (no line in an edit), loads the new code in a check process first, and only then restarts and takes up its open lines again. New code that does not load leaves the last working version running and says why. Proof: one edit each to the CSS, the overlay and the server shows in the approval matrix, an edit that breaks the server leaves it running, and no line is lost. |
+| L1    | ADR 0009, before any agent code: the project's agent is a delivery adapter (ADR 0005, ADR 0007). Each spoken or written note is a durable line; the session claims it and answers by its line ID; a restart takes up the open lines again. New words while the agent edits wait as the next line, and do not stop an edit in the middle. The fast tier's page tools stay in the page and need no line.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| L2    | The server side in `blueline serve`, under each app's routes: the realtime key, the voice and the app map. They move from `examples/review-demo`. The keys stay in the server, from its environment or a 1Password reference that it reads once. Without a key a route answers 503, and the overlay hides what needs it. Proof: the approval matrix gets a realtime key and a spoken line from the server, and the page never holds a key.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| L3    | The app map for any app. The agent finds the routes and pages, and names each part by a stable selector from the code. It also reads the app's review adapter: the scenarios, acting as a person, reset and ready (in the approval matrix, `src/dev/review/adapter.ts`). A journey on the map names the setup it needs, and the walk runs that setup first. Before each step the walker checks the part on the page as it is now (there, and not disabled); a step that fails hands the walk to the deep agent. Proof: spoken journeys in the approval matrix for two people and two matter states.                                                                                                                                                                                                                                                                                                   |
+| L4    | The deep agent for each project, in the server, as the ADR 0009 adapter: one Agent SDK session, its folder a zug-web task worktree, with the `live` Blueline worktree as a second folder under its lock. The server enforces its access: real paths after symbolic links, writes only in the two worktrees, no reads of `.env` files, keys or `.git`, and no edits to agent instruction files. It runs checks only from a list fixed when the session starts. Its prompt says how to tell a note on Blueline from a note on the app. Proof: a note on the app changes only the zug-web worktree, a note on Blueline's panel changes only `live`, and both show on the page. A note that makes the agent change the server in two files, such as an export and its importer, ends with the new server running and the line answered.                                                                   |
+| L5    | The overlay, in three steps, each proven before the next. (a) One panel: one controller owns the keys, the queue, settle and the remark panel, and a target names either an app element or one of Blueline's own, which the overlay finds through its shadow root (`composedPath`), so pointing at Blueline's panel works. (b) The queue, the walker and the agent's cursor. (c) Push-to-talk with the fast tier; the page that it gets comes from the live DOM and the map.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| L6    | The evals on the approval matrix pass (see below), from source and from the packed package. An installed package cannot take an edit to itself: a review that started from the package, with `live` set up, switches to `live` source at the first note on Blueline (the server restarts from `live` at a turn boundary, keeps its open lines, and the overlay reloads), and the edit goes on as from source. Without `live`, a note on Blueline waits in the queue for the next release.                                                                                                                                                                                                                                                                                                                                                                                                             |
+| L7    | Every future session uses it: a Blueline release on npm; the approval matrix and the dev dashboard on it, each proven with the packed package first; the `blueline` skill in the dotfiles rewritten for the new flow. The prototype's demo plugins go only after the published package passes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+### Phase 2 and on
+
+The order is the vision's, after phase 1, with what remarks need first:
+
+2. **Remarks replace steps** (vision, "Decided on 2026-10-30"), in this order: the identity of
+   a project and a journey; durable storage of remarks; the shared setup helpers as named
+   actions in the config; remarks through the CLI and MCP, with annotations that have their
+   own replies, settle without a key, and the brief; each app moved to remarks while steps
+   still work; then one minor version removes steps.
+3. **Journeys and the orchestrator.** The L4 session grows into one orchestrator per project:
+   it routes each note, starts a journey agent in its own worktree for work in parallel (at
+   most 3), and runs the ready gate. The last settle ships the journey.
+4. **Project and places**: `places` in the config, the registry, the tree, and the inbox for
+   all projects.
+5. **Know how the UX is**: the measures, the weekly digest and the judge.
+6. **The browser extension**, with its ADR, for hosted dev and prod.
+
+Each phase has its own acceptance cases in the evals, such as a note routed to the right
+journey or an inbox that keeps its items over a restart. The routing score of phase 1 does
+not prove them. The robustness items stay beside the phases: Effect's latest stable release,
+and one typed contract for the CLI, HTTP, MCP and the page.
+
+### Evals on the approval matrix
+
+The harness is in Blueline and knows no app. The cases name the approval matrix's pages,
+people and amounts, so they live in zug-web, which is private; Blueline is public. They go
+under `apps/approval-matrix/src/dev/review/evals`, through a zug-web PR. The agent makes the
+AIZ ticket and opens the zug-web PRs itself, as zug-web's `docs/agents/issue-tracker.md` says.
+
+A run never touches Henrik's review: it makes its own zug-web and Blueline worktrees, its own
+backend with its own data, and its own dev servers on free ports, in a headless browser.
+It keeps the transcripts, stills and diffs of a failed case in the state folder, and
+removes the worktrees and processes at the end.
+
+- **Routing**: cases from the approval matrix, with the page from the live DOM and the app's
+  map: commands, questions, and journeys from several start pages and people. A journey is
+  graded as walked, handed to the deep agent, or wrong.
+- **Walks in the browser**: a fake microphone speaks each journey; the walk runs on the real
+  page; the case checks where it ends (the path and what shows), that no step was lost, and
+  the time from release to the first move.
+- **The deep agent, end to end**: a spoken change is right only when the expected files
+  changed, no other path changed, the checks pass, and the page shows the change after a
+  reload. Then Opus judges the answer's quality.
+- **Notes on Blueline**: a note on Blueline's own panel changes only the `live` worktree,
+  and the page shows the change within a set time.
+- **No wrong journeys**: tasks that the app does not do, or that another person does, go to
+  the deep agent.
+- **The update loop**: an edit to the CSS, the overlay and the server each shows in the page,
+  and no open line is lost.
+- **The package**: the same cases run once with the packed package in place of the source.
+  A note on Blueline first switches the review to `live` source; the case checks that switch,
+  that no line is lost in it, and that the edit then shows on the page.
+
+The bar for phase 1: no wrong journey, the routing at least as right as in the workshop
+(73 of 75 on 2026-11-04), a walk that starts within 2 s typical, and every end-to-end case
+right.
+
 ## Evals
 
 Evals come after the build, once the design and the behaviour are agreed in real use.

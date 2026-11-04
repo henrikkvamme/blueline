@@ -1,0 +1,1300 @@
+[
+  {
+    "id": "euros-real-1",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "real 37772f71",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Uh, how would th-this look in, uh, euros?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "The amount in euros: a figure of about EUR 3 200 to 3 800 (40 000 NOK at a real rate), with EUR or € in place of NOK, in the same read-only field. Wrong: a new layout, a lost field box, a figure out of range, other parts changed."
+    }
+  },
+  {
+    "id": "euros-real-2",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "real 159ac5b7",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How is look in euros?",
+        "input": "circled",
+        "circle": {
+          "target": "amount"
+        }
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "He circled the amount; his English is broken but he means the amount in euros. The amount in euros: a figure of about EUR 3 200 to 3 800 (40 000 NOK at a real rate), with EUR or € in place of NOK, in the same read-only field. Wrong: a new layout, a lost field box, a figure out of range, other parts changed."
+    }
+  },
+  {
+    "id": "kr-after",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "What if the kroner came after the number?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "The amount reads 40 000 NOK or 40 000 kr, in the same field. Wrong: other changes, a new layout."
+    }
+  },
+  {
+    "id": "title-short",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "real a548f39d",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "This title is too long. Make it shorter. Just the name and the word bonus.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "title",
+      "guide": "A shorter title made of Kari's name and the word bonus, such as \"Kari Nordmann bonus\" or \"Bonus: Kari Nordmann\", in the same heading style. The asker line under it stays. Wrong: words he did not ask for, a smaller heading, the asker line changed."
+    }
+  },
+  {
+    "id": "title-norsk",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How would the title look in Norwegian?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "title",
+      "guide": "The title in Norwegian, such as \"Bonus til Kari Nordmann\", same heading style. Only the title; the rest stays English. Wrong: other lines translated."
+    }
+  },
+  {
+    "id": "button-name",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "What if this said who it goes to?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "submit"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "submit",
+      "guide": "The send button names who gets it first, such as \"Send to Ola Hansen\" (Ola approves first), same blue button. Wrong: a name that is not an approver, a broken button."
+    }
+  },
+  {
+    "id": "asker-date",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Show the real date instead of two days ago.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "asker"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "asker",
+      "guide": "The asker line with a date instead of \"2 days ago\". The app stores no date, so a date two days before today is a fair example; claiming it is the stored real date is not. Same small grey text."
+    }
+  },
+  {
+    "id": "role-order",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Could the role say who approves first?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "approvers"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "guide": "The approver rows show the order, such as \"Director · approves first\" and \"Finance · second\". Ola Hansen is first, Ingrid Berg second. Same grey rows."
+    }
+  },
+  {
+    "id": "status-approved",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How does this look once it's approved?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "status",
+      "guide": "The status as approved: \"Approved\", and the app's approved look has a green dot. Same pill shape and size."
+    }
+  },
+  {
+    "id": "sent-time",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/sent",
+    "turns": [
+      {
+        "said": "Put the time it was sent in here.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "sent"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "guide": "The sent message with a time in it, mocked up on the Sent page. The app stores no send time: a time shown as an example is fine; claiming it is the real time is not. Same grey paragraph."
+    }
+  },
+  {
+    "id": "tab-rename",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How would it look if this tab was called People?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "tab-approvers"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "tab-approvers",
+      "guide": "The Approvers tab reads People, in the same tab style. Wrong: other tabs changed."
+    }
+  },
+  {
+    "id": "add-label",
+    "group": "mockup-words",
+    "set": "held",
+    "source": "variation",
+    "page": "/approvers",
+    "turns": [
+      {
+        "said": "Make the add button say add last.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "add"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "guide": "The add button reads something like \"Add last\", same button style. Only a mock-up, or a change put in the queue; never a code edit."
+    }
+  },
+  {
+    "id": "converted-under",
+    "group": "mockup-parts",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Can we show euros too, small, under it?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "The NOK field stays as it is, and a small grey line under it shows about EUR 3 200 to 3 800. Wrong: the NOK field changed or lost."
+    }
+  },
+  {
+    "id": "third-approver",
+    "group": "mockup-parts",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How would it look with a third approver, from HR?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "approvers"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "approvers",
+      "guide": "A third grey row for an HR approver under Ola Hansen and Ingrid Berg, same style. A placeholder name is fine when it is not claimed to be real."
+    }
+  },
+  {
+    "id": "urgent-badge",
+    "group": "mockup-parts",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "What if urgent ones had a little badge here?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "guide": "A small badge such as \"Urgent\" by the title, in the app's style, with the heading and asker line unchanged."
+    }
+  },
+  {
+    "id": "status-steps",
+    "group": "mockup-parts",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Show the status as steps, one per approver.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "guide": "The status as small steps, Ola Hansen then Ingrid Berg, where the pill was and about its size. Wrong: a large block that pushes the page around."
+    }
+  },
+  {
+    "id": "button-disabled",
+    "group": "mockup-parts",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How would the button look if it could not be sent yet?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "submit"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "submit",
+      "guide": "The send button in a disabled look: greyed, same size, maybe with a short reason. What it says about the look must match what the mock-up shows."
+    }
+  },
+  {
+    "id": "hint-status-green",
+    "group": "hint",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Make the status green.",
+        "input": "circled",
+        "circle": {
+          "target": "amount"
+        }
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "status",
+      "guide": "He circled the amount but named the status: the status gets the mock-up, with a green dot or tint. Wrong: the amount changed."
+    }
+  },
+  {
+    "id": "hint-who-approves",
+    "group": "hint",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Who approves this?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "A question: the answer names Ola Hansen (Director) first and Ingrid Berg (Finance) second. No mock-up."
+    }
+  },
+  {
+    "id": "hint-dollars",
+    "group": "hint",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How would the amount look in dollars?",
+        "input": "circled",
+        "circle": {
+          "target": "submit"
+        }
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "He circled the button but named the amount: the amount in US dollars, about USD 3 500 to 4 200, in the same field. Wrong: the button changed."
+    }
+  },
+  {
+    "id": "hint-this-loop",
+    "group": "hint",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "What would this say once it's approved?",
+        "input": "circled",
+        "point": [
+          {
+            "target": "title"
+          }
+        ],
+        "circle": {
+          "target": "status",
+          "word": 2
+        }
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "status",
+      "guide": "He says \"this\" while he loops the status: the status, mocked up as approved. Wrong: the title changed."
+    }
+  },
+  {
+    "id": "two-swap-rows",
+    "group": "two-places",
+    "set": "held",
+    "source": "variation",
+    "page": "/approvers",
+    "turns": [
+      {
+        "said": "Swap Ola and Ingrid in this list.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "approver-list"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "guide": "A mock-up of the approver list with Ingrid Berg first and Ola Hansen second, same grey rows, or the agent makes the swap the page allows (drag). Wrong: other rows changed."
+    }
+  },
+  {
+    "id": "two-put-under",
+    "group": "two-places",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Put this under that.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          },
+          {
+            "target": "amount",
+            "word": 3
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "guide": "Move the status pill under the amount field, as a mock-up: the status shows below the amount. Wrong: the amount changed, or the status moved somewhere else."
+    }
+  },
+  {
+    "id": "two-same-grey",
+    "group": "two-places",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Make this the same grey as that.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "submit"
+          },
+          {
+            "target": "approvers",
+            "word": 6
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "submit",
+      "guide": "The send button in the grey of the approver rows, with dark text, same size. Wrong: the rows changed."
+    }
+  },
+  {
+    "id": "follow-dollars",
+    "group": "follow-up",
+    "set": "dev",
+    "source": "real 37772f71",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Uh, how would th-this look in, uh, euros?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      },
+      {
+        "said": "Dollars.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "First the amount in euros; then the amount in US dollars, about USD 3 500 to 4 200, in the same field. Both turns must be right."
+    }
+  },
+  {
+    "id": "follow-shorter",
+    "group": "follow-up",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Make the title shorter.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      },
+      {
+        "said": "Even shorter.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "title",
+      "guide": "Two mock-ups of the title, the second shorter than the first, same heading style, still about Kari's bonus."
+    }
+  },
+  {
+    "id": "follow-sent-back",
+    "group": "follow-up",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "How does this look once it's approved?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      },
+      {
+        "said": "And when it's sent back?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "status",
+      "guide": "First the status as approved (green); then as sent back (red, such as \"Sent back\"). Same pill."
+    }
+  },
+  {
+    "id": "act-settle",
+    "group": "act",
+    "set": "dev",
+    "source": "real 37772f71",
+    "page": "/request",
+    "remark": "Who asked, under the title",
+    "turns": [
+      {
+        "said": "Okay, okay. Settle this.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "checks": [
+        {
+          "says": "the remark is settled",
+          "js": "q.settled.includes('r-who') && !start.settled.includes('r-who')"
+        }
+      ],
+      "guide": "He settles the remark that shows (who asked, under the title). The agent settles it in the queue, with at most a short word. No mock-up."
+    }
+  },
+  {
+    "id": "act-next",
+    "group": "act",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "remark": "The page's title",
+    "turns": [
+      {
+        "said": "Next one.",
+        "input": "spoken"
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "checks": [
+        {
+          "says": "another remark shows",
+          "js": "q.trail[q.at] !== 'r-title'"
+        }
+      ],
+      "guide": "He goes to the next remark: the agent moves the queue on. No mock-up."
+    }
+  },
+  {
+    "id": "act-keep-pill",
+    "group": "act",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "remark": "How should the status look?",
+    "turns": [
+      {
+        "said": "Keep the pill.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "checks": [
+        {
+          "says": "Pill is kept",
+          "js": "q.picks['r-status'] === 'Pill'"
+        }
+      ],
+      "guide": "The remark that shows asks how the status should look, with the variants Dot, Pill and Steps: the agent keeps Pill."
+    }
+  },
+  {
+    "id": "act-undo",
+    "group": "act",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "remark": "Who asked, under the title",
+    "turns": [
+      {
+        "said": "Settle this.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      },
+      {
+        "said": "No wait, undo that.",
+        "input": "spoken"
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "checks": [
+        {
+          "says": "the remark is not settled",
+          "js": "!q.settled.includes('r-who')"
+        }
+      ],
+      "guide": "First he settles the remark that shows (who asked, under the title), then takes it back: at the end the remark is not settled."
+    }
+  },
+  {
+    "id": "journey-run-send",
+    "group": "journey",
+    "set": "dev",
+    "source": "real 07e20052",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Click through the journey for me. Go to the approvers and add one, then send it.",
+        "input": "spoken"
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "clicks": "some",
+      "checks": [
+        {
+          "says": "it ends on the Sent page",
+          "js": "doc.querySelector('[data-q=\"sent\"]') !== null"
+        }
+      ],
+      "guide": "The agent runs it itself: it says each click, then makes it: Approvers tab, Add an approver, back to Request, Send for approval. It ends on the Sent page with Kari Nordmann added."
+    }
+  },
+  {
+    "id": "journey-teach-send",
+    "group": "journey",
+    "set": "dev",
+    "source": "real 1c03a16b",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Show me how I would send this request for approval.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "submit"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "clicks": "none",
+      "checks": [
+        {
+          "says": "it ends on the Sent page",
+          "js": "doc.querySelector('[data-q=\"sent\"]') !== null"
+        }
+      ],
+      "guide": "He wants to learn: the agent shows the send button and waits for his own click, then it ends on the Sent page. Wrong: the agent clicks for him."
+    }
+  },
+  {
+    "id": "journey-teach-add",
+    "group": "journey",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Show me how I add an approver.",
+        "input": "spoken"
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "clicks": "none",
+      "checks": [
+        {
+          "says": "Kari Nordmann is added",
+          "js": "doc.body.innerText.includes('Kari Nordmann') && doc.body.innerText.includes('HR')"
+        }
+      ],
+      "guide": "He wants to learn: the agent leads him to the Approvers tab and the add button, and waits for his clicks there. At the end Kari Nordmann, HR, is added. Wrong: the agent clicks for him."
+    }
+  },
+  {
+    "id": "journey-run-back",
+    "group": "journey",
+    "set": "dev",
+    "source": "real 1c03a16b",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Click through the journey for me. Go to the approvers and add one, then come back.",
+        "input": "spoken"
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "clicks": "some",
+      "checks": [
+        {
+          "says": "it ends on Request with the new approver",
+          "js": "doc.querySelector('[data-q=\"amount\"]') !== null && doc.querySelector('[data-q=\"approvers\"]').innerText.includes('HR')"
+        }
+      ],
+      "guide": "The agent clicks the Approvers tab, Add an approver, then the Request tab. It ends on Request, which now lists three approvers."
+    }
+  },
+  {
+    "id": "q-status-bruh",
+    "group": "question",
+    "set": "dev",
+    "source": "real 4f0a10fe",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "What does this mean bruh?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "A short, true answer: the request waits for its approvers; blue means it is still moving. No mock-up."
+    }
+  },
+  {
+    "id": "q-stands-here",
+    "group": "question",
+    "set": "dev",
+    "source": "real da8e7e67",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "What does, uh, stands here?",
+        "input": "circled",
+        "circle": {
+          "target": "amount"
+        }
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "He asks what the circled field says: the bonus amount, NOK 40 000, read-only. No mock-up."
+    }
+  },
+  {
+    "id": "q-who-ingrid",
+    "group": "question",
+    "set": "dev",
+    "source": "variation",
+    "page": "/approvers",
+    "turns": [
+      {
+        "said": "Who is Ingrid?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "approver-list"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "Ingrid Berg is the second approver, from Finance; Ingrid gets it once Ola Hansen approves. No mock-up."
+    }
+  },
+  {
+    "id": "q-why-blue",
+    "group": "question",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Why is this blue?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "submit"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "The send button is blue because it is the page's main action. Nothing false about the code. No mock-up."
+    }
+  },
+  {
+    "id": "q-who-now",
+    "group": "question",
+    "set": "held",
+    "source": "variation",
+    "page": "/sent",
+    "turns": [
+      {
+        "said": "Who has the request now?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "sent"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "Ola Hansen has it first; Ingrid Berg gets it once Ola Hansen approves. No mock-up."
+    }
+  },
+  {
+    "id": "variant-red",
+    "group": "variant",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "remark": "How should the status look?",
+    "turns": [
+      {
+        "said": "Add a version where the pill is red.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "checks": [
+        {
+          "says": "a variant was added",
+          "js": "(q.remarks.find((r) => r.id === 'r-status')?.variants?.length ?? 0) > (start.remarks.find((r) => r.id === 'r-status')?.variants?.length ?? 0)"
+        }
+      ],
+      "guide": "The remark that shows is a choice of status looks: the agent adds a new variant with a red pill, in the app's look, and shows it."
+    }
+  },
+  {
+    "id": "variant-remark",
+    "group": "variant",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Add a remark that the title is too long.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "checks": [
+        {
+          "says": "a remark was added",
+          "js": "q.remarks.length > start.remarks.length"
+        }
+      ],
+      "guide": "The agent writes a new remark into the queue, about the title being too long."
+    }
+  },
+  {
+    "id": "noise-wallah",
+    "group": "noise",
+    "set": "dev",
+    "source": "real 159ac5b7",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Wallah.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "tab-approvers"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "clicks": "none",
+      "checks": [
+        {
+          "says": "the queue is as it was",
+          "js": "JSON.stringify(q.settled) === JSON.stringify(start.settled)"
+        }
+      ],
+      "guide": "Not a request. A good answer does nothing, or asks in one short line what he wants. Wrong: a mock-up, a journey, an act."
+    }
+  },
+  {
+    "id": "noise-uh",
+    "group": "noise",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Uh, hmm, wait.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "clicks": "none",
+      "guide": "Not a request. A good answer does nothing, or asks in one short line. Wrong: a mock-up or an act."
+    }
+  },
+  {
+    "id": "noise-norsk",
+    "group": "noise",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Hvordan ser dette ut i euro?",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "Norwegian for \"How does this look in euros?\": The amount in euros: a figure of about EUR 3 200 to 3 800 (40 000 NOK at a real rate), with EUR or € in place of NOK, in the same read-only field. Wrong: a new layout, a lost field box, a figure out of range, other parts changed."
+    }
+  },
+  {
+    "id": "noise-cant-type",
+    "group": "noise",
+    "set": "dev",
+    "source": "real 0059f1be",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "I can't type.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "guide": "He tried to type in the amount: the field is read-only in this made-up page. A good answer says so in a line, or offers to show a change. Wrong: claiming he can type there."
+    }
+  },
+  {
+    "id": "bounds-code",
+    "group": "bounds",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Change this title in the real code.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "edits": "none",
+      "guide": "A change to the made-up app is not made in code: it is mocked up or put in the review queue as a change, and the agent says so. Wrong: a code edit."
+    }
+  },
+  {
+    "id": "bounds-deploy",
+    "group": "bounds",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Deploy this to production.",
+        "input": "spoken"
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "edits": "none",
+      "guide": "The workshop cannot deploy: the agent says so in a line. Wrong: claiming it deployed, or changing anything."
+    }
+  },
+  {
+    "id": "bounds-delete-page",
+    "group": "bounds",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Delete the approvers page.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "tab-approvers"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "any",
+      "edits": "none",
+      "guide": "A change to the made-up app: mocked up or put in the queue, not made in code."
+    }
+  },
+  {
+    "id": "interrupt-dollars",
+    "group": "interrupt",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Show me how the amount would look in euros.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      },
+      {
+        "said": "No wait, in dollars.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ],
+        "when": "first-beat"
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "He changes his mind while it answers: the last mock-up shows the amount in US dollars, about USD 3 500 to 4 200. Wrong: it ends with euros."
+    }
+  },
+  {
+    "id": "interrupt-status",
+    "group": "interrupt",
+    "set": "held",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "Explain this whole page to me.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "title"
+          }
+        ]
+      },
+      {
+        "said": "Actually, just the status.",
+        "input": "spoken",
+        "point": [
+          {
+            "target": "status"
+          }
+        ],
+        "when": "first-beat"
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "He cuts in: the answer ends on the status: it waits for its approvers, blue while it moves. No mock-up."
+    }
+  },
+  {
+    "id": "typed-euros",
+    "group": "mockup-words",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "how would this look in euros",
+        "input": "typed",
+        "point": [
+          {
+            "target": "amount"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "some",
+      "target": "amount",
+      "guide": "The amount in euros: a figure of about EUR 3 200 to 3 800 (40 000 NOK at a real rate), with EUR or € in place of NOK, in the same read-only field. Wrong: a new layout, a lost field box, a figure out of range, other parts changed."
+    }
+  },
+  {
+    "id": "typed-question",
+    "group": "question",
+    "set": "dev",
+    "source": "variation",
+    "page": "/request",
+    "turns": [
+      {
+        "said": "what does this status mean",
+        "input": "typed",
+        "point": [
+          {
+            "target": "status"
+          }
+        ]
+      }
+    ],
+    "expect": {
+      "mockup": "none",
+      "guide": "A short true answer: it waits for its approvers. No mock-up."
+    }
+  }
+]

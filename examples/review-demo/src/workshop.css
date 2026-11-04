@@ -1,0 +1,82 @@
+@import "tailwindcss";
+/* The dev tools' own dark look, which the workshops' panels use. */
+@import "@henrikkvamme/blueline/styles.css";
+
+/* The agent's voice, in the panel, while it speaks. */
+@keyframes dt-eq {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* The agent cursor's note comes in from the cursor, with a small spring. */
+@keyframes dt-note {
+  from {
+    opacity: 0;
+    transform: translate(-8px, -4px) scale(0.9);
+  }
+}
+
+/* The ring of the agent's click: it spreads out from the cursor's tip and fades. */
+@keyframes dt-press {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* A mock-up comes in over the element it stands for. */
+@keyframes dt-mock {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* A light that runs along the top of the agent's line while it works. */
+@keyframes dt-scan {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/* The agent's words while it works: a light passes over them, as over Claude's own. */
+.dt-shimmer {
+  background: linear-gradient(
+      90deg,
+      var(--color-dt-muted) 0%,
+      var(--color-dt-muted) 40%,
+      var(--color-dt-text) 50%,
+      var(--color-dt-muted) 60%,
+      var(--color-dt-muted) 100%
+    )
+    0 0 / 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: dt-shimmer 1.8s linear infinite;
+}
+
+@keyframes dt-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-shimmer {
+    animation: none;
+  }
+}

@@ -21,6 +21,7 @@ import { takeLines, type Line } from "../bin/lines";
 import { listenerPick } from "../bin/listen";
 import { reply } from "../bin/reply";
 import { claim, claimsPath, feedbackLines, unclaim, withLock } from "../bin/wire";
+import { appendOnce } from "../src/server/channel";
 import { stamped } from "../src/vite";
 
 const line = (fields: object) => `${JSON.stringify(fields)}\n`;
@@ -39,6 +40,38 @@ describe("a line's identity", () => {
     expect(JSON.parse(stamped('{"line":"mine"}', "L2") ?? "").line).toBe("L2");
     expect(stamped("[1]", "L3")).toBeUndefined();
     expect(stamped("not json", "L4")).toBeUndefined();
+  });
+
+  it("is the page's own ID when that is a UUID, so a line sent again is the same line", () => {
+    const page = "0b8f1c52-6d0e-4f43-9a51-3e2f7c1d9a10";
+    expect(JSON.parse(stamped(`{"line":"${page}"}`, "L5") ?? "").line).toBe(page);
+  });
+
+  it("is appended once, however often the page sends it", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "blueline-append-"));
+    const file = path.join(dir, "feedback.jsonl");
+    const text = JSON.stringify({ kind: "note", line: "L1" });
+    const added = await Effect.runPromise(
+      Effect.all(
+        Array.from({ length: 6 }, () => appendOnce(file, text, "L1")),
+        { concurrency: "unbounded" },
+      ),
+    );
+    expect(added.filter(Boolean)).toHaveLength(1);
+    expect(readFileSync(file, "utf8")).toBe(`${text}\n`);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("cuts a torn line, so the whole line sent again reads back once", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "blueline-append-"));
+    const file = path.join(dir, "feedback.jsonl");
+    const before = line({ kind: "note", line: "L0" });
+    const text = JSON.stringify({ kind: "note", line: "L1", text: "Gjør tittelen kortere" });
+    writeFileSync(file, before + text.slice(0, 20));
+    expect(await Effect.runPromise(appendOnce(file, text, "L1"))).toBe(true);
+    expect(readFileSync(file, "utf8")).toBe(`${before}${text}\n`);
+    expect(ids(linesOf(readFileSync(file, "utf8")))).toEqual(["L0", "L1"]);
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("is its place in bytes and its hash for a line from before the stamp", () => {

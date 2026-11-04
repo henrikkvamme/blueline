@@ -1,0 +1,13 @@
+{
+  "flow": "answers",
+  "metrics": [
+    { "id": "pass", "label": "Pass", "kind": "binary" },
+    { "id": "code", "label": "Code checks", "kind": "binary" },
+    { "id": "understood", "label": "Understood", "kind": "binary" },
+    { "id": "minimal", "label": "Minimal", "kind": "binary" },
+    { "id": "native", "label": "Native", "kind": "binary" },
+    { "id": "truthful", "label": "Truthful", "kind": "binary" },
+    { "id": "agree", "label": "Judges agree", "kind": "binary" }
+  ],
+  "perf_fields": ["first_beat_s", "latency_s"]
+}

@@ -7,5 +7,12 @@
     "erasableSyntaxOnly": true,
     "resolveJsonModule": true
   },
-  "include": ["bin/*.ts", "scripts/*.ts", "src/vite.ts", "src/server/*.ts", "vite.config.ts"]
+  "include": [
+    "bin/*.ts",
+    "scripts/*.ts",
+    "src/vite.ts",
+    "src/server/*.ts",
+    "vite.config.ts",
+    "evals/*/*.ts"
+  ]
 }

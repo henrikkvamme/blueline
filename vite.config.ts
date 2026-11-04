@@ -63,7 +63,7 @@ export default defineConfig({
   lint: {
     extends: [recommended],
     options: { typeAware: true, typeCheck: true, denyWarnings: true },
-    ignorePatterns: ["dist/**", "src/**/*.gen.ts"],
+    ignorePatterns: ["dist/**", "src/**/*.gen.ts", "src/vendor/**"],
     overrides: [
       {
         // Tool configuration, the dev server's plugin, the channel it shares with
@@ -74,7 +74,7 @@ export default defineConfig({
     ],
   },
   fmt: {
-    ignorePatterns: ["dist/**", "pnpm-lock.yaml", "src/**/*.gen.ts"],
+    ignorePatterns: ["dist/**", "pnpm-lock.yaml", "src/**/*.gen.ts", "src/vendor/**"],
   },
   test: {
     projects: [
