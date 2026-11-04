@@ -23,10 +23,18 @@ We add a fast tier in front of the agent. On Henrik's decision of 2026-11-04:
 
 On Henrik's decision of 2026-11-04, the fast tier also walks a journey through the app, such as
 "show me how I send this" or "click through it for me". Its `walk` tool takes the steps in
-order. Each step names a part from a fixed list of the app's parts, says one line, and then
-points at the part, clicks it, or waits for his own click. Its instructions hold a short map of
-the app, because it cannot read the code. It hands a journey to Opus when it is not sure of the
-parts or their order. The walker speaks each line in the same voice as Opus's lines.
+order. Each step names a part of the app, says one line, and then points at the part, clicks
+it, or waits for his own click. It hands a journey to Opus when it is not sure of the parts or
+their order. The walker speaks each line in the same voice as Opus's lines.
+
+The fast tier cannot read the code, so it walks by the app's map. Opus reads the app's code once
+and writes the map (`examples/review-demo/map.ts`): the pages, the parts of each by their
+`data-q` names, the page that a click on a part opens, and the usual journeys. The map goes into
+each new session's instructions, and its part names are the only parts `walk` accepts. The map
+keeps a hash of each file Opus read. When one of them changes, the map is stale: the session
+does not get it, and Opus writes it again in the background, in about 15 s. A session with no
+fresh map has no `walk` tool, and a journey goes to Opus. A map written by hand was not chosen:
+it goes stale without a sign, and the prod version has no person to keep it.
 
 A journey spoken to the fast tier started its walk 1.6 s after he let go of the keys. The same
 journey typed to Opus started 3.4 s after Enter, and a spoken one also waits for the fast tier
@@ -44,6 +52,11 @@ for each setup, on 2026-11-04:
 | `gpt-realtime-2.1-mini`, push-to-talk    | 22/24      | 578 ms | 731 ms          | 1517 ms |
 | ElevenLabs Agents, Claude Haiku 5.5      | 24/24      | 692 ms | 897 ms          | 2724 ms |
 | ElevenLabs Agents, Gemini 3.5 Flash-Lite | 24/24      | 775 ms | 834 ms          | 909 ms  |
+
+`evals/voice/route.ts` checks the routing of the live session: 16 spoken requests, from "next"
+to a journey and a question on the code, each with the page it was said on. With the map, it
+gave 47 of 48 right in three rounds; the one miss asked a question on the code as quick, not
+deep. With no map, both journeys went to Opus, 4 of 4.
 
 ## Not chosen
 

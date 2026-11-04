@@ -132,18 +132,17 @@ function load(): State {
   }
 }
 
-/** The fast tier's walk steps as beats; a step on a part the app does not have is left out. */
+/** The fast tier's walk steps as beats. The session holds its parts to the app's map. */
 function beatsOf(steps: unknown): readonly Beat[] {
   if (!Array.isArray(steps)) return [];
   return steps.flatMap((step: unknown): Beat[] => {
     if (typeof step !== "object" || step === null) return [];
     const { part, do: how, say } = step as Record<string, unknown>;
-    const name = typeof part === "string" ? TARGETS[part] : undefined;
-    if (typeof part !== "string" || name === undefined || typeof say !== "string") return [];
+    if (typeof part !== "string" || part === "" || typeof say !== "string") return [];
     return [
       {
         target: selectorOf(part),
-        name,
+        name: TARGETS[part] ?? part,
         say,
         ...(how === "click" ? { click: true } : how === "turn" ? { turn: true } : {}),
       },

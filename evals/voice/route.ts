@@ -282,11 +282,13 @@ async function run(c: Case): Promise<Result> {
   send({ type: "response.create" });
   await done;
   ws.close();
-  const base = { id: c.id, said: c.said, want: c.tool, ...(heard === undefined ? {} : { heard }) };
+  // Without the app's map the session has no walk, so a journey goes to the deep agent.
+  const want = !mapped && c.tool === "walk" ? "ask_deep_agent" : c.tool;
+  const base = { id: c.id, said: c.said, want, ...(heard === undefined ? {} : { heard }) };
   if (got === undefined) return { ...base, pass: false, why: error ?? "no tool" };
   const call = got;
-  const right = call.tool === c.tool;
-  const holds = c.holds === undefined || (right && c.holds[1](call.args));
+  const right = call.tool === want;
+  const holds = c.holds === undefined || want !== c.tool || (right && c.holds[1](call.args));
   return {
     ...base,
     got: call,
@@ -319,6 +321,12 @@ async function inParallel<T>(jobs: readonly (() => Promise<T>)[], width: number)
 const only = flags.only?.split(",");
 const chosen = CASES.filter((c) => only === undefined || only.includes(c.id));
 const reps = Number(flags.reps);
+const mapped = (await fetch(`${flags.url}/__realtime/map`).catch(() => undefined))?.ok === true;
+console.log(
+  mapped
+    ? "The session has the app's map.\n"
+    : "No app map yet: a journey goes to the deep agent.\n",
+);
 // ElevenLabs allows a few requests at a time, so new speech is made one line at a time.
 for (const c of chosen) await pcm(c.said);
 const results = await inParallel(
