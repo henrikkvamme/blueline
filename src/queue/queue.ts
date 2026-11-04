@@ -303,17 +303,11 @@ export interface Move {
 /** Next: the next open remark on the trail ahead, else the queue's first remark. A settled
  * remark ahead is passed over, so Next goes back from the past to what needs him. With
  * nothing to show, the reviewer stays, and the remark that he leaves still settles. A remark
- * whose walk he did not see to the end goes back into the queue, to come again. */
+ * whose walk he did not see to the end stays open behind him, and comes again after the
+ * rest. */
 export function next(q: Queue): Move {
   const left = leave(q);
-  const queue =
-    left.untried === undefined
-      ? left.queue
-      : {
-          ...left.queue,
-          trail: left.queue.trail.filter((id) => id !== left.untried),
-          at: left.queue.at - 1,
-        };
+  const queue = left.queue;
   const open = queue.trail.findIndex((id, i) => i > queue.at && !isSettled(queue, id));
   if (open !== -1) return { ...left, queue: { ...queue, at: open } };
   const first =

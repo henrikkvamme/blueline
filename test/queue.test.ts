@@ -182,6 +182,22 @@ describe("the queue", () => {
     expect(settleNow(go(skipped.queue, next)).settled).toEqual(["a"]);
   });
 
+  it("brings a remark whose walk he skipped back only after the rest", () => {
+    const walk = [{ target: "#x", say: "Look here" }];
+    let q = start(
+      { ...look("a", "/a", 1), walk },
+      { ...look("b", "/a", 2), walk },
+      { ...look("c", "/a", 3), walk },
+    );
+    const shown: (string | undefined)[] = [];
+    for (let i = 0; i < 6; i++) {
+      q = go(q, next);
+      shown.push(current(q)?.id);
+    }
+    expect(shown).toEqual(["a", "b", "c", "a", "b", "c"]);
+    expect(left(q)).toBe(3);
+  });
+
   it("goes back to where he was, the settle undone, and forward again", () => {
     let q = start(look("a", "/a", 1), look("b", "/a", 2));
     q = go(q, next);

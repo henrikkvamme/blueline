@@ -190,7 +190,12 @@ function Live() {
     setVisit(undefined);
     if (guide.on && here?.walk !== undefined && !isTried(q, here))
       walkRemark(here.id, here.walk, here.page);
-    else walker.stop();
+    else {
+      walker.stop();
+      const read = here?.id;
+      if (!guide.on && read !== undefined)
+        setState((s) => ({ ...s, queue: walked(s.queue, read) }));
+    }
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new remark starts a walk, not a new setting
   }, [here?.id, walker]);
   useEffect(() => walker.navigate(page), [walker, page]);
