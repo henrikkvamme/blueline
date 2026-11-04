@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { envOf } from "./hearing.ts";
+import { inputInside } from "./inside.ts";
 
 /*
  * The app's map, for the voice model (ADR 0008): the app's pages, the parts of each by name,
@@ -84,8 +85,6 @@ let making: Promise<void> | undefined;
 async function make(log: (line: string) => void): Promise<void> {
   const started = Date.now();
   const read = new Set<string>();
-  const inside = (file: unknown) =>
-    typeof file === "string" && !relative(ROOT, resolve(ROOT, file)).startsWith("..");
   const run = query({
     prompt: [
       `Read the code of the app in ${ENTRY}, and write its map for a voice model that walks a reviewer through the app with a cursor. The model cannot read the code, so the map is all it knows of the app.`,
@@ -103,7 +102,7 @@ async function make(log: (line: string) => void): Promise<void> {
       tools: ["Read", "Glob", "Grep"],
       outputFormat: { type: "json_schema", schema: jsonSchema },
       canUseTool: async (_name, input) =>
-        inside(input.file_path ?? input.path ?? ".")
+        inputInside(ROOT, input)
           ? { behavior: "allow", updatedInput: input }
           : { behavior: "deny", message: "Only files in this repository." },
     },

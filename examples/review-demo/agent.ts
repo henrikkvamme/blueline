@@ -1,4 +1,4 @@
-import { basename, relative, resolve } from "node:path";
+import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createSdkMcpServer,
@@ -13,6 +13,7 @@ import {
 import type { Plugin } from "vite";
 import { z } from "zod";
 import { type Exchange, keepFeedback } from "./feedback.ts";
+import { inputInside } from "./inside.ts";
 import { ears as makeEars, envOf, words } from "./hearing.ts";
 import { speakAhead } from "./voice.ts";
 
@@ -218,12 +219,6 @@ function firstLine(written: string) {
   }
 }
 
-const inside = (path: unknown) => {
-  if (typeof path !== "string") return true;
-  const rel = relative(ROOT, resolve(ROOT, path));
-  return !rel.startsWith("..") && !/(^|\/)(node_modules|\.git)(\/|$)/.test(rel);
-};
-
 /** What the page's tools send to: the request that runs now. */
 interface Out {
   send: (event: Event) => void;
@@ -371,8 +366,7 @@ export function agent(): Plugin {
         // Each token as it comes, for the timing of each step.
         includePartialMessages: true,
         canUseTool: async (name, input) =>
-          name.startsWith("mcp__page__") ||
-          (ALLOWED.includes(name) && inside(input["file_path"] ?? input["path"]))
+          name.startsWith("mcp__page__") || (ALLOWED.includes(name) && inputInside(ROOT, input))
             ? { behavior: "allow", updatedInput: input }
             : { behavior: "deny", message: "Only files in this repository, and no commands." },
         ...(resume === undefined ? {} : { resume }),
