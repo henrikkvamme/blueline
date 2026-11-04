@@ -5,6 +5,9 @@
  * with a short-lived key from the dev server's `/__realtime/token`. Turn detection is off: his
  * audio flows only while the keys are held, and the release commits it.
  *
+ * He may speak again before it answers. Each release is a turn: the turns wait in line for
+ * their answers, one at a time, and a press never throws away a turn before it.
+ *
  * With no route or no key, `ready` stays false and the workshop hears him the old way.
  */
 
@@ -12,6 +15,14 @@ export interface Call {
   readonly name: string;
   readonly args: Readonly<Record<string, unknown>>;
   readonly id: string;
+  /** The release it answers. */
+  readonly turn: number;
+}
+
+export interface Released {
+  readonly turn: number;
+  /** Resolves when the model calls a tool for this turn or ends its answer. */
+  readonly answered: Promise<void>;
 }
 
 export interface Fast {
@@ -19,12 +30,11 @@ export interface Fast {
   readonly ready: () => boolean;
   /** Connects ahead of his first press. */
   readonly warm: () => void;
-  /** The keys went down: his voice streams, and what it said stops. */
+  /** The keys went down: his voice streams, and the model's voice goes quiet. */
   readonly press: (stream: MediaStream) => void;
-  /** The keys came up: the page as he saw it, then his words, and it acts. Resolves when
-   * it calls a tool or ends its answer. */
-  readonly release: (page: string) => Promise<void>;
-  /** He dropped what he said. */
+  /** The keys came up: the page as he saw it, then his words, and it acts. */
+  readonly release: (page: string) => Released;
+  /** He dropped what he said since the press. */
   readonly drop: () => void;
   /** What a tool did, for the model to know. It says nothing about it. */
   readonly answer: (id: string, output: string) => void;
@@ -36,7 +46,7 @@ export interface Fast {
 
 interface Handlers {
   readonly onCall: (call: Call) => void;
-  readonly onHeard: (words: string) => void;
+  readonly onHeard: (words: string, turn: number) => void;
 }
 
 /** After the keys come up, his last syllable is still on its way. */
@@ -54,18 +64,47 @@ export function fast(voice: () => string, on: Handlers): Fast {
   let sender: RTCRtpSender | undefined;
   let speaker: HTMLAudioElement | undefined;
   let muted = false;
-  let responding = false;
-  let context = 0;
   let generation = 0;
   let tail = 0;
-  let answered: (() => void) | undefined;
-  const settle = () => {
-    answered?.();
-    answered = undefined;
+  let flush: (() => void) | undefined;
+  let turns = 0;
+  let pages: number[] = [];
+  let waiting: number[] = [];
+  let answering: number | undefined;
+  let hush = 0;
+  let commits: number[] = [];
+  const items = new Map<string, number>();
+  const answers = new Map<number, () => void>();
+  const answer = (turn: number | undefined) => {
+    if (turn === undefined) return;
+    answers.get(turn)?.();
+    answers.delete(turn);
   };
 
   const send = (event: object) => {
     if (channel?.readyState === "open") channel.send(JSON.stringify(event));
+  };
+
+  const sound = () => {
+    if (speaker !== undefined) speaker.muted = muted || (answering ?? turns) < hush;
+  };
+
+  const respond = () => {
+    if (answering !== undefined) return;
+    const turn = waiting.shift();
+    if (turn === undefined) return;
+    answering = turn;
+    for (const old of pages.filter((p) => p < turn))
+      send({ type: "conversation.item.delete", item_id: `page${String(old)}` });
+    pages = pages.filter((p) => p >= turn);
+    sound();
+    send({ type: "response.create", event_id: `respond${String(turn)}` });
+  };
+
+  const answered = () => {
+    answer(answering);
+    answering = undefined;
+    respond();
   };
 
   const close = () => {
@@ -76,19 +115,29 @@ export function fast(voice: () => string, on: Handlers): Fast {
     peer = undefined;
     channel = undefined;
     sender = undefined;
-    responding = false;
+    window.clearTimeout(tail);
+    flush = undefined;
+    for (const done of answers.values()) done();
+    answers.clear();
+    pages = [];
+    waiting = [];
+    answering = undefined;
+    commits = [];
+    items.clear();
     if (state !== "unavailable") state = "off";
   };
 
   const receive = (event: Event) => {
     switch (event.type) {
-      case "response.created":
-        responding = true;
-        break;
       case "response.done":
-        responding = false;
-        settle();
+        answered();
         break;
+      case "input_audio_buffer.committed": {
+        const turn = commits.shift();
+        if (turn !== undefined && typeof event["item_id"] === "string")
+          items.set(event["item_id"], turn);
+        break;
+      }
       case "response.output_item.done": {
         const item = event["item"] as
           | { type: string; name?: string; arguments?: string; call_id?: string }
@@ -101,16 +150,30 @@ export function fast(voice: () => string, on: Handlers): Fast {
         } catch {
           // A call with broken arguments acts with none.
         }
-        settle();
-        on.onCall({ name: item.name, args, id: item.call_id });
+        const turn = answering ?? turns;
+        answer(turn);
+        on.onCall({ name: item.name, args, id: item.call_id, turn });
         break;
       }
-      case "conversation.item.input_audio_transcription.completed":
-        on.onHeard(typeof event["transcript"] === "string" ? event["transcript"].trim() : "");
+      case "conversation.item.input_audio_transcription.completed": {
+        const id = typeof event["item_id"] === "string" ? event["item_id"] : "";
+        const turn = items.get(id);
+        items.delete(id);
+        if (turn !== undefined)
+          on.onHeard(
+            typeof event["transcript"] === "string" ? event["transcript"].trim() : "",
+            turn,
+          );
         break;
-      case "error":
+      }
+      case "error": {
         console.warn("Realtime:", event["error"]);
+        const cause = (event["error"] as { event_id?: unknown } | undefined)?.event_id;
+        if (cause === `respond${String(answering)}`) answered();
+        if (typeof cause === "string" && cause.startsWith("commit"))
+          commits = commits.filter((turn) => cause !== `commit${String(turn)}`);
         break;
+      }
     }
   };
 
@@ -134,7 +197,7 @@ export function fast(voice: () => string, on: Handlers): Fast {
       peer = pc;
       speaker = new Audio();
       speaker.autoplay = true;
-      speaker.muted = muted;
+      sound();
       pc.ontrack = (e) => {
         if (speaker !== undefined) speaker.srcObject = e.streams[0] ?? null;
       };
@@ -180,41 +243,42 @@ export function fast(voice: () => string, on: Handlers): Fast {
     ready: () => state === "ready",
     warm: () => void connect(),
     press: (stream) => {
-      window.clearTimeout(tail);
-      if (responding) send({ type: "response.cancel" });
-      send({ type: "output_audio_buffer.clear" });
+      flush?.();
+      hush = turns + 1;
+      sound();
       send({ type: "input_audio_buffer.clear" });
       void sender?.replaceTrack(stream.getAudioTracks()[0] ?? null);
     },
     release: (page) => {
-      settle();
-      window.clearTimeout(tail);
+      flush?.();
+      const turn = ++turns;
       const done = new Promise<void>((resolve) => {
-        answered = resolve;
-        window.setTimeout(resolve, LONGEST);
+        answers.set(turn, resolve);
+        window.setTimeout(() => answer(turn), LONGEST);
       });
-      tail = window.setTimeout(() => {
+      flush = () => {
+        flush = undefined;
+        window.clearTimeout(tail);
         void sender?.replaceTrack(null);
-        if (context > 0)
-          send({ type: "conversation.item.delete", item_id: `page${String(context)}` });
-        context++;
         send({
           type: "conversation.item.create",
           item: {
-            id: `page${String(context)}`,
+            id: `page${String(turn)}`,
             type: "message",
             role: "user",
             content: [{ type: "input_text", text: page }],
           },
         });
-        send({ type: "input_audio_buffer.commit" });
-        send({ type: "response.create" });
-      }, TAIL);
-      return done;
+        pages.push(turn);
+        send({ type: "input_audio_buffer.commit", event_id: `commit${String(turn)}` });
+        commits.push(turn);
+        waiting.push(turn);
+        respond();
+      };
+      tail = window.setTimeout(() => flush?.(), TAIL);
+      return { turn, answered: done };
     },
     drop: () => {
-      settle();
-      window.clearTimeout(tail);
       void sender?.replaceTrack(null);
       send({ type: "input_audio_buffer.clear" });
     },
@@ -230,7 +294,7 @@ export function fast(voice: () => string, on: Handlers): Fast {
       }),
     mute: (to) => {
       muted = to;
-      if (speaker !== undefined) speaker.muted = to;
+      sound();
     },
     close,
   };

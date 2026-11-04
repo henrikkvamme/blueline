@@ -422,7 +422,10 @@ function Live() {
   // at and what the page shows, and the agent answers on the page with its cursor. With no
   // agent, the script puts his words in the queue and says it is on it.
   // The fast tier (ADR 0008): the realtime model hears him and calls these tools at once.
-  const fastCalls = useRef<{ onCall: (c: Call) => void; onHeard: (w: string) => void }>({
+  const fastCalls = useRef<{
+    onCall: (c: Call) => void;
+    onHeard: (w: string, turn: number) => void;
+  }>({
     onCall: () => undefined,
     onHeard: () => undefined,
   });
@@ -431,7 +434,7 @@ function Live() {
   const [realtime] = useState(() =>
     fast(() => speakerNow.current, {
       onCall: (c) => fastCalls.current.onCall(c),
-      onHeard: (w) => fastCalls.current.onHeard(w),
+      onHeard: (w, turn) => fastCalls.current.onHeard(w, turn),
     }),
   );
   // A hot update runs the cleanup and the effect again at once: only a real unmount ends
@@ -456,16 +459,19 @@ function Live() {
     realtime.close();
     realtime.warm();
   }, [realtime, guide.speaker]);
-  const hold = useRef<
-    | {
+  /** What he pointed at and said in each turn, by the turn the fast tier gave it. */
+  const holds = useRef(
+    new Map<
+      number,
+      {
         readonly target: string | undefined;
         readonly trail: Trail;
         readonly drawn: readonly Drawn[];
         readonly at: { readonly x: number; readonly y: number };
         heard: string | undefined;
       }
-    | undefined
-  >(undefined);
+    >(),
+  );
 
   /** The page as he sees it, for the fast tier, in a few lines. */
   const pageFor = (said: { readonly trail: Trail; readonly drawn: readonly Drawn[] }) => {
@@ -507,11 +513,13 @@ function Live() {
     press: (stream) => realtime.press(stream),
     drop: () => realtime.drop(),
     release: (said) => {
-      hold.current = { ...said, heard: undefined };
       const text = pageFor(said);
       timing.asked({ fast: text });
       timing.mark("sent");
-      return realtime.release(text);
+      const { turn, answered } = realtime.release(text);
+      holds.current.set(turn, { ...said, heard: undefined });
+      holds.current.delete(turn - 8);
+      return answered;
     },
   };
 
@@ -520,7 +528,7 @@ function Live() {
     timing.mark("heard");
     timing.mark("agent");
     timing.note({ line: `${call.name} ${JSON.stringify(call.args)}`, ear: "gpt-realtime-2.1" });
-    const held = hold.current;
+    const held = holds.current.get(call.turn);
     const values = here?.variants ?? here?.options ?? [];
     const nth = (n: unknown) => (typeof n === "number" ? values[n - 1] : undefined);
     const titleAfter = (to: (x: Queue) => Move) =>
@@ -612,8 +620,9 @@ function Live() {
   };
   fastCalls.current = {
     onCall: runCall,
-    onHeard: (words) => {
-      if (hold.current !== undefined) hold.current.heard = words;
+    onHeard: (words, turn) => {
+      const held = holds.current.get(turn);
+      if (held !== undefined) held.heard = words;
       timing.note({ said: words });
       setExchange((x) => (x !== undefined && x.said === "" ? { ...x, said: words } : x));
     },

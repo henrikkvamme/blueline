@@ -312,6 +312,7 @@ export function usePointAndTalk({
     let failing = 0;
     let trail: { target: string | undefined; at: number }[] = [];
     let heardFrom = 0;
+    let releases = 0;
     // The ink, in the viewport, with when each point came; the loops, in the page.
     let ink: { x: number; y: number; t: number }[] = [];
     let loops: { points: Point[]; target: string | undefined }[] = [];
@@ -406,9 +407,12 @@ export function usePointAndTalk({
           }
           const drawn = loops.map((l) => ({ path: pathOf(l.points), target: l.target }));
           setTalk({ phase: "thinking", strokes: strokes(), at: mouse });
+          const mine = ++releases;
           void quick
             .release({ target: drawn.at(-1)?.target ?? target, trail, drawn, at: mouse })
-            .then(() => setTalk(IDLE));
+            .then(() => {
+              if (!held && mine === releases) setTalk(IDLE);
+            });
         };
         if (!held) return end();
         meter();
