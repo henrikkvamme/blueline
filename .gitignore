@@ -7,3 +7,5 @@ evals/*/runs/*/
 evals/answers/inbox/
 evals/answers/audio/
 evals/answers/runs-mockups/
+evals/voice/audio/
+evals/voice/runs/
